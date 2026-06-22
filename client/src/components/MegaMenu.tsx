@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   BarChart2,
   Trophy, Coins, ArrowLeftRight, Database, Search,
-  Calculator, TrendingUp, Zap, ChevronDown,
+  Calculator, TrendingUp, ChevronDown,
   LucideIcon, Crosshair, LayoutGrid, Inbox, MessageCircle,
   Hexagon, ClipboardList, ScrollText, ListOrdered,
   Activity, ShieldAlert,
@@ -74,7 +74,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Tools",
       items: [
-        { subId: "draft-board",  label: "Draft Board",  description: "Dynasty rankings board & live draft integration",     icon: Zap          },
         { subId: "pick-tracker", label: "Pick Tracker", description: "Rookie picks derived from kicker draft order, live during your startup draft", icon: ListOrdered },
         { subId: "dispersal-draft", label: "Dispersal Draft", description: "Run a live dispersal draft of orphan-team assets with real-time board & chat", icon: Trophy },
         { subId: "user-search",     label: "User Search",     description: "Find any Sleeper user & open their profile",     icon: Search     },

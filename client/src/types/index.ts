@@ -129,6 +129,10 @@ export interface SleeperLeagueSummary {
   format: string;
   status: string;
   isBestBall?: boolean;
+  /** Sleeper league type — settings.type: 0 = redraft, 1 = keeper, 2 = dynasty. */
+  leagueType?: "redraft" | "keeper" | "dynasty";
+  /** TE-premium points per reception; 0 if none. */
+  tePremium?: number;
   avatar?: string | null;
   // Whether this league passes our automatic filter (active, drafted, with a
   // roster the user owns). Default-eligible leagues are pre-selected in the

@@ -69,7 +69,6 @@ const CommandersReport  = lazy(() => import("./tabs/CommandersReport").then(m =>
 const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
 const TradeReviewCenter    = lazy(() => import("./tabs/TradeReviewCenter").then(m => ({ default: m.TradeReviewCenter })));
 const UserSearch        = lazy(() => import("./tabs/UserSearch"));
-const LiveDraft         = lazy(() => import("./tabs/LiveDraft"));
 const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
 const PickTracker       = lazy(() => import("./tabs/PickTracker").then(m => ({ default: m.PickTracker })));
 const DispersalDraft    = lazy(() => import("@dispersal/DispersalDraft").then(m => ({ default: m.DispersalDraft })));
@@ -104,17 +103,19 @@ function getInitialState(pathTab?: string, pathSub?: string) {
   let requestedTab = pathTab || saved?.tab || "portfolio";
   let requestedSub = pathSub || saved?.sub || "portfolio-summary";
 
-  // Legacy redirect — the "Live Draft" module was merged into "Draft" as
-  // the Draft Board sub-tab. Keep old URLs / saved state working.
+  // Legacy redirect — the "Live Draft" module was merged into "Draft", and the
+  // "Draft Board" sub-tab has since been removed. Send old URLs / saved state to
+  // the Pick Tracker (the Draft module's default sub-tab).
   if (requestedTab === "live-draft") {
     requestedTab = "draft";
-    requestedSub = "draft-board";
+    requestedSub = "pick-tracker";
   }
 
-  // Legacy redirect — the "ADP Explorer" and "Player Availability" draft
-  // sub-tabs were removed. Send stale URLs / saved state to the Draft Board.
-  if (requestedTab === "draft" && (requestedSub === "adp-explorer" || requestedSub === "player-availability")) {
-    requestedSub = "draft-board";
+  // Legacy redirect — the "ADP Explorer", "Player Availability", and
+  // "Draft Board" draft sub-tabs were removed. Send stale URLs / saved state to
+  // the Pick Tracker.
+  if (requestedTab === "draft" && (requestedSub === "adp-explorer" || requestedSub === "player-availability" || requestedSub === "draft-board")) {
+    requestedSub = "pick-tracker";
   }
 
   // Legacy redirect — the "My Team" module (dashboard tab, Overview +
@@ -217,7 +218,6 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
     p(() => import("./tabs/Portfolio"));
     p(() => import("./tabs/TradeCenter"));
     const t = setTimeout(() => {
-      p(() => import("./tabs/LiveDraft"));
       p(() => import("./tabs/LeagueAnalyzer"));
       p(() => import("./tabs/Transactions"));
       p(() => import("./tabs/LineupCommand"));
@@ -607,22 +607,13 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
 
-    // Tools module — Draft Board (live Sleeper draft tracker), Pick Tracker,
-    // Dispersal Draft, and User Search. All run without an active league (User
-    // Search is a self-contained Sleeper lookup available to guests).
+    // Tools module — Pick Tracker, Dispersal Draft, and User Search. All run
+    // without an active league (User Search is a self-contained Sleeper lookup
+    // available to guests).
     if (activeMainTab === "draft") {
       if (activeSubTab === "user-search") return <UserSearch />;
-      if (activeSubTab === "pick-tracker") return <PickTracker />;
       if (activeSubTab === "dispersal-draft") return <DispersalDraft />;
-      return (
-        <LiveDraft
-          onConnectSleeper={
-            accessLevel === "guest" || accessLevel === "readonly"
-              ? () => { handleMainTabChange("portfolio"); handleSubTabChange("portfolio-summary"); }
-              : () => setHeaderUpgradeOpen(true)
-          }
-        />
-      );
+      return <PickTracker />;
     }
 
     if (activeMainTab === "portfolio") {

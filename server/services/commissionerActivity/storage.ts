@@ -8,7 +8,7 @@
  * status, notes, and resolvedAt untouched, so an acknowledged/resolved alert
  * stays that way across re-scans.
  */
-import { and, eq, desc, gte, lte, inArray, max, sql } from "drizzle-orm";
+import { and, eq, desc, gt, gte, lte, inArray, max, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
   commissionerActivitySnapshots,
@@ -26,6 +26,7 @@ import type {
   ActivityEvent,
   ActivityAlertRow,
 } from "./types";
+import { getActivityLabel } from "./helpers";
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
@@ -300,11 +301,101 @@ export async function getLatestSnapshot(
       and(
         eq(commissionerActivitySnapshots.leagueId, leagueId),
         eq(commissionerActivitySnapshots.season, season),
+        // Skip the season aggregate (week 0); callers want the latest real week.
+        gt(commissionerActivitySnapshots.week, 0),
       ),
     )
     .orderBy(desc(commissionerActivitySnapshots.week))
     .limit(1);
   return row ?? null;
+}
+
+/** The whole-season aggregate snapshot (stored under the sentinel week 0). */
+export async function getSeasonSnapshot(
+  leagueId: string,
+  season: string,
+): Promise<CommissionerActivitySnapshot | null> {
+  const [row] = await db
+    .select()
+    .from(commissionerActivitySnapshots)
+    .where(
+      and(
+        eq(commissionerActivitySnapshots.leagueId, leagueId),
+        eq(commissionerActivitySnapshots.season, season),
+        eq(commissionerActivitySnapshots.week, 0),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+/** Sum every real (week ≥ 1) snapshot into season cumulative totals + week count. */
+export async function getSeasonTotals(
+  leagueId: string,
+  season: string,
+): Promise<{
+  weeks: number;
+  totalTransactions: number;
+  totalTrades: number;
+  totalWaivers: number;
+  totalFreeAgentMoves: number;
+  totalLineupChanges: number;
+  totalEmptyStarterSlots: number;
+}> {
+  const [row] = await db
+    .select({
+      weeks: sql<number>`count(*)`,
+      totalTransactions: sql<number>`coalesce(sum(${commissionerActivitySnapshots.totalTransactions}), 0)`,
+      totalTrades: sql<number>`coalesce(sum(${commissionerActivitySnapshots.totalTrades}), 0)`,
+      totalWaivers: sql<number>`coalesce(sum(${commissionerActivitySnapshots.totalWaivers}), 0)`,
+      totalFreeAgentMoves: sql<number>`coalesce(sum(${commissionerActivitySnapshots.totalFreeAgentMoves}), 0)`,
+      totalLineupChanges: sql<number>`coalesce(sum(${commissionerActivitySnapshots.totalLineupChanges}), 0)`,
+      totalEmptyStarterSlots: sql<number>`coalesce(sum(${commissionerActivitySnapshots.totalEmptyStarterSlots}), 0)`,
+    })
+    .from(commissionerActivitySnapshots)
+    .where(
+      and(
+        eq(commissionerActivitySnapshots.leagueId, leagueId),
+        eq(commissionerActivitySnapshots.season, season),
+        gt(commissionerActivitySnapshots.week, 0),
+      ),
+    );
+  return {
+    weeks: Number(row?.weeks ?? 0),
+    totalTransactions: Number(row?.totalTransactions ?? 0),
+    totalTrades: Number(row?.totalTrades ?? 0),
+    totalWaivers: Number(row?.totalWaivers ?? 0),
+    totalFreeAgentMoves: Number(row?.totalFreeAgentMoves ?? 0),
+    totalLineupChanges: Number(row?.totalLineupChanges ?? 0),
+    totalEmptyStarterSlots: Number(row?.totalEmptyStarterSlots ?? 0),
+  };
+}
+
+/** Each roster's season-average activity / inactivity-risk across real weeks. */
+export async function getSeasonManagerAggregates(
+  leagueId: string,
+  season: string,
+): Promise<{ rosterId: number; avgActivityScore: number; avgRiskScore: number }[]> {
+  const rows = await db
+    .select({
+      rosterId: commissionerManagerActivity.rosterId,
+      avgActivityScore: sql<number>`avg(${commissionerManagerActivity.activityScore})`,
+      avgRiskScore: sql<number>`avg(${commissionerManagerActivity.inactivityRiskScore})`,
+    })
+    .from(commissionerManagerActivity)
+    .where(
+      and(
+        eq(commissionerManagerActivity.leagueId, leagueId),
+        eq(commissionerManagerActivity.season, season),
+        gt(commissionerManagerActivity.week, 0),
+      ),
+    )
+    .groupBy(commissionerManagerActivity.rosterId);
+  return rows.map((r) => ({
+    rosterId: r.rosterId,
+    avgActivityScore: Number(r.avgActivityScore ?? 0),
+    avgRiskScore: Number(r.avgRiskScore ?? 0),
+  }));
 }
 
 export async function getManagerRows(
@@ -323,6 +414,75 @@ export async function getManagerRows(
       ),
     )
     .orderBy(desc(commissionerManagerActivity.inactivityRiskScore));
+}
+
+/**
+ * Season-wide manager rows: one row per roster, aggregating every scored week.
+ * Counts (transactions / trades / waivers / FA / adds / drops / lineup changes /
+ * empty starters) are summed across the season; activity & risk scores are the
+ * season average; point-in-time fields (identity, current staleness, flags, last
+ * move/lineup timestamps) come from the latest scored week. Sorted by risk desc
+ * to mirror getManagerRows.
+ */
+export async function getSeasonManagerRows(
+  leagueId: string,
+  season: string,
+): Promise<CommissionerManagerActivity[]> {
+  const rows = await db
+    .select()
+    .from(commissionerManagerActivity)
+    .where(
+      and(
+        eq(commissionerManagerActivity.leagueId, leagueId),
+        eq(commissionerManagerActivity.season, season),
+        gt(commissionerManagerActivity.week, 0),
+      ),
+    )
+    .orderBy(commissionerManagerActivity.week); // ascending → last = latest week
+
+  const byRoster = new Map<number, CommissionerManagerActivity[]>();
+  for (const r of rows) {
+    const list = byRoster.get(r.rosterId) ?? [];
+    list.push(r);
+    byRoster.set(r.rosterId, list);
+  }
+
+  const aggregated: CommissionerManagerActivity[] = [];
+  for (const list of Array.from(byRoster.values())) {
+    const latest = list[list.length - 1];
+    const n = list.length || 1;
+    const sum = (pick: (m: CommissionerManagerActivity) => number | null) =>
+      list.reduce((s, m) => s + (pick(m) ?? 0), 0);
+    const maxTs = (pick: (m: CommissionerManagerActivity) => number | null) =>
+      list.reduce<number | null>((acc, m) => {
+        const v = pick(m);
+        return v != null && (acc == null || v > acc) ? v : acc;
+      }, null);
+
+    const activityScore = Math.round(sum((m) => m.activityScore) / n);
+    const inactivityRiskScore = Math.round(sum((m) => m.inactivityRiskScore) / n);
+
+    aggregated.push({
+      ...latest,
+      transactionsCount: sum((m) => m.transactionsCount),
+      tradesCount: sum((m) => m.tradesCount),
+      waiverCount: sum((m) => m.waiverCount),
+      freeAgentCount: sum((m) => m.freeAgentCount),
+      addsCount: sum((m) => m.addsCount),
+      dropsCount: sum((m) => m.dropsCount),
+      lineupChangeCount: sum((m) => m.lineupChangeCount),
+      lineupChanged: list.some((m) => m.lineupChanged),
+      emptyStarterSlots: sum((m) => m.emptyStarterSlots),
+      activityScore,
+      inactivityRiskScore,
+      activityLabel: getActivityLabel(activityScore),
+      lastTransactionTs: maxTs((m) => m.lastTransactionTs),
+      lastLineupChangeTs: maxTs((m) => m.lastLineupChangeTs),
+    });
+  }
+
+  aggregated.sort((a, b) => (b.inactivityRiskScore ?? 0) - (a.inactivityRiskScore ?? 0));
+  return aggregated;
 }
 
 export interface FeedFilters {

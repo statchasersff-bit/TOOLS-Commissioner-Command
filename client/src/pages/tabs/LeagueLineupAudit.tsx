@@ -75,47 +75,62 @@ function Pill({ cls, children }: { cls: string; children: React.ReactNode }) {
 
 const ISSUE_FILTERS: Array<{ id: string; label: string }> = [
   { id: "all", label: "All" },
-  { id: "critical", label: "Critical" },
-  { id: "warning", label: "Warnings" },
-  { id: "empty", label: "Empty Slots" },
-  { id: "out_ir", label: "Out/IR" },
-  { id: "bye", label: "Bye Week" },
-  { id: "repeat", label: "Repeated Issues" },
+  { id: "open", label: "Open Issues" },
   { id: "resolved", label: "Resolved" },
 ];
 
+function isResolved(i: AuditIssue): boolean {
+  return i.issueStatus === "resolved" || i.issueStatus === "ignored";
+}
+
 function matchesFilter(i: AuditIssue, filter: string): boolean {
   switch (filter) {
-    case "all": return true;
-    case "critical": return i.severity === "critical";
-    case "warning": return i.severity === "warning";
-    case "empty": return i.category === "empty_slot";
-    case "out_ir": return i.category === "out" || i.category === "ir" || i.category === "inactive";
-    case "bye": return i.category === "bye";
-    case "repeat": return i.isRepeatOffender;
-    case "resolved": return i.issueStatus === "resolved" || i.issueStatus === "ignored";
-    default: return true;
+    case "open": return !isResolved(i);
+    case "resolved": return isResolved(i);
+    default: return true; // "all"
   }
 }
 
 // ── Summary cards ─────────────────────────────────────────────────────────────
 
-function SummaryCard({ icon: Icon, label, value, accent }: { icon: typeof Users; label: string; value: React.ReactNode; accent?: boolean }) {
+const SUMMARY_ACCENT: Record<string, string> = {
+  red:     "bg-red-500/10 text-red-600 dark-any:text-red-400",
+  amber:   "bg-amber-500/10 text-amber-600 dark-any:text-amber-400",
+  orange:  "bg-orange-500/10 text-orange-600 dark-any:text-orange-400",
+  blue:    "bg-blue-500/10 text-blue-600 dark-any:text-blue-400",
+  emerald: "bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
+  slate:   "bg-slate-500/10 text-slate-500 dark-any:text-slate-400",
+};
+
+// Icon-box KPI card mirroring the Live Lineup Check scan cards: tinted rounded
+// icon on the left, value + label + sub stacked beside it.
+function SummaryCard({ icon: Icon, label, value, accent = "slate", sub }: {
+  icon: typeof Users; label: string; value: React.ReactNode;
+  accent?: keyof typeof SUMMARY_ACCENT; sub?: string;
+}) {
   return (
-    <Card className="p-3 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628]">
-      <div className="flex items-center gap-2">
-        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ring-1",
-          accent ? "bg-[#d4af37]/10 ring-[#d4af37]/15" : "bg-muted/40 ring-border/40")}>
-          <Icon className={cn("w-3.5 h-3.5", accent ? "text-[#d4af37]" : "text-muted-foreground")} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none truncate">{label}</p>
-          <p className="text-lg font-bold leading-tight mt-0.5">{value}</p>
-        </div>
+    <Card className="p-4 flex items-start gap-3 min-w-0">
+      <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5", SUMMARY_ACCENT[accent])}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xl font-bold tabular-nums leading-tight text-foreground">{value}</p>
+        <p className="text-[11px] font-medium leading-tight mt-0.5 text-muted-foreground">{label}</p>
+        {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{sub}</p>}
       </div>
     </Card>
   );
 }
+
+// ── Sub-tabs ──────────────────────────────────────────────────────────────────
+
+type AuditSubTab = "issues" | "strikes" | "managers";
+
+const AUDIT_SUB_TABS: { id: AuditSubTab; label: string; icon: typeof ListChecks }[] = [
+  { id: "issues", label: "League Issues", icon: ListChecks },
+  { id: "strikes", label: "Strike Tracker", icon: Gavel },
+  { id: "managers", label: "Manager History", icon: History },
+];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -126,8 +141,9 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
   const currentYear = new Date().getFullYear();
   const [season] = useState<string>(String(currentYear));
   const [week, setWeek] = useState<number | null>(initialWeek ?? null); // null → latest week with data
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<string>("open");
   const [openIssue, setOpenIssue] = useState<AuditIssue | null>(null);
+  const [subTab, setSubTab] = useState<AuditSubTab>("issues");
 
   const avatars = useLeagueAvatars(leagueId);
 
@@ -158,6 +174,12 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
   });
   const currentWeek = overviewQuery.data?.currentWeek ?? null;
   const isLiveWeek = currentWeek != null && effectiveWeek >= currentWeek;
+  // You can only scan through the current (in-progress) week — a future week
+  // can't be scanned until the prior week is complete. Cap navigation and the
+  // scan button accordingly (falls back to the full slate while currentWeek is
+  // still loading/unknown).
+  const maxScanWeek = currentWeek ?? 18;
+  const isFutureWeek = currentWeek != null && effectiveWeek > currentWeek;
 
   const refreshMut = useMutation({
     mutationFn: () => lineupIntegrityApi.refresh(leagueId, [effectiveWeek], season),
@@ -198,7 +220,13 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
           title="Lineup Integrity"
           subtitle="Review weekly lineup issues, affected matchups, manager history, and commissioner actions for this league."
         />
-        <Button onClick={() => refreshMut.mutate()} disabled={refreshMut.isPending} className="shrink-0" data-testid="button-refresh-audit">
+        <Button
+          onClick={() => refreshMut.mutate()}
+          disabled={refreshMut.isPending || isFutureWeek}
+          title={isFutureWeek ? `Week ${effectiveWeek} hasn't started yet — finish Week ${currentWeek} first.` : undefined}
+          className="shrink-0"
+          data-testid="button-refresh-audit"
+        >
           {refreshMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
           Refresh
         </Button>
@@ -214,13 +242,13 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
           <Select value={String(effectiveWeek)} onValueChange={(v) => setWeek(Number(v))}>
             <SelectTrigger className="h-9 w-[110px]" data-testid="select-audit-week"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
+              {Array.from({ length: maxScanWeek }, (_, i) => i + 1).map((w) => (
                 <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" className="h-9 w-9" disabled={effectiveWeek >= 18}
-            onClick={() => setWeek(Math.min(18, effectiveWeek + 1))} data-testid="button-next-week">
+          <Button variant="outline" size="icon" className="h-9 w-9" disabled={effectiveWeek >= maxScanWeek}
+            onClick={() => setWeek(Math.min(maxScanWeek, effectiveWeek + 1))} data-testid="button-next-week">
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -272,43 +300,67 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
             const pendingResolve = Math.max(0, audit.summary.totalIssues - audit.summary.resolved);
             return (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                <SummaryCard icon={UserX} label="Empty/Out/Bye/IR Starters" accent={badStarters > 0} value={badStarters} />
-                <SummaryCard icon={Layers} label="Over Rostered Lineups" accent={overRosteredLineups > 0} value={overRosteredLineups} />
-                <SummaryCard icon={AlertTriangle} label="Tanking" accent={tankingCount > 0} value={tankingCount} />
-                <SummaryCard icon={CheckCircle2} label="Resolved" value={audit.summary.resolved} />
-                <SummaryCard icon={CalendarClock} label="Pending Resolve" accent={pendingResolve > 0} value={pendingResolve} />
+                <SummaryCard icon={UserX} label="Inactive Starters" value={badStarters} accent="red" sub="Out · IR · Bye · Empty" />
+                <SummaryCard icon={Layers} label="Over Rostered Lineups" value={overRosteredLineups} accent="amber" sub="Too many starters" />
+                <SummaryCard icon={AlertTriangle} label="Tanking" value={tankingCount} accent="orange" sub="Potential signals" />
+                <SummaryCard icon={CheckCircle2} label="Resolved" value={audit.summary.resolved} accent="blue" sub="This week" />
+                <SummaryCard icon={CalendarClock} label="Pending Resolve" value={pendingResolve} accent="slate" sub="Open issues" />
               </div>
             );
           })()}
 
-          {audit.summary.totalIssues === 0 ? (
-            <div className="mt-4">
-              <EmptyState icon={CheckCircle2} title="Clean week"
-                body={`No lineup integrity issues found for this league in Week ${audit.week}. All matchups are currently clean.`} />
-            </div>
-          ) : null}
-
-          {/* League Issues */}
-          <div className="mt-6">
-            <SectionTitle icon={ListChecks}>League Issues</SectionTitle>
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {ISSUE_FILTERS.map((f) => (
-                <button key={f.id} onClick={() => setFilter(f.id)}
-                  data-testid={`filter-issue-${f.id}`}
-                  className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                    filter === f.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>
-                  {f.label}
+          {/* Sub-tab switcher */}
+          <div className="mt-6 flex gap-1 overflow-x-auto border-b border-border/60 mb-5 -mx-1 px-1">
+            {AUDIT_SUB_TABS.map((t) => {
+              const Icon = t.icon;
+              const active = subTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setSubTab(t.id)}
+                  data-testid={`audit-subtab-${t.id}`}
+                  className={cn("relative inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors",
+                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                >
+                  <Icon className="w-3.5 h-3.5" /> {t.label}
+                  {active && <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full" style={{ background: GOLD }} />}
                 </button>
-              ))}
-            </div>
-            <IssuesTable issues={filtered} avatars={avatars} onOpen={setOpenIssue} />
+              );
+            })}
           </div>
 
+          {/* League Issues */}
+          {subTab === "issues" && (
+            <>
+              {audit.summary.totalIssues === 0 ? (
+                <div className="mt-4">
+                  <EmptyState icon={CheckCircle2} title="Clean week"
+                    body={`No lineup integrity issues found for this league in Week ${audit.week}. All matchups are currently clean.`} />
+                </div>
+              ) : null}
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {ISSUE_FILTERS.map((f) => (
+                  <button key={f.id} onClick={() => setFilter(f.id)}
+                    data-testid={`filter-issue-${f.id}`}
+                    className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                      filter === f.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <IssuesTable issues={filtered} avatars={avatars} onOpen={setOpenIssue} />
+            </>
+          )}
+
           {/* Strike Tracker */}
-          <StrikeTrackerSection leagueId={leagueId} week={audit.week} teams={strikeTeams} avatars={avatars} readOnly={isLiveWeek} />
+          {subTab === "strikes" && (
+            <StrikeTrackerSection leagueId={leagueId} week={audit.week} teams={strikeTeams} avatars={avatars} readOnly={isLiveWeek} />
+          )}
 
           {/* Manager History */}
-          <ManagerHistorySection leagueId={leagueId} avatars={avatars} />
+          {subTab === "managers" && (
+            <ManagerHistorySection leagueId={leagueId} avatars={avatars} />
+          )}
         </>
       )}
 
@@ -355,9 +407,7 @@ function OwnerAvatar({
 // ── League Issues table ───────────────────────────────────────────────────────
 
 function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatars: Record<number, RosterIdentity>; onOpen: (i: AuditIssue) => void }) {
-  const SEVERITY_RANK: Record<IssueSeverity, number> = { critical: 3, warning: 2, info: 1 };
   const { sorted, sortKey, sortDir, toggle } = useSortableTable(issues, {
-    severity: (i) => SEVERITY_RANK[i.severity] ?? 0,
     manager: (i) => i.managerName || i.teamName,
     player: (i) => i.playerName,
     issue: (i) => i.issueType,
@@ -374,7 +424,6 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <SortableTh sortKey="severity" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Severity</SortableTh>
               <SortableTh sortKey="manager" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Manager</SortableTh>
               <SortableTh sortKey="player" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Player</SortableTh>
               <SortableTh sortKey="issue" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Issue</SortableTh>
@@ -385,7 +434,6 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
           <tbody>
             {sorted.map((i) => (
               <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                <td className="px-3 py-2"><Pill cls={SEVERITY_META[i.severity].cls}>{SEVERITY_META[i.severity].label}</Pill></td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2">
                     <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
@@ -420,8 +468,7 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
       <div className="grid gap-2 lg:hidden">
         {issues.map((i) => (
           <Card key={i.id} className="p-3">
-            <div className="flex items-center justify-between gap-2">
-              <Pill cls={SEVERITY_META[i.severity].cls}>{SEVERITY_META[i.severity].label}</Pill>
+            <div className="flex items-center justify-end gap-2">
               <IssueStatusPill issue={i} />
             </div>
             <div className="mt-2 flex items-center gap-2 text-sm font-semibold">

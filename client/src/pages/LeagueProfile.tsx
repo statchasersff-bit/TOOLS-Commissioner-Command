@@ -122,7 +122,7 @@ export function LeagueProfile({ leagueId, initialTab, league, userTeam, onNaviga
       case "operations":
         return <Operations leagueId={leagueId} />;
       case "rulebook":
-        return <LeagueRulebook leagueId={leagueId} />;
+        return <LeagueRulebook leagueId={leagueId} league={leagueReady ? league : null} />;
       case "managers":
         return leagueReady
           ? <LeagueManagers leagueId={leagueId} league={league!} />

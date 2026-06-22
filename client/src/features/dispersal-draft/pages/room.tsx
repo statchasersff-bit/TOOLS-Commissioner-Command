@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { BankTimer } from "@dispersal/components/bank-timer";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "@dispersal/router";
-import { Home, Lock, Unlock, ChevronDown } from "lucide-react";
+import { Home, Lock, Unlock, ChevronDown, Download } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -19,7 +19,8 @@ import {
   useUpdateDraftRoom,
   useDeleteDraftRoom,
   useListAssets,
-  getListAssetsQueryKey
+  getListAssetsQueryKey,
+  exportPicksCsv
 } from "@dispersal/api";
 import { useDraftSocket } from "@dispersal/hooks/use-draft-socket";
 import { useDraftRoomState } from "@dispersal/hooks/use-draft-room-state";
@@ -217,6 +218,7 @@ export default function Room() {
   const updateRoom = useUpdateDraftRoom();
   const deleteRoom = useDeleteDraftRoom();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [removingParticipantId, setRemovingParticipantId] = useState<number | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [retracting, setRetracting] = useState(false);
@@ -414,6 +416,27 @@ export default function Room() {
     });
   };
 
+  const onExportCsv = async () => {
+    if (!commissionerToken || !detail?.room) return;
+    setExporting(true);
+    try {
+      const csv = await exportPicksCsv(detail.room.id, commissionerToken);
+      const safeName = (detail.room.leagueName || "dispersal-draft").replace(/[^a-z0-9-_]+/gi, "_");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeName}_draft_results.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err?.data?.error ?? err?.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleLock = () => {
     if (!detail?.room || !commissionerToken) return;
     updateRoom.mutate({
@@ -458,7 +481,7 @@ export default function Room() {
   }, [allAssets]);
 
   if (isLoading) {
-    return <div className="flex h-screen items-center justify-center bg-background text-primary text-xl font-bold">Loading Command Center...</div>;
+    return <div className="flex h-screen items-center justify-center bg-background text-primary text-xl font-bold">Loading Command Center…</div>;
   }
 
   if (!detail) {
@@ -534,12 +557,12 @@ export default function Room() {
         <div className="flex items-center gap-2 md:gap-6 min-w-0 flex-1 overflow-hidden">
           <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Home"><Home size={16} /></Link>
           {isCommissioner && <Link href={`/${code}/setup?step=review`} className="hidden md:inline text-muted-foreground hover:text-foreground text-sm font-medium transition-colors shrink-0">← Setup</Link>}
-          <h1 className="text-sm md:text-xl font-black text-primary tracking-tight uppercase truncate">{room.leagueName}</h1>
+          <h1 className="text-sm md:text-xl font-bold text-primary tracking-tight truncate">{room.leagueName}</h1>
           {room.status !== 'setup' && (
-            <div className={`px-3 py-1 rounded-sm text-xs uppercase tracking-wider font-bold ${
-              room.status === 'active' ? 'bg-green-500/20 text-green-400 border border-green-500/50' :
-              room.status === 'paused' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50' :
-              'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+            <div className={`px-3 py-1 rounded-lg text-xs uppercase tracking-wider font-bold ${
+              room.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400 border border-emerald-300/50 dark-any:border-emerald-400/20' :
+              room.status === 'paused' ? 'bg-amber-500/10 text-amber-600 dark-any:text-amber-400 border border-amber-300/50 dark-any:border-amber-400/20' :
+              'bg-blue-500/10 text-blue-600 dark-any:text-blue-400 border border-blue-300/50 dark-any:border-blue-400/20'
             }`}>
               {room.status}
             </div>
@@ -571,12 +594,12 @@ export default function Room() {
         </div>
         <div className="flex items-center gap-2 md:gap-6 shrink-0">
           {canRetract && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/40 rounded text-xs">
-              <span className="text-yellow-400 font-semibold">Picked: <span className="font-black">{lastPick?.assetName}</span></span>
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-300/50 dark-any:border-amber-400/20 rounded-lg text-xs">
+              <span className="text-amber-600 dark-any:text-amber-400 font-semibold">Picked: <span className="font-bold">{lastPick?.assetName}</span></span>
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-[10px] font-black uppercase tracking-widest text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/20 border border-yellow-500/40"
+                className="h-6 px-2 text-[10px] font-bold uppercase tracking-widest text-amber-600 dark-any:text-amber-400 hover:text-amber-700 dark-any:hover:text-amber-300 hover:bg-amber-500/20 border border-amber-300/50 dark-any:border-amber-400/20"
                 onClick={retractPick}
                 disabled={retracting}
                 title="Undo your pick while it's still your turn window"
@@ -585,20 +608,20 @@ export default function Room() {
               </Button>
             </div>
           )}
-          <div className="hidden md:flex text-sm font-mono font-bold px-4 py-2 bg-secondary/50 rounded border border-border/50">
+          <div className="hidden md:flex text-sm font-mono font-bold px-4 py-2 bg-secondary/50 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6">
             RD {room.currentRound} <span className="text-muted-foreground mx-2">|</span> PK {room.currentPickNumber + 1}
           </div>
           
           <SoundToggle level={soundLevel} onCycle={cycleSoundLevel} />
 
           {isCommissioner && (
-            <div className="hidden md:flex items-center gap-2 bg-card border border-border/50 p-1 rounded">
+            <div className="hidden md:flex items-center gap-2 bg-card border border-[var(--sc-border)] dark-any:border-white/6 p-1 rounded-lg">
               {room.status === 'setup' && (
                 <>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className={`gap-1.5 font-bold ${room.isLocked ? "text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`gap-1.5 font-bold ${room.isLocked ? "text-amber-600 dark-any:text-amber-400 hover:text-amber-700 dark-any:hover:text-amber-300 hover:bg-amber-500/10" : "text-muted-foreground hover:text-foreground"}`}
                     onClick={toggleLock}
                     disabled={updateRoom.isPending}
                     title={room.isLocked ? "Unlock room to allow new managers" : "Lock room to prevent new managers"}
@@ -629,6 +652,18 @@ export default function Room() {
               )}
               <Button size="sm" variant="destructive" onClick={() => undoPick.mutate({ id: room.id, data: { commissionerToken }})} disabled={picks.length === 0}>
                 Undo Last
+              </Button>
+              <div className="w-px h-5 bg-border/60 mx-1" />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5 font-bold text-muted-foreground hover:text-foreground"
+                onClick={onExportCsv}
+                disabled={exporting || picks.length === 0}
+                title="Download draft results as a CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {exporting ? "Exporting…" : "Export CSV"}
               </Button>
               <div className="w-px h-5 bg-border/60 mx-1" />
               <Button
@@ -693,11 +728,11 @@ export default function Room() {
       {/* Mobile-only: Commissioner action bar */}
       {isCommissioner && (
         <div className="md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-border/40 bg-card/60 shrink-0 overflow-x-auto">
-          <Link href={`/${code}/setup?step=review`} className="text-[10px] font-bold text-muted-foreground shrink-0 px-2 py-1 rounded border border-border/40 bg-card hover:text-foreground transition-colors">← Setup</Link>
+          <Link href={`/${code}/setup?step=review`} className="text-[10px] font-bold text-muted-foreground shrink-0 px-2 py-1 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6 bg-card hover:text-foreground transition-colors">← Setup</Link>
           <div className="w-px h-4 bg-border/60 shrink-0" />
           {room.status === 'setup' && (
             <>
-              <Button size="sm" variant="ghost" className={`gap-1 text-[10px] font-bold shrink-0 ${room.isLocked ? "text-yellow-400" : "text-muted-foreground"}`} onClick={toggleLock} disabled={updateRoom.isPending}>
+              <Button size="sm" variant="ghost" className={`gap-1 text-[10px] font-bold shrink-0 ${room.isLocked ? "text-amber-600 dark-any:text-amber-400" : "text-muted-foreground"}`} onClick={toggleLock} disabled={updateRoom.isPending}>
                 {room.isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                 {room.isLocked ? "Locked" : "Lock"}
               </Button>
@@ -714,7 +749,7 @@ export default function Room() {
           )}
           <Button size="sm" variant="destructive" className="text-[10px] font-bold shrink-0" onClick={() => undoPick.mutate({ id: room.id, data: { commissionerToken }})} disabled={picks.length === 0}>Undo</Button>
           {canRetract && (
-            <Button size="sm" variant="ghost" className="text-[10px] font-bold text-yellow-400 border border-yellow-500/40 shrink-0" onClick={retractPick} disabled={retracting}>
+            <Button size="sm" variant="ghost" className="text-[10px] font-bold text-amber-600 dark-any:text-amber-400 border border-amber-300/50 dark-any:border-amber-400/20 shrink-0" onClick={retractPick} disabled={retracting}>
               {retracting ? "…" : "Change Pick"}
             </Button>
           )}
@@ -743,10 +778,10 @@ export default function Room() {
                     return (
                       <div
                         key={pos}
-                        className={`flex items-start gap-2 p-2.5 rounded-sm border transition-all duration-300 ${
+                        className={`flex items-start gap-2 p-2.5 rounded-lg border transition-all duration-300 ${
                           isOnClock
                             ? 'bg-primary/20 border-primary shadow-[0_0_12px_rgba(var(--primary),0.15)]'
-                            : 'bg-card/60 border-border/50'
+                            : 'bg-card/60 border-[var(--sc-border)] dark-any:border-white/6'
                         }`}
                       >
                         <span className={`font-mono font-bold text-xs shrink-0 w-4 text-right mt-0.5 ${isOnClock ? 'text-primary' : 'text-muted-foreground/50'}`}>{pos}</span>
@@ -786,7 +821,7 @@ export default function Room() {
                                 key={`select-${pos}-${unassignedParticipants.map(p => p.id).join(',')}`}
                                 onChange={e => { if (e.target.value) assignToSlot(parseInt(e.target.value), pos, teamName); }}
                                 disabled={assigning}
-                                className="w-full text-xs bg-background/60 border border-border/40 rounded-sm px-1.5 py-1 text-muted-foreground cursor-pointer disabled:opacity-40"
+                                className="w-full text-xs bg-background/60 border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg px-1.5 py-1 text-muted-foreground cursor-pointer disabled:opacity-40"
                               >
                                 <option value="" disabled>Assign manager...</option>
                                 {unassignedParticipants.map(p => (
@@ -814,7 +849,7 @@ export default function Room() {
                         <button
                           onClick={randomizeUnassigned}
                           disabled={assigning}
-                          className="text-[9px] font-black uppercase tracking-widest text-primary/70 hover:text-primary border border-primary/30 hover:border-primary/60 rounded-sm px-1.5 py-0.5 transition-colors disabled:opacity-40"
+                          className="text-[9px] font-bold uppercase tracking-widest text-primary/70 hover:text-primary border border-primary/30 hover:border-primary/60 rounded-lg px-1.5 py-0.5 transition-colors disabled:opacity-40"
                         >
                           Randomize
                         </button>
@@ -822,7 +857,7 @@ export default function Room() {
                     </div>
                     <div className="px-2.5 pb-2.5 space-y-1.5">
                       {unassignedParticipants.map(p => (
-                        <div key={p.id} className="flex items-center gap-2 px-2.5 py-2 rounded-sm border border-dashed border-border/40 bg-card/30">
+                        <div key={p.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-dashed border-[var(--sc-border)] dark-any:border-white/6 bg-card/30">
                           <span className="font-mono text-xs text-muted-foreground/30 shrink-0 w-4 text-right">—</span>
                           <div className="font-semibold text-sm truncate text-foreground/60 flex-1">{p.username}</div>
                           {isCommissioner && room.status === 'setup' && (
@@ -845,7 +880,7 @@ export default function Room() {
                 <div className="shrink-0 border-t border-border/40 bg-card/80 px-3 py-2.5">
                   <div className="text-[9px] tracking-widest font-bold text-muted-foreground/40 uppercase mb-1.5">Commissioner</div>
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-sm bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 overflow-hidden">
                       {commissioner.sleeperAvatarId ? (
                         <img
                           src={`https://sleepercdn.com/avatars/thumbs/${commissioner.sleeperAvatarId}`}
@@ -855,7 +890,7 @@ export default function Room() {
                         />
                       ) : null}
                       <span
-                        className="text-primary font-black text-xs w-full h-full flex items-center justify-center"
+                        className="text-primary font-bold text-xs w-full h-full flex items-center justify-center"
                         style={{ display: commissioner.sleeperAvatarId ? 'none' : 'flex' }}
                       >{commissioner.username.charAt(0).toUpperCase()}</span>
                     </div>
@@ -901,7 +936,7 @@ export default function Room() {
                         isMobile ? 'pb-1 px-1 pt-0.5' : 'pb-2.5 px-2.5 pt-1'
                       } ${
                         isOTC
-                          ? 'border-primary animate-otc-header rounded-t-sm'
+                          ? 'border-primary animate-otc-header rounded-t-lg'
                           : 'border-border/30'
                       }`}
                       style={{ background: isOTC ? 'hsl(var(--primary)/0.1)' : 'hsl(var(--background)/0.95)', backdropFilter: 'blur(8px)' }}
@@ -911,7 +946,7 @@ export default function Room() {
                           <div className="flex items-center gap-1 min-w-0">
                             <div className={`${isMobile ? 'text-[9px]' : 'text-sm'} font-bold truncate ${isOTC ? 'text-primary' : 'text-foreground/90'}`}>{p.username}</div>
                             {isOTC && !isMobile && (
-                              <span className="animate-otc-badge shrink-0 text-[8px] font-black uppercase tracking-widest bg-primary text-primary-foreground px-1.5 py-0.5 rounded-sm leading-none">
+                              <span className="animate-otc-badge shrink-0 text-[8px] font-bold uppercase tracking-widest bg-primary text-primary-foreground px-1.5 py-0.5 rounded-lg leading-none">
                                 ON THE CLOCK
                               </span>
                             )}
@@ -967,9 +1002,9 @@ export default function Room() {
                   <React.Fragment key={`round-${round}`}>
                     {/* Round Indicator */}
                     <div className={`flex items-center justify-center ${isMobile ? '' : 'h-20'}`}>
-                      <div className={`flex flex-col items-center gap-0.5 border border-border/40 rounded-sm bg-card/50 ${isMobile ? 'px-0.5 py-0.5' : 'px-2 py-1'}`}>
+                      <div className={`flex flex-col items-center gap-0.5 border border-[var(--sc-border)] dark-any:border-white/6 rounded-lg bg-card/50 ${isMobile ? 'px-0.5 py-0.5' : 'px-2 py-1'}`}>
                         {!isMobile && <span className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/50">Rd</span>}
-                        <span className={`${isMobile ? 'text-[8px]' : 'text-base'} font-black text-muted-foreground/80 leading-none`}>{round}</span>
+                        <span className={`${isMobile ? 'text-[8px]' : 'text-base'} font-bold text-muted-foreground/80 leading-none`}>{round}</span>
                       </div>
                     </div>
                     
@@ -1002,7 +1037,7 @@ export default function Room() {
                         <div
                           key={`cell-${round}-${colIndex}`}
                           className={`
-                            relative ${isMobile ? 'p-1 rounded-[3px]' : 'h-20 p-2.5 rounded-sm'} border flex flex-col justify-center transition-all duration-300
+                            relative ${isMobile ? 'p-1 rounded-md' : 'h-20 p-2.5 rounded-lg'} border flex flex-col justify-center transition-all duration-300
                             ${pick
                               ? `bg-card/70 border-border/60 shadow-[inset_0_1px_0_hsl(var(--border)/0.3)] ${isRecentPick ? 'animate-pick-land' : ''}`
                               : isCurrentPickCell
@@ -1034,7 +1069,7 @@ export default function Room() {
                                         <img src={thumb} alt="" className="w-8 h-8 rounded-full object-cover bg-muted ring-1 ring-border/40"
                                           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                       ) : (
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black ring-1 ring-border/40 ${isPlayer ? positionAvatarStyle(asset?.position) : 'bg-muted text-muted-foreground/60'}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ring-1 ring-border/40 ${isPlayer ? positionAvatarStyle(asset?.position) : 'bg-muted text-muted-foreground/60'}`}>
                                           {isPlayer ? (asset?.position || '?') : pick.assetType[0] || '·'}
                                         </div>
                                       )}
@@ -1048,7 +1083,7 @@ export default function Room() {
                                       <div className="font-bold text-[11px] leading-tight truncate text-foreground/90">{pick.assetName}</div>
                                       {isPlayer ? (
                                         <div className="flex items-center gap-1 mt-0.5">
-                                          {asset?.position && <span className={`text-[9px] font-black ${positionColor(asset.position)}`}>{asset.position}</span>}
+                                          {asset?.position && <span className={`text-[9px] font-bold ${positionColor(asset.position)}`}>{asset.position}</span>}
                                           {asset?.team && <span className="text-[9px] font-bold text-muted-foreground/70">{asset.team}</span>}
                                         </div>
                                       ) : (
@@ -1061,7 +1096,7 @@ export default function Room() {
                             );
                           })() : isCurrentPickCell ? (
                             <div className="flex flex-col gap-0.5">
-                              {!isMobile && <span className="text-[8px] font-black uppercase tracking-widest text-primary/80">On the Clock</span>}
+                              {!isMobile && <span className="text-[8px] font-bold uppercase tracking-widest text-primary/80">On the Clock</span>}
                               <div className={`font-bold text-primary truncate ${isMobile ? 'text-[9px]' : 'text-[11px]'}`}>{participant?.username ?? 'Open'}</div>
                               {!isMobile && participant?.orphanTeamName && (
                                 <div className="text-[9px] text-primary/70 truncate">{participant.orphanTeamName}</div>
@@ -1111,7 +1146,7 @@ export default function Room() {
               <button
                 key={t}
                 onClick={() => setRightTab(t)}
-                className={`flex-1 py-2.5 text-[8px] font-black uppercase tracking-widest transition-colors border-b-2 -mb-px ${
+                className={`flex-1 py-2.5 text-[8px] font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${
                   rightTab === t ? 'text-primary border-primary' : 'text-muted-foreground/40 border-transparent hover:text-muted-foreground/70'
                 }`}
               >
@@ -1126,7 +1161,7 @@ export default function Room() {
             <div className="flex shrink-0 border-b border-border/40 bg-card/80 backdrop-blur">
               <button
                 onClick={() => setAssetsSubTab('pool')}
-                className={`flex-1 py-2.5 text-[9px] font-black uppercase tracking-widest transition-colors border-b-2 -mb-px ${
+                className={`flex-1 py-2.5 text-[9px] font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${
                   assetsSubTab === 'pool' ? 'text-primary border-primary' : 'text-muted-foreground/50 border-transparent hover:text-muted-foreground/70'
                 }`}
               >
@@ -1134,17 +1169,17 @@ export default function Room() {
               </button>
               <button
                 onClick={() => setAssetsSubTab('queue')}
-                className={`flex-1 py-2.5 text-[9px] font-black uppercase tracking-widest transition-colors border-b-2 -mb-px flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2.5 text-[9px] font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px flex items-center justify-center gap-1.5 ${
                   assetsSubTab === 'queue'
                     ? 'text-primary border-primary'
                     : canPick && queue.length > 0
-                    ? 'text-amber-400/90 border-transparent animate-otc-badge'
+                    ? 'text-amber-600 dark-any:text-amber-400 border-transparent animate-otc-badge'
                     : 'text-muted-foreground/50 border-transparent hover:text-muted-foreground/70'
                 }`}
               >
                 Queue
                 {queue.length > 0 && (
-                  <span className={`text-[8px] font-black px-1 py-0.5 rounded-full ${
+                  <span className={`text-[8px] font-bold px-1 py-0.5 rounded-full ${
                     canPick ? 'bg-primary/30 text-primary' : 'bg-muted/60 text-muted-foreground/70'
                   }`}>
                     {queue.length}
@@ -1166,7 +1201,7 @@ export default function Room() {
                     <select
                       value={assetType}
                       onChange={e => { setAssetType(e.target.value as typeof assetType); setPositionFilter("all"); setPickYearFilter("all"); setPickRoundFilter("all"); }}
-                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-black uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-sm cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                     >
                       <option value="all">All Assets</option>
                       <option value="Player">Players</option>
@@ -1180,7 +1215,7 @@ export default function Room() {
                       <select
                         value={positionFilter}
                         onChange={e => setPositionFilter(e.target.value as typeof positionFilter)}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-black uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-sm cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                       >
                         <option value="all">All Pos</option>
                         <option value="QB">QB</option>
@@ -1196,7 +1231,7 @@ export default function Room() {
                       <select
                         value={pickYearFilter}
                         onChange={e => setPickYearFilter(e.target.value)}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-black uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-sm cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                       >
                         <option value="all">All Years</option>
                         {pickYears.map(y => <option key={y} value={y}>'{y}</option>)}
@@ -1209,7 +1244,7 @@ export default function Room() {
                       <select
                         value={pickRoundFilter}
                         onChange={e => setPickRoundFilter(e.target.value)}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-black uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-sm cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                       >
                         <option value="all">All Rds</option>
                         {pickRounds.map(r => <option key={r} value={r}>Rd {r}</option>)}
@@ -1221,7 +1256,7 @@ export default function Room() {
                     <select
                       value={assetSort}
                       onChange={e => setAssetSort(e.target.value as typeof assetSort)}
-                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-black uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-sm cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                     >
                       <option value="position">By Pos</option>
                       <option value="alpha">A–Z</option>
@@ -1342,11 +1377,11 @@ export default function Room() {
                             {isPlayer ? (
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 {isDrafted ? (
-                                  <span className="text-[9px] text-destructive/50 uppercase tracking-wider font-black">Drafted</span>
+                                  <span className="text-[9px] text-destructive/50 uppercase tracking-wider font-bold">Drafted</span>
                                 ) : (
                                   <>
-                                    {isTop && canPick && <span className="text-[9px] text-primary/70 uppercase tracking-widest font-black">Up next ·</span>}
-                                    {qa.position && <span className={`text-[10px] font-black ${positionColor(qa.position)}`}>{qa.position}</span>}
+                                    {isTop && canPick && <span className="text-[9px] text-primary/70 uppercase tracking-widest font-bold">Up next ·</span>}
+                                    {qa.position && <span className={`text-[10px] font-bold ${positionColor(qa.position)}`}>{qa.position}</span>}
                                     {qa.team && <span className="text-[10px] font-bold text-muted-foreground">{qa.team}</span>}
                                   </>
                                 )}
@@ -1364,7 +1399,7 @@ export default function Room() {
                               <button
                                 onClick={handleQueueDraft}
                                 disabled={isDraftPending}
-                                className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-sm mr-0.5 transition-all disabled:opacity-40 ${
+                                className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg mr-0.5 transition-all disabled:opacity-40 ${
                                   canPick ? 'bg-primary text-primary-foreground shadow-[0_0_8px_hsl(var(--primary)/0.5)]' : 'bg-amber-500/80 text-white'
                                 }`}
                               >
@@ -1634,7 +1669,7 @@ export default function Room() {
                       <select
                         value={rosterViewId ?? ''}
                         onChange={e => setViewRosterParticipantId(Number(e.target.value))}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-black uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-sm cursor-pointer focus:outline-none focus:border-primary/70"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70"
                       >
                         {sortedParticipants.map(p => (
                           <option key={p.id} value={p.id}>{p.orphanTeamName ?? p.username}</option>

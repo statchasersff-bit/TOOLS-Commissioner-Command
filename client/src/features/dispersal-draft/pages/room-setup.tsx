@@ -23,6 +23,7 @@ import SleeperImport from "@dispersal/components/sleeper-import";
 import { sleeperThumb, sleeperTeamLogo, positionColor } from "@dispersal/lib/sleeper";
 import { PickBadgeGroup } from "@dispersal/components/pick-badge";
 import { PlayerSearchInput } from "@dispersal/components/player-search-input";
+import { Panel, PanelHeader, SectionTitle } from "@dispersal/components/ui";
 
 type WizardMode = "choice" | "sleeper" | "manual";
 type ManualStep = "settings" | "assets" | "managers" | "review";
@@ -39,7 +40,7 @@ const TIMEZONES = [
 function PauseWindowFields({ form }: { form: ReturnType<typeof import("react-hook-form").useForm<z.infer<typeof settingsSchema>>> }) {
   const enabled = form.watch("dailyPauseEnabled");
   return (
-    <div className="border border-border/40 rounded-sm p-3 space-y-3 bg-background/50">
+    <div className="border border-border/40 rounded-lg p-3 space-y-3 bg-background/50">
       <label className="flex items-center gap-2 cursor-pointer select-none">
         <input
           type="checkbox"
@@ -340,24 +341,24 @@ export default function RoomSetup() {
   const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}${previewCode}`;
 
   const shareCodePanel = (
-    <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm relative overflow-hidden">
+    <div className="rounded-2xl border border-[var(--sc-border)] bg-[var(--sc-card-bg)] shadow-[var(--sc-shadow-card)] dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)] p-5 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none bg-primary/5 opacity-50" />
-      <h3 className="text-sm font-bold uppercase tracking-widest mb-1 text-primary relative z-10">Share Room</h3>
+      <div className="relative z-10 mb-1"><SectionTitle className="mb-0">Share Room</SectionTitle></div>
       <p className="text-xs text-muted-foreground mb-4 relative z-10">Customize your 5-character code, then share the code and website link with managers.</p>
       <div className="relative z-10 space-y-4">
         <div>
           <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Your Room Code</div>
           {codeSaved ? (
             <div className="flex items-center gap-2">
-              <div className="px-3 py-2 bg-background border border-green-500/40 rounded-sm font-mono text-sm font-bold text-primary select-all tracking-widest">
+              <div className="px-3 py-2 bg-background border border-emerald-500/40 rounded-lg font-mono text-sm font-bold text-primary select-all tracking-widest">
                 {code}
               </div>
-              <span className="text-xs text-green-400 font-bold uppercase tracking-wider whitespace-nowrap">✓ Locked</span>
+              <span className="text-xs text-emerald-600 dark-any:text-emerald-400 font-bold uppercase tracking-wider whitespace-nowrap">✓ Locked</span>
             </div>
           ) : (
             <>
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="px-3 py-2 bg-background border border-border/50 rounded-sm font-mono text-sm font-bold text-primary select-all">
+                <div className="px-3 py-2 bg-background border border-border/50 rounded-lg font-mono text-sm font-bold text-primary select-all">
                   {codePrefix || "…"}-
                 </div>
                 <Input
@@ -542,7 +543,7 @@ export default function RoomSetup() {
   const formatLabel = (f: string) => f === "snake" ? "Snake" : f === "linear" ? "Linear" : "3RR";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="text-foreground">
       <div className="max-w-4xl mx-auto px-5 py-10">
 
         {/* Page header */}
@@ -556,12 +557,12 @@ export default function RoomSetup() {
               <Home size={18} />
             </Link>
             {wizard !== "choice" && (
-              <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/${code}`} className="flex-shrink-0 px-4 py-2 bg-secondary text-secondary-foreground rounded-sm text-xs font-bold uppercase tracking-wider hover:bg-secondary/80 transition-colors">
+              <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/${code}`} className="flex-shrink-0 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-secondary/80 transition-colors">
                 Go to Draft Room
               </a>
             )}
           </div>
-          <h1 className="text-2xl font-black text-primary uppercase tracking-tight leading-tight">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--sc-blue)] dark-any:text-foreground leading-tight">
             {wizard === "choice" ? "Create a Dispersal Draft" : (room.leagueName || "Draft Room Setup")}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
@@ -577,10 +578,10 @@ export default function RoomSetup() {
         {wizard === "choice" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Sleeper card */}
-            <div className="bg-card border-2 border-primary/60 rounded-sm p-7 flex flex-col shadow-lg shadow-primary/5 hover:border-primary transition-colors">
+            <div className="rounded-2xl border-2 border-primary/60 bg-[var(--sc-card-bg)] dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)] p-7 flex flex-col shadow-lg shadow-primary/5 hover:border-primary transition-colors">
               <div className="flex items-center gap-2.5 mb-3">
-                <h2 className="text-lg font-black text-white uppercase tracking-tight">Import From Sleeper</h2>
-                <span className="px-2 py-0.5 bg-primary text-background text-[9px] font-black uppercase tracking-widest rounded-sm flex-shrink-0">Recommended</span>
+                <h2 className="text-lg font-bold text-foreground tracking-tight">Import From Sleeper</h2>
+                <span className="px-2 py-0.5 bg-primary text-background text-[9px] font-black uppercase tracking-widest rounded-md flex-shrink-0">Recommended</span>
               </div>
               <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
                 Connect your Sleeper league to automatically import teams, players, draft picks, and league settings.
@@ -601,8 +602,8 @@ export default function RoomSetup() {
             </div>
 
             {/* Manual card */}
-            <div className="bg-card border border-border/50 rounded-sm p-7 flex flex-col shadow-sm hover:border-border/80 transition-colors">
-              <h2 className="text-lg font-black text-white uppercase tracking-tight mb-3">Manual / CSV Setup</h2>
+            <div className="rounded-2xl border border-[var(--sc-border)] bg-[var(--sc-card-bg)] shadow-[var(--sc-shadow-card)] dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)] p-7 flex flex-col hover:border-border/80 transition-colors">
+              <h2 className="text-lg font-bold text-foreground tracking-tight mb-3">Manual / CSV Setup</h2>
               <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
                 Build a custom dispersal draft room for non-Sleeper leagues or offline setups.
               </p>
@@ -632,9 +633,9 @@ export default function RoomSetup() {
 
             {/* Import phase */}
             {sleeperPhase === "import" && (
-              <div className="bg-card border border-primary/30 rounded-sm p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <h2 className="text-lg font-bold uppercase tracking-widest text-primary">Import From Sleeper</h2>
+              <div className="rounded-2xl border border-primary/30 bg-[var(--sc-card-bg)] shadow-[var(--sc-shadow-card)] dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)] p-6">
+                <div className="mb-1">
+                  <SectionTitle className="mb-0">Import From Sleeper</SectionTitle>
                 </div>
                 <p className="text-xs text-muted-foreground mb-5">
                   Enter your Sleeper username to pull orphan teams directly from your league, players and picks included.
@@ -662,8 +663,8 @@ export default function RoomSetup() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-5">
                   {/* Settings */}
-                  <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                    <h3 className="text-base font-bold uppercase tracking-widest mb-4 pb-2 border-b border-border/40 text-primary">Room Settings</h3>
+                  <Panel className="p-5">
+                    <SectionTitle className="mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">Room Settings</SectionTitle>
                     <Form {...settingsForm}>
                       <form onSubmit={settingsForm.handleSubmit((v) => onUpdateSettings(v))} className="space-y-4">
                         <FormField control={settingsForm.control} name="leagueName" render={({ field }) => (
@@ -727,12 +728,12 @@ export default function RoomSetup() {
                         </Button>
                       </form>
                     </Form>
-                  </div>
+                  </Panel>
 
                   {/* Asset pool */}
-                  <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                    <div className="flex items-center justify-between mb-4 pb-2 border-b border-border/40">
-                      <h3 className="text-base font-bold uppercase tracking-widest text-primary">Asset Pool ({allAssets.length})</h3>
+                  <Panel className="p-5">
+                    <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">
+                      <SectionTitle className="mb-0">Asset Pool ({allAssets.length})</SectionTitle>
                       {allAssets.length > 0 && (
                         <Button variant="ghost" size="sm"
                           className={`h-7 px-3 text-xs font-bold uppercase tracking-wider transition-colors ${clearConfirm ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "text-destructive hover:text-destructive hover:bg-destructive/10"}`}
@@ -743,7 +744,7 @@ export default function RoomSetup() {
                     </div>
                     <div className="max-h-72 overflow-y-auto space-y-2">
                       {picks.length > 0 && (
-                        <div className="p-3 bg-background border border-border/50 rounded-sm">
+                        <div className="p-3 bg-background border border-border/50 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
                             <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Draft Picks ({picks.length})</div>
                             <Button variant="ghost" size="sm"
@@ -777,7 +778,7 @@ export default function RoomSetup() {
                         const thumb = isPlayer ? sleeperThumb(a.notes ?? null) : null;
                         const teamLogo = isPlayer ? sleeperTeamLogo(a.team ?? null) : null;
                         return (
-                          <div key={a.id} className="relative flex items-center px-3 py-2.5 bg-background border border-border/50 rounded-sm gap-3">
+                          <div key={a.id} className="relative flex items-center px-3 py-2.5 bg-background border border-border/50 rounded-lg gap-3">
                             <div className="relative flex-shrink-0">
                               {thumb ? <img src={thumb} alt="" className="w-10 h-10 rounded-full object-cover bg-muted" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /> : <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">{isPlayer ? (a.position || "?") : "$"}</div>}
                               {teamLogo && <img src={teamLogo} alt="" className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-background bg-muted object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
@@ -802,7 +803,7 @@ export default function RoomSetup() {
                                 {reassigningAssetId === a.id && (
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setReassigningAssetId(null)} />
-                                    <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border/60 rounded shadow-lg min-w-40 py-1 text-xs text-foreground">
+                                    <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg shadow-lg min-w-40 py-1 text-xs text-foreground">
                                       <div className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-widest text-muted-foreground border-b border-border/40 mb-1">Move to roster</div>
                                       {allRosterNames.map(n => (
                                         <button key={n} type="button"
@@ -825,11 +826,11 @@ export default function RoomSetup() {
                       })}
                       {allAssets.length === 0 && <div className="text-center py-6 text-muted-foreground text-sm">No assets imported yet</div>}
                     </div>
-                  </div>
+                  </Panel>
 
                   {/* Manual add */}
-                  <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                    <h3 className="text-base font-bold uppercase tracking-widest mb-4 pb-2 border-b border-border/40 text-primary">Add Asset Manually</h3>
+                  <Panel className="p-5">
+                    <SectionTitle className="mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">Add Asset Manually</SectionTitle>
                     <Form {...assetForm}>
                       <form onSubmit={assetForm.handleSubmit(onAddAsset)} className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
@@ -877,7 +878,7 @@ export default function RoomSetup() {
                         </Button>
                       </form>
                     </Form>
-                  </div>
+                  </Panel>
                 </div>
 
                 {/* Right column */}
@@ -887,7 +888,7 @@ export default function RoomSetup() {
 
                   <a
                     href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/${code}`}
-                    className="flex items-center justify-center w-full py-3 bg-primary text-background font-black uppercase tracking-widest rounded-sm hover:bg-primary/90 transition-colors text-sm"
+                    className="flex items-center justify-center w-full py-3 bg-primary text-background font-black uppercase tracking-widest rounded-lg hover:bg-primary/90 transition-colors text-sm"
                   >
                     Go to Draft Room →
                   </a>
@@ -921,8 +922,8 @@ export default function RoomSetup() {
             {/* Step 1: Settings */}
             {manualStep === "settings" && (
               <div className="max-w-lg space-y-4">
-                <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                  <h3 className="text-base font-bold uppercase tracking-widest mb-4 pb-2 border-b border-border/40 text-primary">Room Settings</h3>
+                <Panel className="p-5">
+                  <SectionTitle className="mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">Room Settings</SectionTitle>
                   <Form {...settingsForm}>
                     <form id="settings-form" onSubmit={settingsForm.handleSubmit((v) => onUpdateSettings(v, () => setManualStep("assets")))} className="space-y-4">
                       <FormField control={settingsForm.control} name="leagueName" render={({ field }) => (
@@ -983,7 +984,7 @@ export default function RoomSetup() {
                       <PauseWindowFields form={settingsForm} />
                     </form>
                   </Form>
-                </div>
+                </Panel>
                 <div className="flex justify-end">
                   <Button form="settings-form" type="submit" className="font-bold uppercase tracking-widest" disabled={updateRoom.isPending}>
                     {updateRoom.isPending ? "Saving..." : "Next: Add Assets →"}
@@ -997,8 +998,8 @@ export default function RoomSetup() {
               <div className="space-y-5">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* Manual entry */}
-                  <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                    <h3 className="text-base font-bold uppercase tracking-widest mb-4 pb-2 border-b border-border/40 text-primary">Add Asset Manually</h3>
+                  <Panel className="p-5">
+                    <SectionTitle className="mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">Add Asset Manually</SectionTitle>
                     <Form {...assetForm}>
                       <form onSubmit={assetForm.handleSubmit(onAddAsset)} className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
@@ -1044,11 +1045,11 @@ export default function RoomSetup() {
                         <Button type="submit" size="sm" className="font-bold uppercase tracking-widest" disabled={createAsset.isPending}>Add Asset</Button>
                       </form>
                     </Form>
-                  </div>
+                  </Panel>
 
                   {/* CSV */}
-                  <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                    <h3 className="text-base font-bold uppercase tracking-widest mb-4 pb-2 border-b border-border/40 text-primary">Bulk Import (CSV)</h3>
+                  <Panel className="p-5">
+                    <SectionTitle className="mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">Bulk Import (CSV)</SectionTitle>
                     <p className="text-xs text-muted-foreground mb-3">Paste CSV data. Columns: Name, Type, Position, Team, Notes.</p>
                     <Textarea
                       value={csvContent}
@@ -1059,13 +1060,13 @@ export default function RoomSetup() {
                     <Button onClick={onImportCsv} variant="secondary" size="sm" className="font-bold uppercase tracking-widest" disabled={importCsv.isPending}>
                       {importCsv.isPending ? "Importing..." : "Import CSV"}
                     </Button>
-                  </div>
+                  </Panel>
                 </div>
 
                 {/* Asset pool */}
-                <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-border/40">
-                    <h3 className="text-base font-bold uppercase tracking-widest text-primary">Asset Pool ({allAssets.length})</h3>
+                <Panel className="p-5">
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">
+                    <SectionTitle className="mb-0">Asset Pool ({allAssets.length})</SectionTitle>
                     {allAssets.length > 0 && (
                       <Button variant="ghost" size="sm"
                         className={`h-7 px-3 text-xs font-bold uppercase tracking-wider transition-colors ${clearConfirm ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "text-destructive hover:text-destructive hover:bg-destructive/10"}`}
@@ -1076,7 +1077,7 @@ export default function RoomSetup() {
                   </div>
                   <div className="max-h-72 overflow-y-auto space-y-2">
                     {picks.length > 0 && (
-                      <div className="p-3 bg-background border border-border/50 rounded-sm">
+                      <div className="p-3 bg-background border border-border/50 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Draft Picks ({picks.length})</div>
                           <Button variant="ghost" size="sm"
@@ -1110,7 +1111,7 @@ export default function RoomSetup() {
                       const thumb = isPlayer ? sleeperThumb(a.notes ?? null) : null;
                       const teamLogo = isPlayer ? sleeperTeamLogo(a.team ?? null) : null;
                       return (
-                        <div key={a.id} className="relative flex items-center px-3 py-2.5 bg-background border border-border/50 rounded-sm gap-3">
+                        <div key={a.id} className="relative flex items-center px-3 py-2.5 bg-background border border-border/50 rounded-lg gap-3">
                           <div className="relative flex-shrink-0">
                             {thumb ? <img src={thumb} alt="" className="w-10 h-10 rounded-full object-cover bg-muted" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /> : <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">{isPlayer ? (a.position || "?") : "$"}</div>}
                             {teamLogo && <img src={teamLogo} alt="" className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-background bg-muted object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
@@ -1135,7 +1136,7 @@ export default function RoomSetup() {
                               {reassigningAssetId === a.id && (
                                 <>
                                   <div className="fixed inset-0 z-40" onClick={() => setReassigningAssetId(null)} />
-                                  <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border/60 rounded shadow-lg min-w-40 py-1 text-xs text-foreground">
+                                  <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg shadow-lg min-w-40 py-1 text-xs text-foreground">
                                     <div className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-widest text-muted-foreground border-b border-border/40 mb-1">Move to roster</div>
                                     {allRosterNames.map(n => (
                                       <button key={n} type="button"
@@ -1158,7 +1159,7 @@ export default function RoomSetup() {
                     })}
                     {allAssets.length === 0 && <div className="text-center py-6 text-muted-foreground text-sm">No assets added yet</div>}
                   </div>
-                </div>
+                </Panel>
 
                 <div className="flex justify-end">
                   <Button className="font-bold uppercase tracking-widest" onClick={() => setManualStep("managers")}>
@@ -1173,14 +1174,14 @@ export default function RoomSetup() {
               <div className="max-w-xl space-y-5">
                 {shareCodePanel}
 
-                <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
+                <Panel className="p-5">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-bold uppercase tracking-widest text-primary">Managers Joined</h3>
+                    <SectionTitle className="mb-0">Managers Joined</SectionTitle>
                     <div className="flex items-center gap-3">
                       <Button
                         size="sm"
                         variant={room.isLocked ? "secondary" : "outline"}
-                        className={`h-7 px-3 text-xs font-bold uppercase tracking-wider gap-1.5 ${room.isLocked ? "text-yellow-400 border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20" : "text-muted-foreground hover:text-foreground"}`}
+                        className={`h-7 px-3 text-xs font-bold uppercase tracking-wider gap-1.5 ${room.isLocked ? "text-amber-600 dark-any:text-amber-400 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20" : "text-muted-foreground hover:text-foreground"}`}
                         onClick={onToggleLock}
                         disabled={updateRoom.isPending}
                         title={room.isLocked ? "Click to allow new managers to join" : "Click to prevent new managers from joining"}
@@ -1192,17 +1193,17 @@ export default function RoomSetup() {
                     </div>
                   </div>
                   {managersJoined === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center border border-border/40 rounded-sm bg-muted/10">
+                    <p className="text-sm text-muted-foreground py-4 text-center border border-border/40 rounded-lg bg-muted/10">
                       No managers have joined yet. Share the link above.
                     </p>
                   ) : (
                     <div className="space-y-2">
                       {detail.participants.filter(p => !p.isCommissioner).map(p => (
-                        <div key={p.id} className="flex items-center justify-between px-3 py-2 bg-background border border-border/40 rounded-sm gap-2">
+                        <div key={p.id} className="flex items-center justify-between px-3 py-2 bg-background border border-border/40 rounded-lg gap-2">
                           <span className="font-bold text-sm truncate">{p.username}</span>
                           <div className="flex items-center gap-2 shrink-0">
                             {p.orphanTeamName ? (
-                              <span className="text-xs font-bold text-primary bg-primary/10 border border-primary/30 rounded px-2 py-0.5">{p.orphanTeamName}</span>
+                              <span className="text-xs font-bold text-primary bg-primary/10 border border-primary/30 rounded-lg px-2 py-0.5">{p.orphanTeamName}</span>
                             ) : (
                               <span className="text-xs text-muted-foreground font-mono italic">Unassigned</span>
                             )}
@@ -1242,7 +1243,7 @@ export default function RoomSetup() {
                       </Button>
                     </div>
                   )}
-                </div>
+                </Panel>
 
                 <div className="flex justify-end">
                   <Button className="font-bold uppercase tracking-widest" onClick={() => setManualStep("review")}>
@@ -1255,8 +1256,8 @@ export default function RoomSetup() {
             {/* Step 4: Review */}
             {manualStep === "review" && (
               <div className="max-w-xl space-y-5">
-                <div className="bg-card border border-border/50 rounded-sm p-5 shadow-sm">
-                  <h3 className="text-base font-bold uppercase tracking-widest mb-4 pb-2 border-b border-border/40 text-primary">Draft Summary</h3>
+                <Panel className="p-5">
+                  <SectionTitle className="mb-4 pb-2 border-b border-[var(--sc-border)] dark-any:border-white/6">Draft Summary</SectionTitle>
                   <div className="space-y-3">
                     {([
                       ["League", room.leagueName],
@@ -1272,7 +1273,7 @@ export default function RoomSetup() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </Panel>
 
                 {shareCodePanel}
 
@@ -1285,7 +1286,7 @@ export default function RoomSetup() {
                     {startDraft.isPending ? "Starting Draft..." : managersJoined < room.numOrphanSlots ? `Waiting for managers (${managersJoined}/${room.numOrphanSlots})` : !allAssets.length ? "Add assets first" : "Start Draft →"}
                   </Button>
                 ) : (
-                  <div className="text-center text-sm font-bold text-primary bg-primary/10 p-3 rounded-sm border border-primary/20">
+                  <div className="text-center text-sm font-bold text-primary bg-primary/10 p-3 rounded-lg border border-primary/20">
                     Draft has started.{" "}
                     <Link href={`/${code}`} className="underline hover:text-primary/80">Go to draft room</Link>
                   </div>

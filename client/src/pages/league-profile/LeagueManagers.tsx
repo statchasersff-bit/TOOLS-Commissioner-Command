@@ -65,7 +65,7 @@ export function LeagueManagers({ leagueId, league }: { leagueId: string; league:
             <table className="w-full text-sm" style={{ minWidth: 640 }}>
               <thead>
                 <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
-                  <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager / Team</th>
+                  <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager</th>
                   <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Activity</th>
                   <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risk</th>
                   <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Txns</th>

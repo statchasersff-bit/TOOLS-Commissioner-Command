@@ -127,6 +127,17 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/** Fetch the commissioner-only CSV export of draft results as raw text. */
+export async function exportPicksCsv(roomId: number, commissionerToken: string): Promise<string> {
+  const res = await scAuthFetch(`${BASE}/draft-rooms/${roomId}/export${qs({ commissionerToken })}`);
+  if (!res.ok) {
+    let data: { error?: string } | null = null;
+    try { data = await res.json(); } catch { /* non-JSON error body */ }
+    throw new DispersalApiError(res.status, data);
+  }
+  return res.text();
+}
+
 function qs(params?: Record<string, string | undefined>): string {
   if (!params) return "";
   const sp = new URLSearchParams();

@@ -97,6 +97,10 @@ export interface SleeperLeagueSummary {
   avatar: string | null;
   /** True for Sleeper best-ball leagues (settings.best_ball === 1). */
   isBestBall?: boolean;
+  /** Sleeper league type — settings.type: 0 = redraft, 1 = keeper, 2 = dynasty. */
+  leagueType: "redraft" | "keeper" | "dynasty";
+  /** TE-premium points per reception (scoring_settings.bonus_rec_te); 0 if none. */
+  tePremium?: number;
   // Passes the automatic filter (active, drafted, user owns a roster with
   // players). Default-eligible leagues populate the master list; ineligible
   // ones can still be opted into via Settings → Leagues.
@@ -243,6 +247,8 @@ export async function fetchSleeperLeagues(
     draftId: lg.draft_id ?? null,
     avatar: (lg as any).avatar ?? null,
     isBestBall: lg.settings?.best_ball === 1,
+    leagueType: lg.settings?.type === 2 ? "dynasty" : lg.settings?.type === 1 ? "keeper" : "redraft",
+    tePremium: Number(lg.scoring_settings?.bonus_rec_te ?? 0) || 0,
     eligibleByDefault,
     filterReason,
   }));

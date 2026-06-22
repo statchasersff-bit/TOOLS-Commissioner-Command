@@ -25,12 +25,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity, RefreshCw, Users, AlertTriangle, ListChecks,
   Settings as SettingsIcon, ArrowLeft, ArrowRightLeft, ArrowRight,
-  ShieldAlert, Inbox,
+  Inbox,
 } from "lucide-react";
 import Transactions from "@/pages/tabs/Transactions";
 import {
   refreshActivity, fetchOverview, fetchManagers, fetchSettings, updateSettings,
-  ACTIVITY_LABEL_DISPLAY, LEAGUE_LABEL_DISPLAY, FLAG_DISPLAY,
+  ACTIVITY_LABEL_DISPLAY, LEAGUE_LABEL_DISPLAY,
   activityLabelColor, leagueLabelColor, riskLabel,
   type ActivitySettings,
 } from "@/lib/commissionerActivityApi";
@@ -181,7 +181,8 @@ export default function CommissionerActivity({ onBack, leagueId: leagueIdProp }:
   useEffect(() => {
     if (!leagueId || autoScanned.current.has(leagueId)) return;
     autoScanned.current.add(leagueId);
-    refreshMut.mutate({ mode: "recent", auto: true });
+    // Scan the full season so the season-wide activity score reflects every week.
+    refreshMut.mutate({ mode: "season", auto: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
 
@@ -323,10 +324,15 @@ function OverviewTab({ leagueId }: { leagueId: string }) {
   return (
     <div className="space-y-5">
       {/* KPI grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard icon={Activity} label="League Activity Score" value={`${snap.leagueActivityScore}/100`} accent="gold" sub={`${LEAGUE_LABEL_DISPLAY[label]} · Week ${snap.week} · ${snap.season}`} />
-        <KpiCard icon={Users} label="Active Managers" value={snap.activeManagerCount} accent="emerald" sub="Engaged" />
-        <KpiCard icon={ShieldAlert} label="Inactive Risk" value={snap.inactiveManagerCount} accent="red" sub="At-risk" />
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <KpiCard icon={Activity} label="League Activity Score" value={`${snap.leagueActivityScore}/100`} accent="gold" sub={`${LEAGUE_LABEL_DISPLAY[label]} · ${snap.season} Season`} />
+        <KpiCard
+          icon={Users}
+          label="Active Managers"
+          value={`${snap.activeManagerCount}/${snap.activeManagerCount + snap.inactiveManagerCount}`}
+          accent={snap.inactiveManagerCount > 0 ? "red" : "emerald"}
+          sub={snap.inactiveManagerCount > 0 ? `${snap.inactiveManagerCount} at-risk` : "All engaged"}
+        />
         <KpiCard icon={ListChecks} label="Transactions" value={snap.totalTransactions} accent="blue" sub={`${snap.totalTrades} trades`} />
       </div>
 
@@ -362,7 +368,7 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
   const { sorted, sortKey, sortDir, toggle } = useSortableTable(
     managers,
     {
-      team: (m) => m.teamName,
+      team: (m) => m.managerName || m.teamName,
       score: (m) => m.activityScore,
       risk: (m) => m.inactivityRiskScore,
       trans: (m) => m.transactionsCount,
@@ -412,7 +418,7 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
           <thead>
             {/* Header — navy in light mode, glass strip in dark. */}
             <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
-              <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager / Team</SortableTh>
+              <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager</SortableTh>
               <SortableTh sortKey="score" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</SortableTh>
               <SortableTh sortKey="risk" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risk</SortableTh>
               <SortableTh sortKey="trans" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</SortableTh>
@@ -422,7 +428,6 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
               <SortableTh sortKey="lineup" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Lineup</SortableTh>
               <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</SortableTh>
               <SortableTh sortKey="lastMove" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Last Move</SortableTh>
-              <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Flags</th>
             </tr>
           </thead>
           <tbody>
@@ -443,8 +448,10 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
                         compact
                       />
                       <div className="min-w-0">
-                        <div className="font-bold truncate text-[var(--sc-blue)] dark-any:text-white/90">{m.teamName}</div>
-                        <div className="text-xs truncate text-[var(--sc-text-muted)] dark-any:text-white/30">{m.managerName}</div>
+                        <div className="font-bold truncate text-[var(--sc-blue)] dark-any:text-white/90">{m.managerName}</div>
+                        {m.teamName && m.teamName !== m.managerName && (
+                          <div className="text-xs truncate text-[var(--sc-text-muted)] dark-any:text-white/30">{m.teamName}</div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -457,13 +464,6 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
                   <td className="text-center px-2">{m.lineupChanged ? <span className="font-semibold text-emerald-600 dark-any:text-emerald-400">Yes</span> : <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">No</span>}</td>
                   <td className="text-center px-2">{m.emptyStarterSlots > 0 ? <span className="font-bold tabular-nums text-orange-600 dark-any:text-orange-400">{m.emptyStarterSlots}</span> : <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">0</span>}</td>
                   <td className="text-center px-2 text-xs tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{daysAgo(m.lastTransactionTs)}</td>
-                  <td className="px-3 md:px-5 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {m.flags.map((f) => (
-                        <Chip key={f} className="border-[var(--sc-border)] text-[var(--sc-text-muted)] dark-any:border-white/10 dark-any:text-white/40">{FLAG_DISPLAY[f] ?? f}</Chip>
-                      ))}
-                    </div>
-                  </td>
                 </tr>
               );
             })}

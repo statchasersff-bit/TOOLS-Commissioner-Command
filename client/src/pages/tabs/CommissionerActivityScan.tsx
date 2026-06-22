@@ -22,7 +22,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, RefreshCw, Users, ListChecks, ShieldAlert, ArrowRight, LayoutGrid } from "lucide-react";
 import {
   refreshActivity, fetchMultiOverview,
-  LEAGUE_LABEL_DISPLAY, leagueLabelColor,
   type MultiLeagueRow,
 } from "@/lib/commissionerActivityApi";
 
@@ -97,6 +96,12 @@ function timeAgo(iso: string | null): string {
 
 const num = (v: number | null | undefined) => (v == null ? "—" : v);
 
+const LEAGUE_TYPE_META: Record<string, { label: string; cls: string }> = {
+  dynasty: { label: "Dynasty", cls: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30 dark-any:text-indigo-400" },
+  keeper:  { label: "Keeper",  cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark-any:text-amber-400" },
+  redraft: { label: "Redraft", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark-any:text-slate-400" },
+};
+
 export default function CommissionerActivityScan() {
   const sleeper = useSleeper();
   const { toast } = useToast();
@@ -110,6 +115,8 @@ export default function CommissionerActivityScan() {
   const nameById = Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.name]));
   const avatarById = Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.avatar ?? null]));
   const isBestBallById = Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.isBestBall ?? false]));
+  const totalRostersById = Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.totalRosters]));
+  const leagueTypeById = Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.leagueType]));
   const idsKey = leagueIds.join(",");
 
   const q = useQuery({
@@ -123,7 +130,7 @@ export default function CommissionerActivityScan() {
   const scanMut = useMutation({
     mutationFn: async ({ auto }: { auto?: boolean }) => {
       const results = await Promise.allSettled(
-        leagueIds.map((id) => refreshActivity({ leagueId: id, mode: "recent", forceRefresh: !auto })),
+        leagueIds.map((id) => refreshActivity({ leagueId: id, mode: "season", forceRefresh: !auto })),
       );
       return { ok: results.filter((r) => r.status === "fulfilled").length, total: leagueIds.length };
     },
@@ -156,6 +163,12 @@ export default function CommissionerActivityScan() {
     ? Math.round(scored.reduce((s, r) => s + (r.leagueActivityScore ?? 0), 0) / scored.length)
     : 0;
   const totalActive = rows.reduce((s, r) => s + (r.activeManagerCount ?? 0), 0);
+  // Total rosters across leagues that actually returned data, so the KPI reads
+  // as "active / total managers" consistent with the table's Active column.
+  const totalManagers = rows.reduce(
+    (s, r) => s + (r.activeManagerCount != null ? (totalRostersById[r.leagueId] ?? 0) : 0),
+    0,
+  );
   const totalTransactions = rows.reduce((s, r) => s + (r.totalTransactions ?? 0), 0);
 
   // One display row per scanned league (rows may not yet have data for every id).
@@ -168,13 +181,11 @@ export default function CommissionerActivityScan() {
     tableRows,
     {
       league: (r) => r.name,
+      type: (r) => leagueTypeById[r.id],
       score: (r) => r.row?.leagueActivityScore,
-      status: (r) => r.row?.leagueActivityLabel,
       active: (r) => r.row?.activeManagerCount,
-      inactive: (r) => r.row?.inactiveManagerCount,
       trans: (r) => r.row?.totalTransactions,
       empty: (r) => r.row?.totalEmptyStarterSlots,
-      alerts: (r) => r.row?.openAlerts,
       lastScan: (r) => r.row?.lastScan,
     },
     { defaultKey: "score", defaultDir: "desc" },
@@ -220,7 +231,7 @@ export default function CommissionerActivityScan() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard icon={LayoutGrid} label="Leagues Scanned" value={`${scored.length}/${leagueIds.length}`} accent="blue" />
         <KpiCard icon={Activity} label="Avg Activity Score" value={`${avgScore}/100`} accent="gold" />
-        <KpiCard icon={Users} label="Active Managers" value={totalActive} accent="slate" />
+        <KpiCard icon={Users} label="Active Managers" value={`${totalActive}/${totalManagers}`} accent="slate" />
         <KpiCard icon={ListChecks} label="Total Transactions" value={totalTransactions} accent="slate" />
       </div>
 
@@ -238,27 +249,16 @@ export default function CommissionerActivityScan() {
           "dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
         )}
       >
-        {/* Title bar — gold tick + league count */}
-        <div className="flex items-center justify-between px-4 md:px-5 py-3.5 border-b border-[var(--sc-border)] dark-any:border-white/6">
-          <div className="flex items-center gap-2">
-            <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
-            <h3 className="text-sm font-bold text-[var(--sc-text)] dark-any:text-white/90">League Activity</h3>
-          </div>
-          <span className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/35">{leagueIds.length} league{leagueIds.length !== 1 ? "s" : ""}</span>
-        </div>
-
         <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
           <table className="w-full text-sm" style={{ minWidth: 820 }}>
             <thead>
               <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
                 <SortableTh sortKey="league" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">League</SortableTh>
+                <SortableTh sortKey="type" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Type</SortableTh>
                 <SortableTh sortKey="score" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</SortableTh>
-                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Status</SortableTh>
                 <SortableTh sortKey="active" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Active</SortableTh>
-                <SortableTh sortKey="inactive" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Inactive</SortableTh>
                 <SortableTh sortKey="trans" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</SortableTh>
                 <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</SortableTh>
-                <SortableTh sortKey="alerts" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Alerts</SortableTh>
                 <SortableTh sortKey="lastScan" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 md:px-5 py-2.5 whitespace-nowrap">Last Scan</SortableTh>
               </tr>
             </thead>
@@ -267,17 +267,16 @@ export default function CommissionerActivityScan() {
                 Array.from({ length: Math.max(1, Math.min(leagueIds.length, 6)) }).map((_, i) => (
                   <tr key={i} className="border-b border-[#edf2f7] dark-any:border-white/5 last:border-0">
                     <td className="px-3 md:px-5 py-3"><Skeleton className="h-4 w-40" /></td>
-                    {Array.from({ length: 8 }).map((__, j) => (
+                    {Array.from({ length: 6 }).map((__, j) => (
                       <td key={j} className="px-2 py-3"><Skeleton className="h-4 w-10 mx-auto" /></td>
                     ))}
                   </tr>
                 ))
               ) : leagueIds.length === 0 ? (
-                <tr><td colSpan={9} className="text-center text-sm text-muted-foreground py-12">No eligible leagues to scan.</td></tr>
+                <tr><td colSpan={7} className="text-center text-sm text-muted-foreground py-12">No eligible leagues to scan.</td></tr>
               ) : (
                 sorted.map(({ id, name, row }) => {
                   const score = row?.leagueActivityScore ?? null;
-                  const label = row?.leagueActivityLabel ?? "unknown";
                   const isBestBall = isBestBallById[id] ?? false;
                   return (
                     <tr
@@ -294,19 +293,17 @@ export default function CommissionerActivityScan() {
                           )}
                         </div>
                       </td>
+                      <td className="text-center px-2">
+                        {(() => {
+                          const meta = LEAGUE_TYPE_META[leagueTypeById[id] ?? "redraft"];
+                          return <Chip className={meta.cls}>{meta.label}</Chip>;
+                        })()}
+                      </td>
                       <td className="text-center px-2 font-bold tabular-nums" style={score != null ? { color: GOLD } : undefined}>
                         {score != null ? `${score}` : "—"}
                       </td>
-                      <td className="text-center px-2">
-                        <Chip className={leagueLabelColor(label)}>{LEAGUE_LABEL_DISPLAY[label]}</Chip>
-                      </td>
-                      <td className="text-center px-2 font-semibold tabular-nums text-[var(--sc-text)] dark-any:text-white/70">{num(row?.activeManagerCount)}</td>
-                      <td className="text-center px-2 tabular-nums">
-                        {row?.inactiveManagerCount ? (
-                          <span className="font-bold text-orange-600 dark-any:text-orange-400">{row.inactiveManagerCount}</span>
-                        ) : (
-                          <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">{num(row?.inactiveManagerCount)}</span>
-                        )}
+                      <td className="text-center px-2 font-semibold tabular-nums text-[var(--sc-text)] dark-any:text-white/70">
+                        {row?.activeManagerCount != null ? `${row.activeManagerCount}/${totalRostersById[id] ?? "?"}` : "—"}
                       </td>
                       <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{num(row?.totalTransactions)}</td>
                       <td className="text-center px-2 tabular-nums">
@@ -316,13 +313,6 @@ export default function CommissionerActivityScan() {
                           <span className="font-bold text-red-600 dark-any:text-red-400">{row.totalEmptyStarterSlots}</span>
                         ) : (
                           <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">{num(row?.totalEmptyStarterSlots)}</span>
-                        )}
-                      </td>
-                      <td className="text-center px-2 tabular-nums">
-                        {row?.openAlerts ? (
-                          <span className="font-bold text-amber-600 dark-any:text-amber-400">{row.openAlerts}</span>
-                        ) : (
-                          <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">0</span>
                         )}
                       </td>
                       <td className="text-center px-2 md:px-5 text-xs text-[var(--sc-text-muted)] dark-any:text-white/40 whitespace-nowrap">{timeAgo(row?.lastScan ?? null)}</td>

@@ -19,7 +19,7 @@ export function parsePick(name: string): ParsedPick | null {
 }
 
 const ROUND_STYLES: Record<number, string> = {
-  1: "bg-yellow-500 text-yellow-950 border-yellow-400 shadow-yellow-500/30",
+  1: "bg-[#d4af37] text-[#3a2e05] border-[#e6c75a] shadow-[#d4af37]/30",
   2: "bg-slate-400 text-slate-900 border-slate-300 shadow-slate-400/30",
   3: "bg-amber-700 text-amber-50 border-amber-600 shadow-amber-700/30",
 };
@@ -54,7 +54,7 @@ export function PickBadge({ name, team, className, onClick, onDelete, onReassign
     <span
       title={pick.via ? `Traded pick (originally from ${pick.via})` : name}
       className={cn(
-        "group/pick relative inline-flex flex-col items-center gap-0 px-2.5 py-1 rounded text-xs font-black border shadow-sm select-none leading-none",
+        "group/pick relative inline-flex flex-col items-center gap-0 px-2.5 py-1 rounded-md text-xs font-bold border shadow-sm select-none leading-none",
         colorCls,
         onClick && "cursor-pointer",
         className

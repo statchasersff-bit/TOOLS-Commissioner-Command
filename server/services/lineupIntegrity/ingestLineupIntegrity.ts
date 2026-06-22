@@ -76,7 +76,21 @@ export async function ingestLineupIntegrityForLeague(
   // THIS league actually has lineups set for the week (checked per-week below).
   // A summer display_week is 0, so floor the default scan week at 1.
   const currentWeek = Math.max(1, nflState.display_week ?? nflState.week ?? 1);
-  const weeksToScan = options.weeks && options.weeks.length ? options.weeks : [currentWeek];
+  const requestedWeeks = options.weeks && options.weeks.length ? options.weeks : [currentWeek];
+
+  // Future-week guard: you can only scan through the current (in-progress) NFL
+  // week. A week W is scannable only once week W-1 is complete, which is exactly
+  // W <= currentWeek. Scanning ahead would flag teams for lineups they can still
+  // change and would let a commissioner skip past an unfinished prior week.
+  const weeksToScan = requestedWeeks.filter((w) => w <= currentWeek);
+  if (weeksToScan.length === 0) {
+    const earliest = Math.min(...requestedWeeks);
+    return {
+      success: true, leagueId, season, weeksScanned: [], lineupsChecked: 0,
+      alertsCreated: 0, criticalAlerts: 0, skipped: true,
+      reason: `Week ${earliest} hasn't finished yet — you can only scan through Week ${currentWeek}. Complete the prior week first.`,
+    };
+  }
 
   const settings = await getLineupIntegritySettings(leagueId);
 

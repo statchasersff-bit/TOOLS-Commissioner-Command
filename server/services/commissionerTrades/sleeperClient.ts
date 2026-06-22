@@ -135,5 +135,50 @@ export async function getLeagueDirectory(leagueId: string): Promise<LeagueDirect
   return data;
 }
 
+// ── Startup-draft detection ───────────────────────────────────────────────────
+// Sleeper trade picks only carry a season + round — no startup-vs-rookie flag.
+// We identify startup-draft picks by matching a pick's season against the
+// league's actual drafts: a "startup" draft fills full rosters (many rounds),
+// unlike a rookie draft (~4-5 rounds). Seasons that have such a draft are
+// startup seasons, so any pick for those seasons is a startup-draft pick.
+export interface SleeperDraftLite {
+  draft_id: string;
+  season?: string;
+  type?: string;
+  status?: string;
+  settings?: { rounds?: number; [k: string]: unknown };
+}
+
+export async function getLeagueDrafts(leagueId: string): Promise<SleeperDraftLite[]> {
+  const data = await fetchJson<SleeperDraftLite[] | null>(
+    `${SLEEPER_API}/league/${leagueId}/drafts`,
+  );
+  return Array.isArray(data) ? data : [];
+}
+
+const STARTUP_MIN_ROUNDS = 10; // rookie drafts are ≤ ~7 rounds; startup fills full rosters
+const STARTUP_TTL_MS = 60 * 60 * 1000;
+const startupSeasonsCache = new Map<string, { ts: number; data: Set<string> }>();
+
+/** Seasons whose draft is a full-roster startup draft (cached per league). */
+export async function getStartupPickSeasons(leagueId: string): Promise<Set<string>> {
+  const cached = startupSeasonsCache.get(leagueId);
+  if (cached && Date.now() - cached.ts < STARTUP_TTL_MS) return cached.data;
+
+  const seasons = new Set<string>();
+  try {
+    const drafts = await getLeagueDrafts(leagueId);
+    for (const d of drafts) {
+      if (d.season && Number(d.settings?.rounds ?? 0) >= STARTUP_MIN_ROUNDS) {
+        seasons.add(String(d.season));
+      }
+    }
+  } catch {
+    /* leave empty — no startup exclusion when draft data is unavailable */
+  }
+  startupSeasonsCache.set(leagueId, { ts: Date.now(), data: seasons });
+  return seasons;
+}
+
 /** Re-export the shared cached players map for the ingest pipeline. */
 export { getSleeperPlayers };

@@ -88,7 +88,7 @@ export function BankTimer({
       <span
         className={cn(
           sizeCls,
-          "text-blue-400 border-blue-400/30 bg-blue-400/10",
+          "text-blue-600 dark-any:text-blue-400 border-blue-500/30 bg-blue-500/10",
           className,
         )}
         title="Timer paused during quiet hours"
@@ -104,7 +104,7 @@ export function BankTimer({
   const colorCls = empty
     ? "text-destructive border-destructive/40 bg-destructive/10 animate-pulse"
     : low
-    ? "text-yellow-400 border-yellow-400/30 bg-yellow-400/10"
+    ? "text-amber-600 dark-any:text-amber-400 border-amber-500/30 bg-amber-500/10"
     : isOnClock
     ? "text-primary border-primary/30 bg-primary/10"
     : "text-muted-foreground/50 border-border/30 bg-transparent";

@@ -1329,8 +1329,6 @@ function MultiLeagueDashboard({
     inactive: (id) => num(id, (r) => r.inactiveStarters + r.byeStarters + r.emptySlots),
     risky: (id) => num(id, (r) => r.questionableStarters + r.doubtfulStarters),
     signals: (id) => num(id, (r) => r.tankingTeams),
-    status: (id) => leagueStatusLabel(rowById(id)?.status ?? "data_pending", "live"),
-    lastScanned: (id) => rowById(id)?.lastScanned ?? null,
   });
 
   if (isLoading) return <Loading />;
@@ -1342,6 +1340,12 @@ function MultiLeagueDashboard({
   const quesDoubStarters = sum((r) => r.questionableStarters + r.doubtfulStarters);
   const needsReview = sum((r) => r.needsReview);
   const resolved = sum((r) => r.resolvedThisWeek);
+  // Single "last scanned" stamp for the whole table — leagues scan together, so
+  // surface the most recent scan time above the table instead of per-row.
+  const lastScanned = rows.reduce<string | null>(
+    (latest, r) => (r.lastScanned && (!latest || r.lastScanned > latest) ? r.lastScanned : latest),
+    null,
+  );
 
   return (
     <div className="space-y-5">
@@ -1361,7 +1365,10 @@ function MultiLeagueDashboard({
 
       {/* League table */}
       <div>
-        <div className="flex items-center justify-end gap-2 mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/40" title={lastScanned ? new Date(lastScanned).toLocaleString() : undefined}>
+            Last scanned: <span className="font-medium text-foreground dark-any:text-white/70">{formatLastScanned(lastScanned)}</span>
+          </p>
           <div className="flex items-center gap-2 flex-shrink-0">
             <ScanSettingsButton leagueIds={leagueIds} />
             <Button
@@ -1397,11 +1404,9 @@ function MultiLeagueDashboard({
               <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
                 <SortableTh sortKey="league" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">League</SortableTh>
                 <SortableTh sortKey="managers" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Managers</SortableTh>
-                <SortableTh sortKey="inactive" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">OUT/BYE/IR/EMPTY</SortableTh>
-                <SortableTh sortKey="risky" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">QUES/DOUB</SortableTh>
-                <SortableTh sortKey="signals" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Review Signals</SortableTh>
-                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Status</SortableTh>
-                <SortableTh sortKey="lastScanned" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Last Scanned</SortableTh>
+                <SortableTh sortKey="inactive" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Inactive</SortableTh>
+                <SortableTh sortKey="risky" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risky</SortableTh>
+                <SortableTh sortKey="signals" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Pot Tank</SortableTh>
                 <th className="text-right font-bold px-2 md:px-5 py-2.5 whitespace-nowrap">Action</th>
               </tr>
             </thead>
@@ -1461,10 +1466,6 @@ function MultiLeagueDashboard({
                     <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
                       {noData ? "—" : (r!.tankingTeams ? <span className="font-bold text-red-600 dark-any:text-red-500">{r!.tankingTeams}</span> : 0)}
                     </td>
-                    <td className="px-2 py-2.5"><Badge text={leagueStatusLabel(status, "live")} color={STATUS_META[status].color} /></td>
-                    <td className="px-2 py-2.5 text-xs whitespace-nowrap text-[var(--sc-text-muted)] dark-any:text-white/40" title={r?.lastScanned ? new Date(r.lastScanned).toLocaleString() : undefined}>
-                      {formatLastScanned(r?.lastScanned ?? null)}
-                    </td>
                     <td className="px-2 md:px-5 py-2.5 text-right">
                       {status === "best_ball_excluded" || status === "not_started" ? (
                         <span className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/40">—</span>
@@ -1480,7 +1481,7 @@ function MultiLeagueDashboard({
                   </tr>
                   {isOpen && (
                     <tr className="bg-[var(--sc-card-soft)] dark-any:bg-white/[0.02] border-b border-[#edf2f7] dark-any:border-white/5">
-                      <td colSpan={8} className="px-3 md:px-5 py-3">
+                      <td colSpan={6} className="px-3 md:px-5 py-3">
                         <LeagueReviewPanel
                           row={r!}
                           mode="live"

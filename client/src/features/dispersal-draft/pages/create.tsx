@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Panel } from "@dispersal/components/ui";
 
 const createFormSchema = z.object({
   leagueName: z.string().min(1, "League name is required"),
@@ -55,22 +56,22 @@ export default function Create() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-lg">
-        <button
-          onClick={() => setLocation("/")}
-          className="text-muted-foreground text-sm font-bold uppercase tracking-widest mb-8 flex items-center gap-2 hover:text-foreground transition-colors"
-        >
-          ← Back
-        </button>
+    <div className="w-full max-w-lg mx-auto space-y-6">
+      <button
+        onClick={() => setLocation("/")}
+        className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+      >
+        ← Back
+      </button>
 
-        <div className="mb-8">
-          <h1 className="text-3xl font-black uppercase tracking-tight text-primary mb-1">Create a Draft Room</h1>
-          <p className="text-muted-foreground text-sm">Set up your dispersal draft. You'll import assets on the next page.</p>
-        </div>
+      <div>
+        <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--sc-blue)] dark-any:text-foreground">Create a Draft Room</h1>
+        <span className="sc-section-rule" />
+        <p className="text-sm mt-2 text-muted-foreground">Set up your dispersal draft. You'll import assets on the next page.</p>
+      </div>
 
-        <div className="bg-card border border-border/50 rounded-sm p-8 shadow-sm">
-          <Form {...form}>
+      <Panel className="p-6">
+        <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
                 control={form.control}
@@ -178,15 +179,14 @@ export default function Create() {
 
               <Button
                 type="submit"
-                className="w-full h-11 font-black uppercase tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+                className="w-full h-11 font-bold mt-2"
                 disabled={createDraftRoom.isPending}
               >
                 {createDraftRoom.isPending ? "Creating..." : "Create Draft Room →"}
               </Button>
             </form>
           </Form>
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 }

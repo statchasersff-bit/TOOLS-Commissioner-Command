@@ -12,7 +12,6 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -34,18 +33,21 @@ import {
   ShieldAlert,
   ScrollText,
   Users,
-  BarChart3,
   Settings as SettingsIcon,
   ClipboardList,
   Flag,
+  Layers,
+  StickyNote,
 } from "lucide-react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
+import { useLeagueAvatars } from "@/hooks/useLeagueAvatars";
 import {
   ingestTrades,
   fetchTradeFeed,
   fetchTrade,
   updateReview,
   fetchManagerHistory,
-  fetchAnalytics,
   type TradeRow,
   type TradeAsset,
   type TradeFlag,
@@ -54,7 +56,6 @@ import {
   type RiskLabel,
   type Severity,
   type ManagerHistory,
-  type LeagueAnalytics,
 } from "@/lib/commissionerTradesApi";
 
 // ── Local commissioner settings (Phase 1: persisted client-side) ──────────────
@@ -87,14 +88,13 @@ function loadSettings(leagueId: string): TradeReviewSettings {
   return DEFAULT_SETTINGS;
 }
 
-type SectionId = "feed" | "queue" | "details" | "manager" | "analytics" | "settings";
+type SectionId = "feed" | "queue" | "details" | "manager" | "settings";
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: typeof Eye }> = [
   { id: "feed", label: "Trade Feed", icon: ScrollText },
   { id: "queue", label: "Review Queue", icon: ClipboardList },
   { id: "details", label: "Trade Details", icon: Eye },
   { id: "manager", label: "Manager History", icon: Users },
-  { id: "analytics", label: "League Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -198,46 +198,18 @@ function StatusChip({ status }: { status: TradeStatus }) {
   );
 }
 
-// Risk as a commissioner-readable label ("Low Risk") — no raw score in the feed.
-function riskText(label: RiskLabel): string {
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)} Risk`;
-}
-
 // Short, scannable flag labels for the collapsed "Flags:" row.
 const FLAG_SHORT: Record<string, string> = {
   lopsided: "Lopsided",
-  future_pick: "Future pick moved",
+  future_pick: "Future pick risk",
   premium_pick: "Premium future asset",
-  repeat_partner: "Repeat partners",
-  orphan_risk: "Orphan risk",
+  repeat_partner: "Repeat manager concern",
+  orphan_risk: "Possible dump",
   league_balance: "League balance",
-  direction_mismatch: "Direction mismatch",
+  direction_mismatch: "Contender/rebuilder mismatch",
 };
 function flagShort(f: TradeFlag): string {
   return FLAG_SHORT[f.flagType] ?? f.title;
-}
-
-// Left severity accent rail — only high-risk trades carry a strong color so the
-// feed stays calm and the dangerous trades pop.
-const RISK_BAR: Record<RiskLabel, string> = {
-  low: "bg-emerald-500/40",
-  medium: "bg-amber-500/70",
-  high: "bg-orange-500",
-  critical: "bg-red-500",
-};
-// Risk badge (leading visual signal): restrained tint, label like "Critical Risk".
-function RiskBadge({ label }: { label: RiskLabel }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
-        RISK_STYLES[label],
-      )}
-      data-testid={`badge-risk-${label}`}
-    >
-      {riskText(label)}
-    </span>
-  );
 }
 
 // CTA copy follows the trade's status: act vs. just look back at the decision.
@@ -267,27 +239,6 @@ function SignalChips({ flags }: { flags: TradeFlag[] }) {
           {flagShort(f)}
         </span>
       ))}
-    </div>
-  );
-}
-
-// One "<Team> receives → assets" block. Both sides of a 2-team trade get one;
-// multi-team trades stack one per roster.
-function ReceivesBlock({
-  name,
-  assets,
-}: {
-  name: string;
-  assets: TradeAsset[];
-}) {
-  return (
-    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {name} receives
-      </div>
-      <div className="mt-0.5 text-sm leading-snug text-foreground/90">
-        {assets.length === 0 ? "—" : assets.map(assetLabel).join(" · ")}
-      </div>
     </div>
   );
 }
@@ -364,11 +315,19 @@ export function TradeReviewCenter({ league }: { league: League }) {
   }, [league.teams]);
   const teamName = useCallback((rid: number) => rosterNames.get(rid) ?? `Team ${rid}`, [rosterNames]);
 
+  // Per-league format chips (SF/1QB, team count, scoring) resolved from the
+  // connected Sleeper league summaries — the feed spans multiple leagues.
+  const leagueMeta = useCallback((id: string): LeagueMeta => {
+    const s = sleeper.leagues.find((l) => l.leagueId === id);
+    return { format: s?.format, scoring: s?.scoringFormat, teams: s?.totalRosters, tep: s?.tePremium ?? 0, avatar: s?.avatar ?? null };
+  }, [sleeper.leagues]);
+
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await fetchTradeFeed(commishLeagueIds);
+      // Startup-draft pick trades are excluded server-side (feed query).
       setTrades(data.trades);
     } catch (e: any) {
       setError(e?.message || "Failed to load trades");
@@ -419,11 +378,6 @@ export function TradeReviewCenter({ league }: { league: League }) {
     setSelectedTradeId(id);
     setSection("details");
   }, []);
-  const openManager = useCallback((rid: number) => {
-    setSelectedManagerRoster(rid);
-    setSection("manager");
-  }, []);
-
   const onReviewUpdated = useCallback((id: number, status: ReviewStatus) => {
     setTrades((prev) => prev.map((t) => (t.id === id ? { ...t, reviewStatus: status } : t)));
   }, []);
@@ -484,7 +438,7 @@ export function TradeReviewCenter({ league }: { league: League }) {
       ) : (
         <>
           {section === "feed" && (
-            <TradeFeed trades={trades} teamName={teamName} onOpen={openTrade} onRefresh={handleRefresh} refreshing={refreshing} />
+            <TradeFeed trades={trades} teamName={teamName} leagueMeta={leagueMeta} onOpen={openTrade} onReviewUpdated={onReviewUpdated} onRefresh={handleRefresh} refreshing={refreshing} />
           )}
           {section === "queue" && (
             <ReviewQueue
@@ -512,9 +466,6 @@ export function TradeReviewCenter({ league }: { league: League }) {
               onPickRoster={setSelectedManagerRoster}
               onOpen={openTrade}
             />
-          )}
-          {section === "analytics" && (
-            <AnalyticsView leagueId={leagueId} teamName={teamName} onOpenManager={openManager} />
           )}
           {section === "settings" && (
             <SettingsView
@@ -547,16 +498,29 @@ function receivedBy(t: TradeRow, rosterId: number): TradeAsset[] {
   return t.assets.filter((a) => a.toRosterId === rosterId);
 }
 
+interface LeagueMeta { format?: string; scoring?: string; teams?: number; tep?: number; avatar?: string | null }
+
+// League-format scoring label: PPR / 0.5 PPR / Standard.
+function scoringLabel(scoring?: string): string | null {
+  if (!scoring) return null;
+  if (scoring === "Half") return "0.5 PPR";
+  return scoring; // "PPR" | "Standard"
+}
+
 function TradeFeed({
   trades,
   teamName,
+  leagueMeta,
   onOpen,
+  onReviewUpdated,
   onRefresh,
   refreshing,
 }: {
   trades: TradeRow[];
   teamName: (r: number) => string;
+  leagueMeta: (id: string) => LeagueMeta;
   onOpen: (id: number) => void;
+  onReviewUpdated: (id: number, status: ReviewStatus) => void;
   onRefresh: () => void;
   refreshing: boolean;
 }) {
@@ -659,12 +623,13 @@ function TradeFeed({
       ) : (
         <div className="space-y-2.5">
           {sorted.map((t) => (
-            <TradeCard
+            <TradeReviewCard
               key={t.id}
               trade={t}
               teamName={teamName}
-              showLeague={multiLeague}
+              meta={leagueMeta(t.leagueId)}
               onOpen={onOpen}
+              onReviewUpdated={onReviewUpdated}
             />
           ))}
         </div>
@@ -673,87 +638,221 @@ function TradeFeed({
   );
 }
 
-// ── Trade Card ────────────────────────────────────────────────────────────────
-// Hybrid feed-card: a severity rail leads, parties + gap + status sit on the
-// header line, each side's haul gets its own "receives" block, and the CTA
-// adapts to whether the commissioner still needs to act. Scannable like a table
-// row, readable like a card — and it stacks cleanly on mobile.
-function TradeCard({
+// ── Trade Review Card (premium Dynasty-style trade comparison) ────────────────
+
+const GOLD = "#d4af37";
+
+function MetaChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/40 dark-any:bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+// One asset row — player headshot+meta or pick/FAAB icon, value aligned right.
+function AssetRow({ a }: { a: TradeAsset }) {
+  if (a.assetType === "player") {
+    return (
+      <div className="flex items-center justify-between gap-2 py-1.5">
+        <PlayerAvatar id={a.playerId ?? ""} name={a.playerName ?? "Unknown player"} pos={a.position ?? ""} team={a.team ?? ""} size="sm" />
+        <span className="flex-shrink-0 text-sm font-bold tabular-nums text-foreground/90">{fmt(a.assetValue)}</span>
+      </div>
+    );
+  }
+  const isPick = a.assetType === "pick";
+  const label = isPick ? `${a.pickSeason ?? ""} ${ordinal(a.pickRound)}`.trim() : `$${a.faabAmount ?? 0} FAAB`;
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#0b3a7a]/15 ring-1 ring-border/40 dark-any:bg-white/5">
+          <Layers className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-bold text-foreground">{label || "Draft pick"}</div>
+          <div className="text-[11px] text-muted-foreground">{isPick ? "Draft pick" : "Free-agent budget"}</div>
+        </div>
+      </div>
+      <span className="flex-shrink-0 text-sm font-bold tabular-nums text-foreground/90">{fmt(a.assetValue)}</span>
+    </div>
+  );
+}
+
+// One side of the comparison — label, manager name, total + advantage pill, assets.
+function TradeSide({
+  name, avatar, total, advantage, assets,
+}: {
+  name: string;
+  avatar?: string | null;
+  total: number;
+  advantage: number;
+  assets: TradeAsset[];
+}) {
+  return (
+    <div className="rounded-xl border border-border/50 bg-muted/20 p-3 dark-any:border-white/8 dark-any:bg-white/[0.02]">
+      <div className="mb-1.5 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <SleeperUserAvatar username={name} avatar={avatar ?? null} size="sm" compact />
+          <span className="min-w-0 truncate text-sm font-semibold text-foreground">{name}</span>
+          <span className="flex-shrink-0 text-[11px] font-medium text-muted-foreground">receives</span>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <div className="text-base font-bold tabular-nums text-foreground">{fmt(total)}</div>
+          {advantage > 0 && (
+            <span className="mt-0.5 inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark-any:text-emerald-400">
+              +{fmt(advantage)} Value
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="divide-y divide-border/40">
+        {assets.length === 0
+          ? <div className="py-1.5 text-xs text-muted-foreground">—</div>
+          : assets.map((a, i) => <AssetRow key={i} a={a} />)}
+      </div>
+    </div>
+  );
+}
+
+// Premium trade-review card — mirrors the Dynasty Command trade-comparison card
+// while keeping commissioner risk/flag/review context. Trade is the main content.
+function TradeReviewCard({
   trade: t,
   teamName,
-  showLeague,
+  meta,
   onOpen,
+  onReviewUpdated,
 }: {
   trade: TradeRow;
   teamName: (r: number) => string;
-  showLeague: boolean;
+  meta: LeagueMeta;
   onOpen: (id: number) => void;
+  onReviewUpdated: (id: number, status: ReviewStatus) => void;
 }) {
+  const { toast } = useToast();
+  const avatars = useLeagueAvatars(t.leagueId); // rosterId → owner avatar hash
   const status = tradeStatus(t);
-  const quietCta = status === "reviewed" || status === "fair";
+  const isCritical = t.riskLabel === "critical";
+
+  // Build per-side data; mark the value-advantage side.
+  const sides = t.rosterIds.map((rid) => ({
+    rid,
+    name: rosterLabel(t, rid, teamName),
+    total: t.totalValueByRoster[String(rid)] ?? 0,
+    assets: receivedBy(t, rid),
+  }));
+  const ranked = [...sides].sort((a, b) => b.total - a.total);
+  const advantage = ranked.length >= 2 ? Math.round(ranked[0].total - ranked[1].total) : 0;
+  const winnerRid = ranked[0]?.rid;
+
+  const statusText = status === "review" ? "Review needed" : STATUS_META[status].label;
+
+  const dismiss = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await updateReview(t.id, { reviewStatus: "no_action" });
+      onReviewUpdated(t.id, "no_action");
+      toast({ title: "Flag dismissed", description: "Marked as No Action." });
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err?.message, variant: "destructive" });
+    }
+  };
+
   return (
-    <Card
-      className="group relative cursor-pointer overflow-hidden pl-3 transition-colors hover:bg-muted/30"
+    <div
+      className={cn(
+        "group cursor-pointer rounded-2xl border p-4 transition-colors sm:p-5",
+        "border-[var(--sc-border)] bg-[var(--sc-card-bg)] hover:bg-[var(--sc-card-soft)]",
+        "dark-any:border-white/8 dark-any:bg-[linear-gradient(180deg,rgba(8,17,30,0.92)_0%,rgba(6,12,22,0.96)_100%)] dark-any:hover:bg-white/[0.03]",
+        isCritical && "ring-1 ring-red-500/30 dark-any:ring-red-500/25",
+      )}
       onClick={() => onOpen(t.id)}
       data-testid={`card-trade-${t.id}`}
     >
-      {/* Left severity accent rail */}
-      <div className={cn("absolute inset-y-0 left-0 w-1", RISK_BAR[t.riskLabel])} aria-hidden />
-
-      <div className="p-3 sm:p-4">
-        {/* Header: risk badge + parties on the left; gap + status on the right. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <RiskBadge label={t.riskLabel} />
-          <span className="min-w-0 truncate font-semibold">{tradeTeams(t, teamName)}</span>
-          {t.isMultiTeam && <Badge variant="outline" className="text-[10px]">Multi</Badge>}
-          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="whitespace-nowrap">
-              Gap <span className="font-semibold tabular-nums text-foreground">{t.valueDiffPct}%</span>
-            </span>
-            <StatusChip status={status} />
+      {/* Title row: league logo — league — gap — status */}
+      <div className="flex items-center gap-2">
+        {(meta.avatar || t.leagueName) && (
+          <SleeperUserAvatar username={t.leagueName ?? "League"} avatar={meta.avatar ?? null} size="sm" compact />
+        )}
+        <div className="min-w-0 truncate text-base font-bold text-foreground">
+          {t.leagueName ?? "Trade"}
+        </div>
+        {t.isMultiTeam && <MetaChip>Multi</MetaChip>}
+        <div className="ml-auto flex flex-shrink-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="whitespace-nowrap">
+            Gap <span className="font-bold tabular-nums text-foreground">{t.valueDiffPct}%</span>
           </span>
+          <StatusChip status={status} />
         </div>
+      </div>
 
-        {/* Meta line */}
-        <div className="mt-1 text-xs text-muted-foreground">
-          {fmtDate(t.statusUpdatedTs ?? t.createdTs)}
-          {t.week != null ? ` · Week ${t.week}` : ""}
-          {showLeague && t.leagueName ? ` · ${t.leagueName}` : ""}
+      {/* Trade comparison */}
+      {sides.length === 2 ? (
+        <div className="mt-3 grid grid-cols-1 items-stretch gap-2 md:grid-cols-[1fr_auto_1fr] md:gap-3">
+          <TradeSide name={sides[0].name} avatar={avatars[sides[0].rid]?.avatar} total={sides[0].total} advantage={winnerRid === sides[0].rid ? advantage : 0} assets={sides[0].assets} />
+          <div className="flex items-center justify-center">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0b3a7a]/15 ring-1 ring-border/40 dark-any:bg-white/5">
+              <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+          <TradeSide name={sides[1].name} avatar={avatars[sides[1].rid]?.avatar} total={sides[1].total} advantage={winnerRid === sides[1].rid ? advantage : 0} assets={sides[1].assets} />
         </div>
-
-        {/* Receives blocks — the core readability win. Two-up for 2-team trades. */}
-        <div className={cn("mt-3 grid gap-2", t.rosterIds.length === 2 ? "sm:grid-cols-2" : "")}>
-          {t.rosterIds.map((rid) => (
-            <ReceivesBlock key={rid} name={rosterLabel(t, rid, teamName)} assets={receivedBy(t, rid)} />
+      ) : (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {sides.map((s) => (
+            <TradeSide key={s.rid} name={s.name} avatar={avatars[s.rid]?.avatar} total={s.total} advantage={winnerRid === s.rid ? advantage : 0} assets={s.assets} />
           ))}
         </div>
+      )}
 
-        {/* Why-flagged signals + adaptive CTA */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <SignalChips flags={t.flags} />
+      {/* Why flagged + league settings (settings pills right-aligned) */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <SignalChips flags={t.flags} />
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {meta.format && <MetaChip>{meta.format}</MetaChip>}
+          {meta.teams != null && <MetaChip>{meta.teams} Teams</MetaChip>}
+          {scoringLabel(meta.scoring) && <MetaChip>{scoringLabel(meta.scoring)}</MetaChip>}
+          {meta.tep ? <MetaChip>TEP</MetaChip> : null}
+        </div>
+      </div>
+
+      {/* Commissioner action footer */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3 dark-any:border-white/8">
+        <div className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground/80">{statusText}</span>
+          {" · "}Last updated {fmtDate(t.statusUpdatedTs ?? t.createdTs)}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           <Button
             size="sm"
-            variant="ghost"
-            className={cn("ml-auto h-7 px-2", quietCta ? "text-muted-foreground" : "text-primary")}
+            className="h-8"
+            style={{ background: GOLD, color: "#1a1206" }}
             onClick={(e) => { e.stopPropagation(); onOpen(t.id); }}
             data-testid={`button-review-trade-${t.id}`}
           >
             {ctaLabel(status)}
           </Button>
+          <Button size="sm" variant="outline" className="h-8" onClick={(e) => { e.stopPropagation(); onOpen(t.id); }} data-testid={`button-add-note-${t.id}`}>
+            <StickyNote className="mr-1.5 h-3.5 w-3.5" /> Add Note
+          </Button>
+          {t.reviewStatus !== "no_action" && (
+            <Button size="sm" variant="ghost" className="h-8 text-muted-foreground" onClick={dismiss} data-testid={`button-dismiss-flag-${t.id}`}>
+              Dismiss Flag
+            </Button>
+          )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
 // Quick-filter pills: the fast "what needs me?" lens, ANDed with the dropdowns.
-type QuickFilter = "all" | "needs-review" | "flagged" | "reviewed" | "high-risk" | "unreviewed";
+type QuickFilter = "all" | "needs-review" | "flagged" | "reviewed" | "unreviewed";
 const QUICK_FILTERS: Array<{ value: QuickFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "needs-review", label: "Needs Review" },
   { value: "flagged", label: "Flagged" },
   { value: "reviewed", label: "Reviewed" },
-  { value: "high-risk", label: "High Risk" },
   { value: "unreviewed", label: "Unreviewed" },
 ];
 function matchesQuick(t: TradeRow, q: QuickFilter): boolean {
@@ -762,7 +861,6 @@ function matchesQuick(t: TradeRow, q: QuickFilter): boolean {
     case "needs-review": return tradeStatus(t) === "review";
     case "flagged": return tradeStatus(t) === "flagged" || tradeStatus(t) === "escalated";
     case "reviewed": return t.reviewStatus === "reviewed" || t.reviewStatus === "no_action";
-    case "high-risk": return t.riskLabel === "high" || t.riskLabel === "critical";
     case "unreviewed": return t.reviewStatus === "unreviewed";
   }
 }
@@ -1177,95 +1275,6 @@ function ManagerHistoryView({
             ))}
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── League Analytics ──────────────────────────────────────────────────────────
-function AnalyticsView({
-  leagueId,
-  teamName,
-  onOpenManager,
-}: {
-  leagueId: string;
-  teamName: (r: number) => string;
-  onOpenManager: (r: number) => void;
-}) {
-  const [data, setData] = useState<LeagueAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchAnalytics(leagueId)
-      .then((d) => !cancelled && setData(d))
-      .catch(() => !cancelled && setData(null))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [leagueId]);
-
-  if (loading) return <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading analytics…</div>;
-  if (!data || data.totalTrades === 0) return <EmptyState icon={BarChart3} title="No analytics yet" body="Once trades are scanned, league-level analytics will appear here." />;
-
-  const weeks = Object.entries(data.tradesByWeek).sort((a, b) => Number(a[0]) - Number(b[0]));
-  const maxWeek = Math.max(1, ...weeks.map(([, c]) => c));
-  const maxMgr = Math.max(1, ...data.mostActiveManagers.map((m) => m.count));
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Total trades" value={String(data.totalTrades)} />
-        <StatCard label="Avg value gap" value={`${data.avgValueDiffPct}%`} />
-        <StatCard label="High-risk trades" value={String(data.highRiskTrades)} tone={data.highRiskTrades > 0 ? "neg" : undefined} />
-        <StatCard label="Future-pick trades" value={String(data.futurePickTrades)} />
-        <StatCard label="Reviewed" value={String(data.reviewedCount)} tone="pos" />
-        <StatCard label="Unreviewed" value={String(data.unreviewedCount)} tone={data.unreviewedCount > 0 ? "neg" : undefined} />
-      </div>
-
-      <Card className="p-4">
-        <div className="mb-3 font-semibold">Trades by Week</div>
-        <div className="space-y-1.5">
-          {weeks.map(([wk, count]) => (
-            <div key={wk} className="flex items-center gap-2 text-sm">
-              <span className="w-16 shrink-0 text-muted-foreground">Week {wk}</span>
-              <div className="h-4 flex-1 rounded bg-muted">
-                <div className="h-4 rounded bg-primary" style={{ width: `${(count / maxWeek) * 100}%` }} />
-              </div>
-              <span className="w-6 shrink-0 text-right tabular-nums">{count}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="p-4">
-        <div className="mb-3 font-semibold">Most Active Managers</div>
-        <div className="space-y-1.5">
-          {data.mostActiveManagers.map((m) => (
-            <button key={m.rosterId} onClick={() => onOpenManager(m.rosterId)} className="flex w-full items-center gap-2 text-sm hover:opacity-80">
-              <span className="w-32 shrink-0 truncate text-left text-muted-foreground">{teamName(m.rosterId)}</span>
-              <div className="h-4 flex-1 rounded bg-muted">
-                <div className="h-4 rounded bg-sky-500" style={{ width: `${(m.count / maxMgr) * 100}%` }} />
-              </div>
-              <span className="w-6 shrink-0 text-right tabular-nums">{m.count}</span>
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {data.frequentTradePairs.length > 0 && (
-        <Card className="p-4">
-          <div className="mb-3 font-semibold">Frequent Trade Partners</div>
-          <ul className="space-y-1.5 text-sm">
-            {data.frequentTradePairs.map((p, i) => (
-              <li key={i} className="flex items-center justify-between">
-                <span>{teamName(p.rosterIdA)} ↔ {teamName(p.rosterIdB)}</span>
-                <span className="text-muted-foreground">{p.tradeCount} {p.tradeCount === 1 ? "trade" : "trades"} · {fmt(p.totalValueMoved)} value</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
       )}
     </div>
   );

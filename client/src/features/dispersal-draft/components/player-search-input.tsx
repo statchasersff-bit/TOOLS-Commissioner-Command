@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
+import { POS_COLOR } from "@dispersal/components/ui";
 
 interface PlayerResult {
   id: string;
@@ -16,13 +17,6 @@ interface PlayerSearchInputProps {
   disabled?: boolean;
   placeholder?: string;
 }
-
-const POS_COLOR: Record<string, string> = {
-  QB: "text-red-400",
-  RB: "text-green-400",
-  WR: "text-blue-400",
-  TE: "text-yellow-400",
-};
 
 export function PlayerSearchInput({ value, onChange, onPlayerSelect, disabled, placeholder }: PlayerSearchInputProps) {
   const [results, setResults] = useState<PlayerResult[]>([]);
@@ -109,7 +103,7 @@ export function PlayerSearchInput({ value, onChange, onPlayerSelect, disabled, p
       {open && results.length > 0 && createPortal(
         <div
           style={dropdownStyle}
-          className="bg-card border border-border/60 rounded-sm shadow-2xl overflow-hidden"
+          className="bg-card border border-[var(--sc-border)] dark-any:border-white/10 rounded-xl shadow-2xl overflow-hidden"
         >
           {results.map(p => (
             <button

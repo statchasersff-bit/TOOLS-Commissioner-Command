@@ -564,7 +564,6 @@ export const NAV_CONFIG: MainTabConfig[] = [
     id: "draft",
     label: "Tools",
     subTabs: [
-      { id: "draft-board", label: "Draft Board" },
       { id: "pick-tracker", label: "Pick Tracker" },
       { id: "dispersal-draft", label: "Dispersal Draft" },
       { id: "user-search", label: "User Search" },

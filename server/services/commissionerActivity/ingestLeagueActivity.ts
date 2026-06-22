@@ -28,7 +28,7 @@ import { parseTransactionEvents, countAddsDropsForRoster, type PlayersById } fro
 import { parseLineupEvents } from "./parseMatchups";
 import { getSleeperPlayers } from "../../sleeper";
 import { scoreManagerActivity } from "./scoreManagerActivity";
-import { scoreLeagueActivity } from "./scoreLeagueActivity";
+import { scoreLeagueActivity, scoreSeasonActivity } from "./scoreLeagueActivity";
 import { generateActivityAlerts } from "./generateActivityAlerts";
 import {
   getActivitySettings,
@@ -42,6 +42,8 @@ import {
   saveActivityAlerts,
   getWeeksSinceLastTransaction,
   getWeeksSinceLastLineupChange,
+  getSeasonTotals,
+  getSeasonManagerAggregates,
 } from "./storage";
 import type {
   ActivityEvent,
@@ -228,6 +230,33 @@ export async function ingestLeagueActivityForLeague(input: IngestInput): Promise
     await saveActivitySnapshot(leagueSnapshot);
     managerRowsUpdated += await saveManagerActivityRows(scoredManagers);
     alertsCreated += await saveActivityAlerts(alerts);
+  }
+
+  // Roll every stored week up into one whole-season snapshot (sentinel week 0)
+  // so the dashboard can show a single season-wide league activity score. Reads
+  // from the DB (not just this run's weeks) so a "recent" scan still folds in the
+  // earlier weeks that were persisted previously.
+  const [seasonTotals, seasonAggregates] = await Promise.all([
+    getSeasonTotals(input.leagueId, season),
+    getSeasonManagerAggregates(input.leagueId, season),
+  ]);
+  if (seasonAggregates.length) {
+    const seasonSnapshot = scoreSeasonActivity({
+      leagueId: input.leagueId,
+      season,
+      weeks: seasonTotals.weeks,
+      managerAggregates: seasonAggregates,
+      totals: {
+        totalTransactions: seasonTotals.totalTransactions,
+        totalTrades: seasonTotals.totalTrades,
+        totalWaivers: seasonTotals.totalWaivers,
+        totalFreeAgentMoves: seasonTotals.totalFreeAgentMoves,
+        totalLineupChanges: seasonTotals.totalLineupChanges,
+        totalEmptyStarterSlots: seasonTotals.totalEmptyStarterSlots,
+      },
+      settings,
+    });
+    await saveActivitySnapshot(seasonSnapshot);
   }
 
   return {

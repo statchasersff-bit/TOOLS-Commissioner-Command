@@ -24,7 +24,9 @@ import { ingestLeagueActivityForLeague } from "../services/commissionerActivity/
 import {
   getSnapshot,
   getLatestSnapshot,
+  getSeasonSnapshot,
   getManagerRows,
+  getSeasonManagerRows,
   getEvents,
   getAlerts,
   updateAlertStatus,
@@ -161,7 +163,12 @@ export function registerCommissionerActivityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId is required" });
     try {
       const { season, week } = await resolveSeasonWeek(leagueId, req);
-      const snapshot = week != null ? await getSnapshot(leagueId, season, week) : null;
+      // The headline cards reflect the whole season; fall back to the latest week
+      // only if a season aggregate hasn't been computed yet (e.g. old data).
+      const snapshot =
+        (await getSeasonSnapshot(leagueId, season)) ??
+        (week != null ? await getSnapshot(leagueId, season, week) : null);
+      // Manager leaderboards still reflect the latest scored week (current state).
       const managers = week != null ? await getManagerRows(leagueId, season, week) : [];
       const alerts = await getAlerts(leagueId, { season: season || undefined });
       res.json({ season, week, ...buildOverview(snapshot, managers, alerts) });
@@ -177,7 +184,13 @@ export function registerCommissionerActivityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId is required" });
     try {
       const { season, week } = await resolveSeasonWeek(leagueId, req);
-      const managers = week != null ? await getManagerRows(leagueId, season, week) : [];
+      // Season-wide table: aggregate every scored week into one row per roster.
+      // An explicit ?week= still pins a single week for drill-downs.
+      const reqWeek = parseIntOrNull(req.query.week);
+      const managers =
+        reqWeek != null
+          ? await getManagerRows(leagueId, season, reqWeek)
+          : await getSeasonManagerRows(leagueId, season);
       res.json({ season, week, managers });
     } catch (err) {
       console.error("[CommissionerActivity] managers failed:", err);
@@ -329,7 +342,11 @@ export function registerCommissionerActivityRoutes(app: Express): void {
       const season = await safeSeason();
       const rows = await Promise.all(
         leagueIds.map(async (leagueId) => {
-          const snapshot = await getLatestSnapshot(leagueId, season);
+          // Prefer the whole-season aggregate; fall back to the latest week if a
+          // season snapshot hasn't been computed for this league yet.
+          const snapshot =
+            (await getSeasonSnapshot(leagueId, season)) ??
+            (await getLatestSnapshot(leagueId, season));
           const openAlerts = await countOpenAlerts(leagueId);
           return {
             leagueId,

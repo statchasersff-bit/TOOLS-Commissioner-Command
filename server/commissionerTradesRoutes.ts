@@ -26,6 +26,7 @@ import {
   ingestSleeperTradesForLeague,
   getRiskLabel,
   getLeagueDirectory,
+  getStartupPickSeasons,
   type LeagueDirectory,
   type ReviewStatus,
 } from "./services/commissionerTrades";
@@ -137,21 +138,41 @@ export function registerCommissionerTradesRoutes(app: Express): void {
       const assets = await loadAssetsFor(rows.map((r) => r.id));
       const flags = await loadFlagsFor(rows.map((r) => r.id));
 
-      // Resolve display names (league + team names) for every league present in
-      // the result so cross-league rows render correctly. Cached per league.
+      // Resolve display names (league + team names) and startup-draft seasons for
+      // every league present in the result. Both cached per league.
       const presentLeagueIds = Array.from(new Set(rows.map((r) => r.leagueId)));
       const directories = new Map<string, LeagueDirectory>();
+      const startupSeasonsByLeague = new Map<string, Set<string>>();
       await Promise.all(
         presentLeagueIds.map(async (id) => {
-          try {
-            directories.set(id, await getLeagueDirectory(id));
-          } catch {
-            /* fall back to default labels in shapeTrade */
-          }
+          const [dir, startup] = await Promise.all([
+            getLeagueDirectory(id).catch(() => null),
+            getStartupPickSeasons(id).catch(() => new Set<string>()),
+          ]);
+          if (dir) directories.set(id, dir);
+          startupSeasonsByLeague.set(id, startup);
         }),
       );
 
-      const feed = rows.map((r) =>
+      // Exclude trades that include a startup-draft pick — a pick whose season
+      // matches a full-roster startup draft for its league. (Deep rounds are a
+      // safety net for when draft data is unavailable: no rookie draft runs that
+      // many rounds.)
+      const isStartupPick = (
+        a: typeof commissionerTradeAssets.$inferSelect,
+        leagueId: string,
+      ): boolean => {
+        if (a.assetType !== "pick") return false;
+        const startup = startupSeasonsByLeague.get(leagueId);
+        if (a.pickSeason != null && startup?.has(String(a.pickSeason))) return true;
+        return Number(a.pickRound ?? 0) >= 10;
+      };
+      const visibleRows = rows.filter((r) => {
+        const ra = assets.get(r.id) ?? [];
+        return !ra.some((a) => isStartupPick(a, r.leagueId));
+      });
+
+      const feed = visibleRows.map((r) =>
         shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? [], directories.get(r.leagueId)),
       );
       res.json({ leagueId: leagueIds[0], leagueIds, trades: feed });

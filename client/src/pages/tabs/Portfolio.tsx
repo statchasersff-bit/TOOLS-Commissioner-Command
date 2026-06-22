@@ -19,11 +19,9 @@ import {
   Search,
   Users,
   Trophy,
-  Calendar,
   Shield,
   Check,
   TrendingUp,
-  Target,
   AlertTriangle,
   Layers,
   Activity,
@@ -727,56 +725,6 @@ export function PortfolioSummary({ onNavigate, onOpenLeagueProfile }: { onNaviga
     if (onOpenLeagueProfile) onOpenLeagueProfile(leagueId);
     else onNavigate?.("league-analyzer", "league-activity");
   }, [setActiveLeague, onNavigate, onOpenLeagueProfile]);
-  // Live startup drafts the user is in. Fresh startup leagues don't make it
-  // into useSleeper().leagues (their roster has no players yet, so
-  // fetchSleeperLeagues filters them out) — but the user still wants them
-  // visible in Portfolio so the live startup draft is one click away.
-  const [liveStartupDrafts, setLiveStartupDrafts] = useState<Array<{
-    leagueId: string;
-    leagueName: string;
-    leagueAvatar: string | null;
-    draftId: string;
-    status: string;
-    season: string;
-    rounds: number;
-    teams: number;
-    picksMade: number;
-    totalPicks: number;
-    startTime: number | null;
-    mySlot: number | null;
-    picksAway: number | null;
-  }>>([]);
-  const [liveStartupDraftsLoading, setLiveStartupDraftsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!isConnected || !user?.userId) {
-      setLiveStartupDrafts([]);
-      return;
-    }
-    let cancelled = false;
-    setLiveStartupDraftsLoading(true);
-    import("@/lib/sleeperApi").then(({ detectLiveDrafts }) => detectLiveDrafts(user.userId))
-      .then((all) => {
-        if (cancelled) return;
-        // Restrict to actually-in-progress startups (drafting / paused).
-        // Sleeper's /user/:id/leagues endpoint also surfaces pre_draft
-        // leagues from its public league browser / marketplace that the
-        // user merely showed interest in — those have a roster slot but
-        // the user isn't truly drafting, so they'd appear here as noise.
-        // Once a draft enters "drafting" only real participants remain.
-        const startups = (all || []).filter((d: any) =>
-          d.draftCategory === "startup" &&
-          (d.status === "drafting" || d.status === "paused")
-        );
-        setLiveStartupDrafts(startups);
-        setLiveStartupDraftsLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLiveStartupDraftsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [isConnected, user?.userId]);
-
   useEffect(() => {
     if (!isConnected || !user?.userId || leagues.length === 0) return;
     let cancelled = false;
@@ -1053,96 +1001,6 @@ export function PortfolioSummary({ onNavigate, onOpenLeagueProfile }: { onNaviga
           />
         </div>
       </Card>
-
-      {/* Live Startup Drafts — surfaces fresh-startup leagues that aren't
-          in the user's main league list yet (no roster players → filtered
-          out of useSleeper().leagues). One row per draft + a CTA that
-          jumps straight to the Live Draft module. */}
-      {liveStartupDrafts.length > 0 && (
-        <Card className="p-4 md:p-5 border border-emerald-500/30 bg-[linear-gradient(180deg,rgba(16,185,129,0.08),rgba(16,185,129,0.015))]" data-testid="live-startup-drafts">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/15 flex items-center justify-center ring-1 ring-emerald-500/30">
-                <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold tracking-tight">Live Startup Drafts</h3>
-                <p className="text-[10.5px] text-muted-foreground leading-tight">
-                  {liveStartupDrafts.length} startup draft{liveStartupDrafts.length === 1 ? "" : "s"} in progress.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {liveStartupDrafts.map((d) => {
-              const isLive = d.status === "drafting" || d.status === "paused";
-              const isPaused = d.status === "paused";
-              const isOnClock = isLive && d.picksAway === 0;
-              const startsSoon = d.status === "pre_draft" && d.startTime && d.startTime > Date.now();
-              const statusPill = isPaused
-                ? { label: "PAUSED", cls: "bg-amber-500 text-black" }
-                : isOnClock
-                  ? { label: "YOUR PICK", cls: "bg-[#d4af37] text-[#0b3a7a]" }
-                  : isLive
-                    ? { label: "LIVE", cls: "bg-emerald-500 text-white" }
-                    : { label: "UPCOMING", cls: "bg-blue-500 text-white" };
-              return (
-                <div
-                  key={d.draftId}
-                  className="flex items-center gap-3 p-2.5 rounded-lg border border-border/40 bg-card/40 hover:border-emerald-500/40 transition-colors"
-                  data-testid={`live-startup-row-${d.draftId}`}
-                >
-                  <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
-                    <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                    {d.leagueAvatar && (
-                      <img
-                        src={`https://sleepercdn.com/avatars/thumbs/${d.leagueAvatar}`}
-                        alt={d.leagueName}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-foreground truncate" data-testid={`text-live-startup-name-${d.draftId}`}>{d.leagueName}</p>
-                    <p className="text-[10.5px] text-muted-foreground tabular-nums">
-                      {isLive ? `Pick ${Math.min(d.picksMade + 1, d.totalPicks)} of ${d.totalPicks}` : startsSoon ? `Starts ${new Date(d.startTime!).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "Start time not set"}
-                      {typeof d.picksAway === "number" && isLive && d.picksAway > 0 && (
-                        <span className="ml-1.5">· {d.picksAway} {d.picksAway === 1 ? "pick" : "picks"} away</span>
-                      )}
-                      {d.mySlot != null && (
-                        <span className="ml-1.5 text-muted-foreground/70">· Slot {d.mySlot}</span>
-                      )}
-                    </p>
-                  </div>
-                  <span
-                    className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap", statusPill.cls)}
-                    data-testid={`badge-live-startup-status-${d.draftId}`}
-                  >
-                    {isLive && !isPaused && !isOnClock && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                    )}
-                    {statusPill.label}
-                  </span>
-                  <Button
-                    size="sm"
-                    className="h-7 text-[11px] gap-1 bg-[#0b3a7a] hover:bg-[#0b3a7a]/80 text-white"
-                    onClick={() => onNavigate?.("draft", "draft-board")}
-                    data-testid={`button-track-live-startup-${d.draftId}`}
-                  >
-                    <Target className="w-3 h-3" />
-                    Track
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {liveStartupDraftsLoading && liveStartupDrafts.length === 0 && (
-        <p className="text-[10.5px] text-muted-foreground text-center -mt-2">Scanning for live startup drafts…</p>
-      )}
 
       {summaryLoading && (
         <Card className="p-8 text-center">
