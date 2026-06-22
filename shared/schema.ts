@@ -125,6 +125,10 @@ export const leagueFinances = pgTable("league_finances", {
   season: varchar("season", { length: 10 }).notNull().default("2026"),
   buyIn: integer("buy_in").notNull().default(0),
   prizes: jsonb("prizes").notNull().default([]),
+  // Per-manager dues tracking (commissioner League Treasury). Schemaless jsonb
+  // so prize/payment shapes can evolve without a migration. Older rows predate
+  // this column and default to an empty array.
+  payments: jsonb("payments").notNull().default([]),
   notes: text("notes"),
   isFree: boolean("is_free").notNull().default(false),
   ignored: boolean("ignored").notNull().default(false),
@@ -1351,7 +1355,14 @@ export const commissionerLineupSettings = pgTable("commissioner_lineup_settings"
 
   enableEmptySlotChecks: boolean("enable_empty_slot_checks").default(true),
   enableByeStarterChecks: boolean("enable_bye_starter_checks").default(true),
+  // Legacy master toggle for OUT/IR/doubtful, kept for backward compatibility.
+  // The three granular toggles below default to this when their own column is
+  // unset, so a league that disabled the master still has them all off.
   enableInactiveStarterChecks: boolean("enable_inactive_starter_checks").default(true),
+  enableOutStarterChecks: boolean("enable_out_starter_checks"),
+  enableIrStarterChecks: boolean("enable_ir_starter_checks"),
+  enableDoubtfulStarterChecks: boolean("enable_doubtful_starter_checks"),
+  enableUnchangedLineupChecks: boolean("enable_unchanged_lineup_checks").default(false),
   enableSuspiciousBenchingChecks: boolean("enable_suspicious_benching_checks").default(true),
   enableTankingRiskChecks: boolean("enable_tanking_risk_checks").default(true),
 
@@ -1367,6 +1378,7 @@ export const commissionerLineupSettings = pgTable("commissioner_lineup_settings"
 
   ignoreLineupChecksInOffseason: boolean("ignore_lineup_checks_in_offseason").default(true),
   ignoreLineupChecksForBestBall: boolean("ignore_lineup_checks_for_best_ball").default(true),
+  ignoreEliminatedTeams: boolean("ignore_eliminated_teams").default(false),
 
   autoCreateAlerts: boolean("auto_create_alerts").default(true),
   autoCreateStrikes: boolean("auto_create_strikes").default(false),
@@ -1375,8 +1387,42 @@ export const commissionerLineupSettings = pgTable("commissioner_lineup_settings"
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Commissioner action audit trail for lineup-integrity issues. One row per
+// action taken (or system event) against a specific issue, so a commissioner
+// has a defensible record if a manager later disputes a decision.
+export const commissionerLineupAuditLog = pgTable("commissioner_lineup_audit_log", {
+  id: serial("id").primaryKey(),
+
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  week: integer("week").notNull(),
+  rosterId: integer("roster_id"),
+
+  // Links back to the originating lineup check + (optionally) a specific
+  // issue/alert so the audit log can be scoped to one issue in the drawer.
+  lineupCheckId: integer("lineup_check_id"),
+  // Stable client-side issue key (e.g. "checkId:slot:playerId") so multiple
+  // distinct issues on the same team keep separate trails.
+  issueKey: text("issue_key"),
+
+  // Machine action: detected | message_copied | note_added | marked_resolved |
+  // ignored_week | escalated | reopened
+  action: text("action").notNull(),
+  // "System" for automated events, otherwise the commissioner's display name.
+  actor: text("actor").notNull().default("Commissioner"),
+  actorUserId: text("actor_user_id"),
+  note: text("note"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  leagueWeekIdx: index("commissioner_lineup_audit_league_week_idx").on(t.leagueId, t.season, t.week),
+  issueIdx: index("commissioner_lineup_audit_issue_idx").on(t.lineupCheckId),
+}));
+
 export type CommissionerLineupCheck = typeof commissionerLineupChecks.$inferSelect;
 export type InsertCommissionerLineupCheck = typeof commissionerLineupChecks.$inferInsert;
+export type CommissionerLineupAuditLog = typeof commissionerLineupAuditLog.$inferSelect;
+export type InsertCommissionerLineupAuditLog = typeof commissionerLineupAuditLog.$inferInsert;
 export type CommissionerLineupPlayerCheck = typeof commissionerLineupPlayerChecks.$inferSelect;
 export type InsertCommissionerLineupPlayerCheck = typeof commissionerLineupPlayerChecks.$inferInsert;
 export type CommissionerLineupAlert = typeof commissionerLineupAlerts.$inferSelect;

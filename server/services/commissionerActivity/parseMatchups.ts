@@ -11,7 +11,7 @@ import type {
   SleeperRoster,
   SleeperLeagueUser,
 } from "./types";
-import { getOwnerIdForRoster } from "./helpers";
+import { getOwnerIdForRoster, buildUserMap, getTeamName } from "./helpers";
 import { getLineupDiff, countEmptyStarters } from "./compareLineups";
 
 export interface ParseMatchupInput {
@@ -32,6 +32,13 @@ export function parseLineupEvents(input: ParseMatchupInput): ActivityEvent[] {
   const events: ActivityEvent[] = [];
   if (input.skipLineupChecks) return events;
 
+  const userById = buildUserMap(input.users ?? []);
+  const teamName = (rid: number): string => {
+    const roster = (input.rosters ?? []).find((r) => Number(r.roster_id) === Number(rid));
+    const user = roster?.owner_id ? userById.get(String(roster.owner_id)) : undefined;
+    return getTeamName(user, roster);
+  };
+
   const previousByRosterId = new Map<number, SleeperMatchup>(
     (input.previousWeekMatchups ?? []).map((m) => [Number(m.roster_id), m]),
   );
@@ -39,6 +46,7 @@ export function parseLineupEvents(input: ParseMatchupInput): ActivityEvent[] {
   for (const matchup of input.matchups ?? []) {
     const rosterId = Number(matchup.roster_id);
     const ownerId = getOwnerIdForRoster(input.rosters, rosterId);
+    const team = teamName(rosterId);
     const previous = previousByRosterId.get(rosterId);
 
     const emptyStarterSlots = countEmptyStarters(matchup.starters ?? []);
@@ -50,8 +58,8 @@ export function parseLineupEvents(input: ParseMatchupInput): ActivityEvent[] {
         rosterId,
         ownerId,
         eventType: "empty_starter",
-        eventTitle: "Empty starter slot detected",
-        eventDescription: `Roster ${rosterId} has ${emptyStarterSlots} empty starter slot(s).`,
+        eventTitle: `${team} has ${emptyStarterSlots} empty starter slot(s)`,
+        eventDescription: undefined,
         eventTs: input.nowTs,
         severity: emptyStarterSlots >= 2 ? "high" : "medium",
         rawEvent: { starters: matchup.starters, emptyStarterSlots },
@@ -68,8 +76,8 @@ export function parseLineupEvents(input: ParseMatchupInput): ActivityEvent[] {
           rosterId,
           ownerId,
           eventType: "lineup_change",
-          eventTitle: "Lineup changed",
-          eventDescription: `Roster ${rosterId} changed ${diff.changeCount} starter slot(s).`,
+          eventTitle: `${team} changed ${diff.changeCount} starter slot(s)`,
+          eventDescription: undefined,
           eventTs: input.nowTs,
           severity: "info",
           rawEvent: {
@@ -88,8 +96,8 @@ export function parseLineupEvents(input: ParseMatchupInput): ActivityEvent[] {
           rosterId,
           ownerId,
           eventType: "lineup_unchanged",
-          eventTitle: "Lineup unchanged",
-          eventDescription: `Roster ${rosterId} did not change its lineup from the previous week.`,
+          eventTitle: `${team} kept the same lineup as last week`,
+          eventDescription: undefined,
           eventTs: input.nowTs,
           severity: "low",
           rawEvent: {

@@ -32,10 +32,19 @@ export async function getLineupIntegritySettings(
   const d = DEFAULT_LINEUP_INTEGRITY_SETTINGS;
   if (!row) return { ...d };
 
+  // Granular OUT/IR/doubtful toggles fall back to the legacy master toggle when
+  // their own column is unset, so an older row that disabled the master keeps
+  // those three checks off after the column split.
+  const inactiveMaster = bool(row.enableInactiveStarterChecks, d.enableInactiveStarterChecks);
+
   return {
     enableEmptySlotChecks: bool(row.enableEmptySlotChecks, d.enableEmptySlotChecks),
     enableByeStarterChecks: bool(row.enableByeStarterChecks, d.enableByeStarterChecks),
-    enableInactiveStarterChecks: bool(row.enableInactiveStarterChecks, d.enableInactiveStarterChecks),
+    enableInactiveStarterChecks: inactiveMaster,
+    enableOutStarterChecks: bool(row.enableOutStarterChecks, inactiveMaster),
+    enableIrStarterChecks: bool(row.enableIrStarterChecks, inactiveMaster),
+    enableDoubtfulStarterChecks: bool(row.enableDoubtfulStarterChecks, inactiveMaster),
+    enableUnchangedLineupChecks: bool(row.enableUnchangedLineupChecks, d.enableUnchangedLineupChecks),
     enableSuspiciousBenchingChecks: bool(row.enableSuspiciousBenchingChecks, d.enableSuspiciousBenchingChecks),
     enableTankingRiskChecks: bool(row.enableTankingRiskChecks, d.enableTankingRiskChecks),
 
@@ -51,6 +60,7 @@ export async function getLineupIntegritySettings(
 
     ignoreLineupChecksInOffseason: bool(row.ignoreLineupChecksInOffseason, d.ignoreLineupChecksInOffseason),
     ignoreLineupChecksForBestBall: bool(row.ignoreLineupChecksForBestBall, d.ignoreLineupChecksForBestBall),
+    ignoreEliminatedTeams: bool(row.ignoreEliminatedTeams, d.ignoreEliminatedTeams),
 
     autoCreateAlerts: bool(row.autoCreateAlerts, d.autoCreateAlerts),
     autoCreateStrikes: bool(row.autoCreateStrikes, d.autoCreateStrikes),

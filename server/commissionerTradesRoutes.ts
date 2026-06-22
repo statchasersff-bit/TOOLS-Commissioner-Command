@@ -25,6 +25,8 @@ import { getUserIdFromRequest } from "./scAuthRoutes";
 import {
   ingestSleeperTradesForLeague,
   getRiskLabel,
+  getLeagueDirectory,
+  type LeagueDirectory,
   type ReviewStatus,
 } from "./services/commissionerTrades";
 
@@ -85,12 +87,21 @@ export function registerCommissionerTradesRoutes(app: Express): void {
   });
 
   // ── Trade feed (filtered) ──────────────────────────────────────────────────
+  // Accepts either a single `leagueId` or a comma-separated `leagueIds` so the
+  // Trade Review Center can show one league or every league the user commissions.
   app.get("/api/commissioner/trades", async (req, res) => {
     if (!requireUser(req, res)) return;
-    const leagueId = String(req.query.leagueId || "");
-    if (!leagueId) return res.status(400).json({ error: "leagueId required" });
+    const leagueIds = String(req.query.leagueIds || req.query.leagueId || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (leagueIds.length === 0) return res.status(400).json({ error: "leagueId required" });
 
-    const conds = [eq(commissionerTrades.leagueId, leagueId)];
+    const conds = [
+      leagueIds.length === 1
+        ? eq(commissionerTrades.leagueId, leagueIds[0])
+        : inArray(commissionerTrades.leagueId, leagueIds),
+    ];
 
     const reviewStatus = String(req.query.reviewStatus || "");
     if (reviewStatus && REVIEW_STATUSES.includes(reviewStatus as ReviewStatus)) {
@@ -125,8 +136,25 @@ export function registerCommissionerTradesRoutes(app: Express): void {
 
       const assets = await loadAssetsFor(rows.map((r) => r.id));
       const flags = await loadFlagsFor(rows.map((r) => r.id));
-      const feed = rows.map((r) => shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? []));
-      res.json({ leagueId, trades: feed });
+
+      // Resolve display names (league + team names) for every league present in
+      // the result so cross-league rows render correctly. Cached per league.
+      const presentLeagueIds = Array.from(new Set(rows.map((r) => r.leagueId)));
+      const directories = new Map<string, LeagueDirectory>();
+      await Promise.all(
+        presentLeagueIds.map(async (id) => {
+          try {
+            directories.set(id, await getLeagueDirectory(id));
+          } catch {
+            /* fall back to default labels in shapeTrade */
+          }
+        }),
+      );
+
+      const feed = rows.map((r) =>
+        shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? [], directories.get(r.leagueId)),
+      );
+      res.json({ leagueId: leagueIds[0], leagueIds, trades: feed });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Failed to load trades" });
     }
@@ -248,7 +276,8 @@ export function registerCommissionerTradesRoutes(app: Express): void {
         if (r.reviewStatus === "disputed") disputed++;
       }
 
-      const trades = rows.map((r) => shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? []));
+      const directory = await getLeagueDirectory(leagueId).catch(() => undefined);
+      const trades = rows.map((r) => shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? [], directory));
 
       res.json({
         rosterId,
@@ -288,8 +317,9 @@ export function registerCommissionerTradesRoutes(app: Express): void {
         .where(eq(commissionerTradeReviews.tradeId, tradeId))
         .orderBy(desc(commissionerTradeReviews.createdAt));
 
+      const directory = await getLeagueDirectory(trade.leagueId).catch(() => undefined);
       res.json({
-        trade: shapeTrade(trade, assets, flags),
+        trade: shapeTrade(trade, assets, flags, directory),
         assets,
         flags,
         reviews,
@@ -372,10 +402,19 @@ function shapeTrade(
   trade: typeof commissionerTrades.$inferSelect,
   assets: (typeof commissionerTradeAssets.$inferSelect)[],
   flags: (typeof commissionerTradeFlags.$inferSelect)[],
+  directory?: LeagueDirectory,
 ) {
+  const rosterNames: Record<number, string> = {};
+  if (directory) {
+    for (const [rid, names] of Object.entries(directory.rosterNames)) {
+      rosterNames[Number(rid)] = names.teamName;
+    }
+  }
   return {
     id: trade.id,
     leagueId: trade.leagueId,
+    leagueName: directory?.leagueName ?? null,
+    rosterNames,
     sleeperTransactionId: trade.sleeperTransactionId,
     season: trade.season,
     week: trade.week,

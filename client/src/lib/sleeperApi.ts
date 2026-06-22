@@ -172,15 +172,35 @@ export async function fetchSleeperLeagues(
   if (!raw || !Array.isArray(raw)) {
     return [];
   }
-  // We surface every dynasty league (settings.type === 2) and tag each with
-  // whether it passes our automatic filter. Leagues that fail the filter are
-  // still returned (so users can opt them into the master list via
-  // Settings → Leagues) but flagged ineligible with a human-readable reason.
-  // Redraft (type 0) and keeper (type 1) leagues remain excluded entirely.
-  const dynastyOnly = raw.filter((lg) => lg.settings?.type === 2);
+  // We surface dynasty (settings.type === 2), redraft (settings.type === 0), and
+  // keeper (settings.type === 1) leagues WHERE THE USER IS A COMMISSIONER and tag
+  // each with whether it passes our automatic filter. Leagues that fail the
+  // filter are still returned (so users can opt them into the master list via
+  // Settings → Leagues) but flagged ineligible with a human-readable reason. Any
+  // league where the user is not a commissioner is excluded entirely.
+  const commishCandidates = raw.filter(
+    (lg) => lg.settings?.type === 2 || lg.settings?.type === 0 || lg.settings?.type === 1
+  );
 
   const evaluated = await Promise.all(
-    dynastyOnly.map(async (lg) => {
+    commishCandidates.map(async (lg) => {
+      // Commissioner gate — Sleeper marks commissioners with is_owner === true
+      // in /league/:id/users (a league can have multiple commissioners). Only
+      // leagues the user commissions are surfaced; everything else is dropped.
+      try {
+        const leagueUsers = await fetchJson<any[]>(
+          `${SLEEPER_API}/league/${lg.league_id}/users`
+        );
+        const me = leagueUsers.find((u) => u.user_id === userId);
+        if (!me || me.is_owner !== true) {
+          return { lg, exclude: true as const };
+        }
+      } catch {
+        // On error determining commissioner status, exclude rather than risk
+        // surfacing a league the user doesn't commission.
+        return { lg, exclude: true as const };
+      }
+
       // Status-based ineligibility — cheap, no extra request needed.
       if (lg.status === "inactive") {
         return { lg, eligibleByDefault: false, filterReason: "Inactive" };
@@ -209,7 +229,9 @@ export async function fetchSleeperLeagues(
     })
   );
 
-  return evaluated.map(({ lg, eligibleByDefault, filterReason }) => ({
+  return evaluated
+    .filter((e): e is Exclude<typeof e, { exclude: true }> => !("exclude" in e))
+    .map(({ lg, eligibleByDefault, filterReason }) => ({
     leagueId: lg.league_id,
     name: lg.name,
     season: lg.season,
@@ -526,6 +548,8 @@ export interface PortfolioSummaryData {
     totalRosters: number;
     format: string;
     scoringFormat: string;
+    // Sleeper league type — settings.type: 0 = redraft, 1 = keeper, 2 = dynasty.
+    leagueType: "redraft" | "keeper" | "dynasty";
     redraftRank: number;
     dynastyRank: number;
     pfRank: number;
@@ -893,6 +917,12 @@ export async function fetchPortfolioSummary(
         totalRosters: total,
         format: ls.format,
         scoringFormat: ls.scoringFormat,
+        leagueType:
+          leagueRaw.settings?.type === 2
+            ? "dynasty"
+            : leagueRaw.settings?.type === 1
+            ? "keeper"
+            : "redraft",
         redraftRank,
         dynastyRank,
         pfRank,
@@ -1919,6 +1949,23 @@ export async function fetchCrossLeagueTrades(userId: string) {
 
   results.sort((a, b) => b.timestamp - a.timestamp);
   return { trades: results, leaguesScanned: scanned };
+}
+
+/**
+ * Fetch a league's Sleeper users and return a map of owner (user) id →
+ * avatar HASH (not a full URL). Consumers render the hash with
+ * <SleeperUserAvatar avatar={...} />. Returns an empty map if the request
+ * fails so callers can fall back to the initials circle.
+ */
+export async function fetchLeagueAvatarMap(
+  leagueId: string,
+): Promise<Record<string, string | null>> {
+  const users = await fetchJson<SleeperLeagueUserRaw[]>(
+    `${SLEEPER_API}/league/${leagueId}/users`,
+  ).catch(() => [] as SleeperLeagueUserRaw[]);
+  const map: Record<string, string | null> = {};
+  for (const u of users) map[u.user_id] = u.avatar ?? null;
+  return map;
 }
 
 export async function fetchLeagueTransactions(leagueId: string) {
@@ -3033,4 +3080,47 @@ export async function reorderDraftQueue({
   token, draftId, nextQueue,
 }: { token: string; draftId: string; nextQueue: string[] }): Promise<string[]> {
   return updateDraftQueue(token, draftId, nextQueue);
+}
+
+// ── League roster identities ──────────────────────────────────────────────────
+
+/** Per-roster identity: the Sleeper avatar HASH (not a URL — consumers prefix
+ *  with `https://sleepercdn.com/avatars/thumbs/{hash}`, e.g. via
+ *  SleeperUserAvatar) plus the owner's display name. */
+export interface RosterIdentity {
+  avatar: string | null;
+  name: string;
+}
+
+/**
+ * Build a `rosterId → { avatar, name }` map for a league straight from Sleeper's
+ * users + rosters endpoints. Lightweight (no players DB / picks) so it's cheap to
+ * use purely for rendering owner avatars next to manager names. Keyed by roster
+ * id (not owner id) so it works for surfaces that only carry a roster id.
+ * Returns an empty map if either endpoint fails.
+ */
+export async function fetchLeagueRosterIdentities(
+  leagueId: string,
+): Promise<Record<number, RosterIdentity>> {
+  const [usersRaw, rostersRaw] = await Promise.all([
+    fetchJson<SleeperLeagueUserRaw[]>(`${SLEEPER_API}/league/${leagueId}/users`).catch(
+      () => [] as SleeperLeagueUserRaw[],
+    ),
+    fetchJson<SleeperRosterRaw[]>(`${SLEEPER_API}/league/${leagueId}/rosters`).catch(
+      () => [] as SleeperRosterRaw[],
+    ),
+  ]);
+
+  const usersById = new Map<string, SleeperLeagueUserRaw>();
+  for (const u of usersRaw || []) usersById.set(u.user_id, u);
+
+  const map: Record<number, RosterIdentity> = {};
+  for (const r of rostersRaw || []) {
+    const u = r.owner_id ? usersById.get(r.owner_id) : undefined;
+    map[r.roster_id] = {
+      avatar: u?.avatar ?? null,
+      name: u?.metadata?.team_name || u?.display_name || u?.username || `Roster ${r.roster_id}`,
+    };
+  }
+  return map;
 }

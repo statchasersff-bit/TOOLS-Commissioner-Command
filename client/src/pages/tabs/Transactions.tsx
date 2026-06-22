@@ -60,7 +60,7 @@ interface PendingTrade {
   created: number;
 }
 
-type FilterType = "all" | "trade" | "waiver" | "free_agent";
+type FilterType = "all" | "trade" | "waiver" | "free_agent" | "commissioner";
 
 function PlayerHeadshot({ playerId, pos, team = "", size = "md" }: { playerId: string; pos: string; team?: string; size?: "sm" | "md" }) {
   return (
@@ -214,6 +214,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
     trade: transactions.filter((t) => t.type === "trade").length,
     waiver: transactions.filter((t) => t.type === "waiver").length,
     free_agent: transactions.filter((t) => t.type === "free_agent").length,
+    commissioner: transactions.filter((t) => t.type === "commissioner").length,
   }), [transactions]);
 
   const formatDate = (ts: number) =>
@@ -250,6 +251,7 @@ export default function Transactions({ leagueId }: { leagueId: string }) {
   const filters: Array<{ key: FilterType; label: string }> = [
     { key: "all", label: "All" }, { key: "trade", label: "Trades" },
     { key: "waiver", label: "Waivers" }, { key: "free_agent", label: "Free Agency" },
+    { key: "commissioner", label: "Commissioner" },
   ];
 
   return (

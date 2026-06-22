@@ -1,20 +1,14 @@
-import { useState, useMemo, useEffect, lazy, Suspense } from "react";
-const FinanceTab = lazy(() => import("./FinanceTab").then(m => ({ default: m.FinanceTab })));
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KpiCard } from "@/components/KpiCard";
 import { SectionHeader } from "@/components/SectionHeader";
-import { DashboardGreeting } from "@/components/DashboardGreeting";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { useValueModel } from "@/contexts/ValueModelContext";
-import { getPositionColor } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
-import { PortfolioValueChart } from "@/components/PortfolioValueChart";
-import { getPortfolioTimeline, type TimelinePoint } from "@/lib/portfolioApi";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import type { MultiLeagueRow } from "@/lib/commissionerActivityApi";
 import {
   Link,
   CheckCircle,
@@ -31,34 +25,17 @@ import {
   TrendingUp,
   Target,
   AlertTriangle,
-  Crown,
-  BarChart3,
+  Layers,
+  Activity,
+  ShieldAlert,
+  Inbox,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
   ArrowRightLeft,
-  Coins,
   Info,
+  type LucideIcon,
 } from "lucide-react";
-
-// Percent change in total portfolio value versus the snapshot closest to six
-// months before the latest one. Returns null when history doesn't span six
-// months, so the caller can fall back to a plain label.
-function sixMonthChangePct(points: TimelinePoint[]): number | null {
-  if (!points || points.length < 2) return null;
-  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
-  const latest = sorted[sorted.length - 1];
-  if (!latest.totalValue) return null;
-  const target = new Date(latest.date);
-  target.setMonth(target.getMonth() - 6);
-  let baseline: TimelinePoint | undefined;
-  for (const p of sorted) {
-    if (new Date(p.date) <= target) baseline = p;
-    else break;
-  }
-  if (!baseline?.totalValue) return null;
-  return ((latest.totalValue - baseline.totalValue) / baseline.totalValue) * 100;
-}
 
 export function PortfolioConnect({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void }) {
   const { isConnected, user, isLoading, error, lastSyncTime, connect, disconnect, refresh } = useSleeper();
@@ -363,7 +340,13 @@ export function PortfolioMyLeagues({ onSelectLeague, onNavigate }: PortfolioMyLe
   );
 }
 
-type RecordSortKey = "leagueName" | "wins" | "redraftRank" | "dynastyRank" | "playoffOdds" | "pfRank" | "maxPfRank" | "standing";
+type RecordSortKey = "leagueName" | "totalRosters" | "activityScore" | "rosterHealth" | "pendingTrades" | "alerts";
+
+const LEAGUE_TYPE_LABEL: Record<string, string> = {
+  dynasty: "Dynasty",
+  keeper: "Keeper",
+  redraft: "Redraft",
+};
 
 function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort, align = "center" }: {
   label: string; sortKey: RecordSortKey; activeSortKey: RecordSortKey; sortDir: "asc" | "desc";
@@ -388,9 +371,32 @@ function PortfolioSortHeader({ label, sortKey, activeSortKey, sortDir, onSort, a
   );
 }
 
-function SortableLeagueRecords({ records }: { records: any[] }) {
-  const [sortKey, setSortKey] = useState<RecordSortKey>("standing");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+interface LeagueBreakdownData {
+  /** Incoming trades awaiting the user's response, keyed by leagueId. */
+  pendingTradesByLeague: Record<string, number>;
+  pendingTradesLoading: boolean;
+  /** League Activity Score (0–100) per league; null = scanned, no data. */
+  activityByLeague: Record<string, number | null>;
+  activityLoading: boolean;
+  /** Total transactions per league; null = scanned, no data. */
+  txnsByLeague: Record<string, number | null>;
+  /** Per-league commissioner-activity rows (empty slots, alerts, etc.). */
+  leagueRowsById: Record<string, MultiLeagueRow>;
+  /** Open a league — sets it active and navigates to its detail view. */
+  onViewLeague: (leagueId: string) => void;
+}
+
+function SortableLeagueRecords({
+  records,
+  pendingTradesByLeague,
+  pendingTradesLoading,
+  activityByLeague,
+  activityLoading,
+  leagueRowsById,
+  onViewLeague,
+}: { records: any[] } & LeagueBreakdownData) {
+  const [sortKey, setSortKey] = useState<RecordSortKey>("activityScore");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showAll, setShowAll] = useState(false);
 
   function handleSort(key: RecordSortKey) {
@@ -405,13 +411,12 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
   const sorted = useMemo(() => {
     const accessor: Record<RecordSortKey, (r: any) => number | string> = {
       leagueName: r => (r.leagueName || "").toLowerCase(),
-      wins: r => r.wins - r.losses,
-      redraftRank: r => r.redraftRank || 999,
-      dynastyRank: r => r.dynastyRank || 999,
-      playoffOdds: r => r.playoffOdds,
-      pfRank: r => r.pfRank || 999,
-      maxPfRank: r => r.maxPfRank || 999,
-      standing: r => r.standing,
+      totalRosters: r => r.totalRosters || 0,
+      pendingTrades: r => pendingTradesByLeague[r.leagueId] ?? -1,
+      // Unscored leagues sort below scored ones in both directions.
+      activityScore: r => activityByLeague[r.leagueId] ?? -1,
+      rosterHealth: r => leagueRowsById[r.leagueId]?.totalEmptyStarterSlots ?? -1,
+      alerts: r => leagueRowsById[r.leagueId]?.openAlerts ?? -1,
     };
     return [...records].sort((a, b) => {
       const va = accessor[sortKey](a);
@@ -421,25 +426,82 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
       }
       return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
     });
-  }, [records, sortKey, sortDir]);
-
-  const rankCell = (rank: number, total: number) =>
-    rank > 0
-      ? <span className={`font-semibold tabular-nums ${rank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rank <= Math.ceil(total * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rank}</span>
-      : <span className="text-muted-foreground text-[11px]">N/A</span>;
+  }, [records, sortKey, sortDir, pendingTradesByLeague, activityByLeague, leagueRowsById]);
 
   const visible = showAll ? sorted : sorted.slice(0, 10);
 
+  // Pending trades → "Trade Queue" label: "Clear" when none, "N pending" otherwise.
+  const pendingCell = (leagueId: string) => {
+    const count = pendingTradesByLeague[leagueId];
+    if (count == null) {
+      return pendingTradesLoading
+        ? <Loader2 className="w-3 h-3 animate-spin text-muted-foreground inline" />
+        : <span className="text-muted-foreground text-[11px]">—</span>;
+    }
+    if (count === 0) return <span className="text-muted-foreground">Clear</span>;
+    return (
+      <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
+        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+        {count} pending
+      </span>
+    );
+  };
+
+  const typeBadge = (rec: any) => (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground whitespace-nowrap">
+      {LEAGUE_TYPE_LABEL[rec.leagueType] ?? "—"}
+    </span>
+  );
+
+  // Activity score → "High / Moderate / Low" label.
+  const activityCell = (leagueId: string) => {
+    const score = activityByLeague[leagueId];
+    if (score == null && activityLoading) return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground inline" />;
+    const l = activityLabel(score);
+    return <span className={`font-semibold ${l.cls}`}>{l.text}</span>;
+  };
+
+  // Empty starter slots → "Healthy / N open" roster-health label.
+  const rosterHealthCell = (leagueId: string) => {
+    const slots = leagueRowsById[leagueId]?.totalEmptyStarterSlots;
+    if (slots == null && activityLoading) return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground inline" />;
+    const l = rosterHealthLabel(slots);
+    return <span className={`font-semibold ${l.cls}`}>{l.text}</span>;
+  };
+
+  // Open alerts → "None / N" label.
+  const alertsCell = (leagueId: string) => {
+    const open = leagueRowsById[leagueId]?.openAlerts;
+    if (open == null && activityLoading) return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground inline" />;
+    const l = alertsLabel(open);
+    return <span className={l.cls}>{l.text}</span>;
+  };
+
+  const viewButton = (leagueId: string) => (
+    <button
+      onClick={() => onViewLeague(leagueId)}
+      className="text-xs font-semibold text-[#d4af37] hover:underline whitespace-nowrap"
+      data-testid={`button-view-league-${leagueId}`}
+    >
+      View →
+    </button>
+  );
+
   return (
     <div className="rounded-md border border-border/40 overflow-hidden">
-      {/* ── Mobile list (cards, no horizontal scroll) ──
-          League name is the highest-priority info: two-line wrap, decent size,
-          and the avatar+name take the bulk of the row. WN/DYN ranks live in a
-          compact stat row below the name; playoff% is folded into the metadata
-          line. PF Rk / Max PF / Standing are hidden — see desktop for those. */}
+      {/* ── Mobile list (cards, no horizontal scroll) ── */}
       <div className="md:hidden divide-y divide-border/20">
         {visible.map((rec: any, idx: number) => (
-          <MobileLeagueRow key={`m-${rec.leagueId}-${idx}`} rec={rec} rankCell={rankCell} />
+          <MobileLeagueRow
+            key={`m-${rec.leagueId}-${idx}`}
+            rec={rec}
+            pendingCell={pendingCell}
+            typeBadge={typeBadge}
+            activityCell={activityCell}
+            rosterHealthCell={rosterHealthCell}
+            alertsCell={alertsCell}
+            viewButton={viewButton}
+          />
         ))}
       </div>
 
@@ -449,13 +511,12 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <PortfolioSortHeader label="League" sortKey="leagueName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
-              <PortfolioSortHeader label="Rec" sortKey="wins" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <PortfolioSortHeader label="W-N" sortKey="redraftRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <PortfolioSortHeader label="DYN" sortKey="dynastyRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <PortfolioSortHeader label="PLYF%" sortKey="playoffOdds" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <PortfolioSortHeader label="PF Rk" sortKey="pfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <PortfolioSortHeader label="Max PF" sortKey="maxPfRank" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <PortfolioSortHeader label="Stnd" sortKey="standing" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Teams" sortKey="totalRosters" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Activity" sortKey="activityScore" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Roster Health" sortKey="rosterHealth" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Trade Queue" sortKey="pendingTrades" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <PortfolioSortHeader label="Alerts" sortKey="alerts" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <th className="px-2 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -474,7 +535,6 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                       <div className="font-semibold text-sm text-foreground break-words line-clamp-2" title={rec.leagueName}>{rec.leagueName}</div>
                       <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.scoringFormat === "Half" ? "Half-PPR" : rec.scoringFormat}</span>
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.totalRosters} Teams</span>
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">{rec.format}</span>
                         {rec.isBestBall && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">Best Ball</span>
@@ -483,23 +543,12 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
                     </div>
                   </div>
                 </td>
-                <td className="px-2 py-2 text-center font-semibold tabular-nums whitespace-nowrap">{rec.wins}-{rec.losses}{rec.ties > 0 ? `-${rec.ties}` : ""}</td>
-                <td className="px-2 py-2 text-center">{rankCell(rec.redraftRank, rec.totalRosters)}</td>
-                <td className="px-2 py-2 text-center">{rankCell(rec.dynastyRank, rec.totalRosters)}</td>
-                <td className="px-2 py-2 text-center" data-testid={`text-playoff-odds-${rec.leagueId}`}>
-                  {rec.playoffOdds != null
-                    ? <span className={`font-semibold tabular-nums ${rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400" : rec.playoffOdds >= 40 ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>{rec.playoffOdds}%</span>
-                    : <span className="text-muted-foreground text-[11px]">N/A</span>}
-                </td>
-                <td className="px-2 py-2 text-center" data-testid={`text-pf-rank-${rec.leagueId}`}>{rankCell(rec.pfRank, rec.totalRosters)}</td>
-                <td className="px-2 py-2 text-center">
-                  {rec.maxPfRank > 0
-                    ? <span className={`font-semibold tabular-nums ${rec.maxPfRank <= 3 ? "text-emerald-600 dark:text-emerald-400" : rec.maxPfRank <= Math.ceil(rec.totalRosters * 0.7) ? "text-foreground" : "text-red-500 dark:text-red-400"}`}>#{rec.maxPfRank}<span className="text-muted-foreground font-normal">/{rec.totalRosters}</span></span>
-                    : <span className="text-muted-foreground text-[11px]">N/A</span>}
-                </td>
-                <td className="px-2 py-2 text-center" data-testid={`text-standing-${rec.leagueId}`}>
-                  {rec.totalGamesPlayed > 0 && rec.standing > 0 ? rankCell(rec.standing, rec.totalRosters) : <span className="text-muted-foreground text-[11px]">N/A</span>}
-                </td>
+                <td className="px-2 py-2 text-center font-semibold tabular-nums" data-testid={`text-teams-${rec.leagueId}`}>{rec.totalRosters}</td>
+                <td className="px-2 py-2 text-center" data-testid={`text-activity-${rec.leagueId}`}>{activityCell(rec.leagueId)}</td>
+                <td className="px-2 py-2 text-center" data-testid={`text-roster-health-${rec.leagueId}`}>{rosterHealthCell(rec.leagueId)}</td>
+                <td className="px-2 py-2 text-center" data-testid={`text-pending-trades-${rec.leagueId}`}>{pendingCell(rec.leagueId)}</td>
+                <td className="px-2 py-2 text-center" data-testid={`text-alerts-${rec.leagueId}`}>{alertsCell(rec.leagueId)}</td>
+                <td className="px-3 py-2 text-right">{viewButton(rec.leagueId)}</td>
               </tr>
             ))}
           </tbody>
@@ -521,22 +570,18 @@ function SortableLeagueRecords({ records }: { records: any[] }) {
 }
 
 // ── Mobile league-record card ────────────────────────────────────────────────
-// Layout target (≥320px viewports):
 //   [Avatar] League Name (≤2 lines)
-//            12T SF · 95% PLYF
-//            WN #1 · DYN #3 · 8-5
-// Row height lands ~76-88px depending on whether the name wraps to 2 lines.
-function MobileLeagueRow({ rec, rankCell }: { rec: any; rankCell: (rank: number, total: number) => JSX.Element }) {
-  const recordLabel = rec.totalGamesPlayed > 0
-    ? `${rec.wins}-${rec.losses}${rec.ties > 0 ? `-${rec.ties}` : ""}`
-    : null;
-  const scoring = rec.scoringFormat === "Half" ? "½PPR" : rec.scoringFormat;
-  const playoffCls = rec.playoffOdds == null
-    ? "text-muted-foreground"
-    : rec.playoffOdds >= 70 ? "text-emerald-600 dark:text-emerald-400"
-    : rec.playoffOdds >= 40 ? "text-foreground"
-    : "text-red-500 dark:text-red-400";
-
+//            Dynasty · 12 Teams
+//            Activity High · Roster Healthy · Trades Clear · Alerts None
+function MobileLeagueRow({ rec, pendingCell, typeBadge, activityCell, rosterHealthCell, alertsCell, viewButton }: {
+  rec: any;
+  pendingCell: (leagueId: string) => JSX.Element;
+  typeBadge: (rec: any) => JSX.Element;
+  activityCell: (leagueId: string) => JSX.Element;
+  rosterHealthCell: (leagueId: string) => JSX.Element;
+  alertsCell: (leagueId: string) => JSX.Element;
+  viewButton: (leagueId: string) => JSX.Element;
+}) {
   return (
     <div className="flex items-start gap-2.5 px-3 py-3 hover:bg-muted/10 transition-colors" data-testid={`league-record-mobile-${rec.leagueId}`}>
       {rec.avatar ? (
@@ -550,52 +595,137 @@ function MobileLeagueRow({ rec, rankCell }: { rec: any; rankCell: (rank: number,
         <div className="font-semibold text-[13px] leading-tight line-clamp-2 break-words text-foreground" title={rec.leagueName}>
           {rec.leagueName}
         </div>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1 min-w-0">
-          <span className="truncate">{rec.totalRosters}T · {rec.format} · {scoring}{rec.isBestBall ? " · BB" : ""}</span>
-          {rec.playoffOdds != null && (
-            <>
-              <span className="flex-shrink-0">·</span>
-              <span className={`flex-shrink-0 font-semibold tabular-nums ${playoffCls}`} data-testid={`text-playoff-odds-mobile-${rec.leagueId}`}>{rec.playoffOdds}% PLYF</span>
-            </>
-          )}
+        <div className="flex items-center gap-1.5 mt-1 min-w-0">
+          {typeBadge(rec)}
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{rec.totalRosters} Teams</span>
         </div>
-        <div className="flex items-center gap-2 mt-1.5 text-[11px]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[11px]">
           <span className="flex items-center gap-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Win-Now</span>
-            {rankCell(rec.redraftRank, rec.totalRosters)}
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Activity</span>
+            {activityCell(rec.leagueId)}
           </span>
           <span className="text-border/60">·</span>
           <span className="flex items-center gap-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">DYN</span>
-            {rankCell(rec.dynastyRank, rec.totalRosters)}
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Roster</span>
+            {rosterHealthCell(rec.leagueId)}
           </span>
-          {recordLabel && (
-            <span className="ml-auto text-muted-foreground font-medium tabular-nums">{recordLabel}</span>
-          )}
+          <span className="text-border/60">·</span>
+          <span className="flex items-center gap-1">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Trades</span>
+            {pendingCell(rec.leagueId)}
+          </span>
+          <span className="text-border/60">·</span>
+          <span className="flex items-center gap-1">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Alerts</span>
+            {alertsCell(rec.leagueId)}
+          </span>
         </div>
       </div>
+      <div className="flex-shrink-0 self-center pl-1">{viewButton(rec.leagueId)}</div>
     </div>
   );
 }
 
-export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void } = {}) {
-  const { isConnected, user, leagues } = useSleeper();
-  const { valuesBySleeperId, sourceId, sources } = useValueModel();
-  const activeSourceLabel = sources.find(s => s.id === sourceId)?.label ?? sourceId;
+// ── Commissioner Action Center tile ──────────────────────────────────────────
+// An actionable status card: a count + a CTA that deep-links to the tool that
+// resolves it. Highlights amber when the count is non-zero (something to do).
+function ActionTile({ icon: Icon, label, count, cta, onClick, loading }: {
+  icon: LucideIcon;
+  label: string;
+  count: number | null;
+  cta: string;
+  onClick?: () => void;
+  loading?: boolean;
+}) {
+  const active = (count ?? 0) > 0;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "group text-left rounded-lg border p-3.5 transition-colors w-full",
+        active
+          ? "border-amber-500/40 bg-amber-500/[0.06] hover:bg-amber-500/10"
+          : "border-border/50 bg-card/40 hover:bg-muted/20",
+        !onClick && "cursor-default",
+      )}
+      data-testid={`action-tile-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <div className="flex items-center gap-2">
+        <div className={cn(
+          "w-7 h-7 rounded-md flex items-center justify-center ring-1 flex-shrink-0",
+          active ? "bg-amber-500/15 ring-amber-500/30" : "bg-muted/50 ring-border/40",
+        )}>
+          <Icon className={cn("w-3.5 h-3.5", active ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")} />
+        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">{label}</span>
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <span className={cn(
+          "text-2xl font-bold leading-none tabular-nums",
+          active ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+        )}>
+          {loading ? "…" : count ?? "—"}
+        </span>
+        {onClick && (
+          <span className="text-[11px] font-semibold text-[#d4af37] group-hover:underline whitespace-nowrap">{cta} →</span>
+        )}
+      </div>
+    </button>
+  );
+}
 
-  const [innerTab, setInnerTab] = useState<"overview" | "finances">("overview");
+// ── Label helpers for the League Command Center table ────────────────────────
+// Convert raw commissioner-activity numbers into plain-language labels so the
+// table reads as status, not unexplained scores.
+function activityLabel(score: number | null | undefined): { text: string; cls: string } {
+  if (score == null) return { text: "—", cls: "text-muted-foreground" };
+  if (score >= 70) return { text: "High", cls: "text-emerald-600 dark:text-emerald-400" };
+  if (score >= 40) return { text: "Moderate", cls: "text-foreground" };
+  return { text: "Low", cls: "text-red-500 dark:text-red-400" };
+}
+
+function rosterHealthLabel(emptySlots: number | null | undefined): { text: string; cls: string } {
+  if (emptySlots == null) return { text: "—", cls: "text-muted-foreground" };
+  if (emptySlots === 0) return { text: "Healthy", cls: "text-emerald-600 dark:text-emerald-400" };
+  return { text: `${emptySlots} open`, cls: "text-amber-600 dark:text-amber-400" };
+}
+
+function alertsLabel(openAlerts: number | null | undefined): { text: string; cls: string } {
+  if (openAlerts == null) return { text: "—", cls: "text-muted-foreground" };
+  if (openAlerts === 0) return { text: "None", cls: "text-muted-foreground" };
+  return { text: String(openAlerts), cls: "text-red-500 dark:text-red-400 font-semibold" };
+}
+
+export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void } = {}) {
+  const { isConnected, user, leagues, setActiveLeague } = useSleeper();
+
   const [summaryData, setSummaryData] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [exposureSortCol, setExposureSortCol] = useState<"name" | "pos" | "value" | "exposure" | "leagueCount">("exposure");
-  const [exposureSortDir, setExposureSortDir] = useState<"asc" | "desc">("desc");
-  const [exposureVisible, setExposureVisible] = useState(25);
-  const [exposureCollapsed, setExposureCollapsed] = useState(true);
-  const [leagueFilter, setLeagueFilter] = useState<"all" | "contender" | "middle" | "rebuild">("all");
   const [pendingTradeCount, setPendingTradeCount] = useState<number | null>(null);
   const [pendingTradeLoading, setPendingTradeLoading] = useState(false);
-  const [portfolioValue, setPortfolioValue] = useState<number | null>(null);
-  const [portfolioChange6mo, setPortfolioChange6mo] = useState<number | null>(null);
-  const [portfolioValueLoading, setPortfolioValueLoading] = useState(false);
+  // Per-league breakdown data for the League Breakdown table.
+  const [pendingTradesByLeague, setPendingTradesByLeague] = useState<Record<string, number>>({});
+  const [activityByLeague, setActivityByLeague] = useState<Record<string, number | null>>({});
+  const [txnsByLeague, setTxnsByLeague] = useState<Record<string, number | null>>({});
+  const [activityLoading, setActivityLoading] = useState(false);
+  // Aggregate commissioner-activity KPIs across the leagues the user commissions
+  // (moved here from the All Leagues tab). Null until the first scan resolves.
+  const [activityKpis, setActivityKpis] = useState<{
+    leagues: number; scanned: number; healthy: number;
+    lowActivity: number; atRiskManagers: number; openAlerts: number; emptySlots: number;
+  } | null>(null);
+  // Per-league commissioner-activity rows, keyed by leagueId — powers the
+  // labeled League Command Center table and the "needs attention" rollup.
+  const [leagueRowsById, setLeagueRowsById] = useState<Record<string, MultiLeagueRow>>({});
+
+  // Open a league from the League Breakdown table — set it active, then jump to
+  // League Activity (Transactions now lives there as a sub-tab).
+  const handleViewLeague = useCallback((leagueId: string) => {
+    setActiveLeague(leagueId);
+    onNavigate?.("league-analyzer", "league-activity");
+  }, [setActiveLeague, onNavigate]);
   // Live startup drafts the user is in. Fresh startup leagues don't make it
   // into useSleeper().leagues (their roster has no players yet, so
   // fetchSleeperLeagues filters them out) — but the user still wants them
@@ -616,33 +746,6 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
     picksAway: number | null;
   }>>([]);
   const [liveStartupDraftsLoading, setLiveStartupDraftsLoading] = useState(false);
-
-  // Total dynasty portfolio value (latest basket-timeline snapshot) for the KPI.
-  useEffect(() => {
-    if (!isConnected || !user?.userId) {
-      setPortfolioValue(null);
-      setPortfolioChange6mo(null);
-      return;
-    }
-    let cancelled = false;
-    setPortfolioValueLoading(true);
-    getPortfolioTimeline(user.userId, { range: "all" })
-      .then((tl) => {
-        if (cancelled) return;
-        setPortfolioValue(tl.summary.totalPortfolioValue);
-        setPortfolioChange6mo(sixMonthChangePct(tl.points));
-        setPortfolioValueLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setPortfolioValue(null);
-        setPortfolioChange6mo(null);
-        setPortfolioValueLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isConnected, user?.userId]);
 
   useEffect(() => {
     if (!isConnected || !user?.userId) {
@@ -707,28 +810,119 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
             fetchLeagueTransactionsFiltered(l.leagueId, ["trade"], [], []),
           ]);
           const userRoster = (rosters as any[]).find((r: any) => r.owner_id === userId);
-          if (!userRoster) return 0;
+          if (!userRoster) return { leagueId: l.leagueId, count: 0 };
           const userRosterId: number = userRoster.roster_id;
           // Mirror TradeSync's "incoming" definition exactly:
           // proposed + user is a party + user didn't create it + user hasn't consented yet
-          return (txns as any[]).filter((t: any) =>
+          const count = (txns as any[]).filter((t: any) =>
             t.status === "proposed" &&
             Array.isArray(t.roster_ids) && t.roster_ids.includes(userRosterId) &&
             t.creator !== userId &&
             !(t.consenter_ids ?? []).includes(userRosterId)
           ).length;
+          return { leagueId: l.leagueId, count };
         })
       )
     ).then((results) => {
       if (cancelled) return;
-      let count = 0;
+      let total = 0;
+      const byLeague: Record<string, number> = {};
       for (const r of results) {
-        if (r.status === "fulfilled") count += r.value;
+        if (r.status === "fulfilled") {
+          byLeague[r.value.leagueId] = r.value.count;
+          total += r.value.count;
+        }
       }
-      setPendingTradeCount(count);
+      setPendingTradesByLeague(byLeague);
+      setPendingTradeCount(total);
       setPendingTradeLoading(false);
     }).catch(() => {
-      if (!cancelled) { setPendingTradeCount(null); setPendingTradeLoading(false); }
+      if (!cancelled) { setPendingTradeCount(null); setPendingTradesByLeague({}); setPendingTradeLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [isConnected, user?.userId, leagues]);
+
+  // League Activity Score per league. Scores live in the Commissioner Activity
+  // backend and only exist once a league has been scanned. We only scan leagues
+  // the user actually COMMISSIONS — Sleeper's /league/:id/users marks the
+  // commissioner with is_owner — then read the scores back via multi-overview.
+  // Leagues the user doesn't commission stay null and render as "—".
+  useEffect(() => {
+    if (!isConnected || !user?.userId || leagues.length === 0) {
+      setActivityByLeague({});
+      setTxnsByLeague({});
+      setActivityKpis(null);
+      setLeagueRowsById({});
+      return;
+    }
+    let cancelled = false;
+    setActivityLoading(true);
+    const userId = user.userId;
+
+    (async () => {
+      // Determine which leagues the user commissions (is_owner === true).
+      const ownership = await Promise.allSettled(
+        leagues.map(async (l) => {
+          const users = await fetch(
+            `https://api.sleeper.app/v1/league/${l.leagueId}/users`
+          ).then((r) => r.json());
+          const me = (users as any[]).find((u: any) => u.user_id === userId);
+          return { leagueId: l.leagueId, isCommissioner: me?.is_owner === true };
+        })
+      );
+      if (cancelled) return;
+
+      const commissionerLeagueIds: string[] = [];
+      const byLeague: Record<string, number | null> = {};
+      const txnsMap: Record<string, number | null> = {};
+      for (const r of ownership) {
+        if (r.status !== "fulfilled") continue;
+        byLeague[r.value.leagueId] = null; // default: not scored
+        txnsMap[r.value.leagueId] = null;  // default: no data
+        if (r.value.isCommissioner) commissionerLeagueIds.push(r.value.leagueId);
+      }
+
+      if (commissionerLeagueIds.length === 0) {
+        setActivityByLeague(byLeague);
+        setTxnsByLeague(txnsMap);
+        setActivityKpis(null);
+        setLeagueRowsById({});
+        setActivityLoading(false);
+        return;
+      }
+
+      const { refreshActivity, fetchMultiOverview } = await import("@/lib/commissionerActivityApi");
+      // Best-effort scan of the commissioned leagues; tolerate failures.
+      await Promise.allSettled(
+        commissionerLeagueIds.map((leagueId) => refreshActivity({ leagueId, mode: "recent" }))
+      );
+      if (cancelled) return;
+      const { leagues: rows } = await fetchMultiOverview(commissionerLeagueIds);
+      if (cancelled) return;
+      const rowsById: Record<string, MultiLeagueRow> = {};
+      for (const row of rows) {
+        byLeague[row.leagueId] = row.hasData ? row.leagueActivityScore : null;
+        txnsMap[row.leagueId] = row.hasData ? row.totalTransactions : null;
+        rowsById[row.leagueId] = row;
+      }
+      setLeagueRowsById(rowsById);
+      // Roll the per-league rows up into the activity KPI tiles (mirrors the
+      // aggregates the All Leagues tab used to show).
+      const monitored = rows.filter((r) => r.hasData);
+      setActivityKpis({
+        leagues: commissionerLeagueIds.length,
+        scanned: monitored.length,
+        healthy: monitored.filter((r) => (r.leagueActivityScore ?? 0) >= 70).length,
+        lowActivity: monitored.filter((r) => (r.leagueActivityScore ?? 0) < 50).length,
+        atRiskManagers: monitored.reduce((s, r) => s + (r.inactiveManagerCount ?? 0), 0),
+        openAlerts: rows.reduce((s, r) => s + r.openAlerts, 0),
+        emptySlots: monitored.reduce((s, r) => s + (r.totalEmptyStarterSlots ?? 0), 0),
+      });
+      setActivityByLeague(byLeague);
+      setTxnsByLeague(txnsMap);
+      setActivityLoading(false);
+    })().catch(() => {
+      if (!cancelled) { setActivityByLeague({}); setTxnsByLeague({}); setActivityKpis(null); setLeagueRowsById({}); setActivityLoading(false); }
     });
     return () => { cancelled = true; };
   }, [isConnected, user?.userId, leagues]);
@@ -760,132 +954,104 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
   const bestBallCount = leagues.filter((l) => l.isBestBall).length;
   const seasons = Array.from(new Set(leagues.map((l) => l.season)));
 
-  const portfolioToggle = (
-    <div className="grid flex-shrink-0" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4, width: 240 }}>
-      {(["overview", "finances"] as const).map((tab) => {
-        const isActive = innerTab === tab;
-        const Icon = tab === "overview" ? BarChart3 : Coins;
-        const label = tab === "overview" ? "Overview" : "Finances";
-        return (
-          <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-${tab}`}
-            className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-            style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
-            <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
-            {label}
-            {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  if (innerTab === "finances") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <SectionHeader title="League Finances" subtitle="Track buy-ins, prizes, and ROI across your leagues" />
-          <div className="hidden md:block pt-1">{portfolioToggle}</div>
-        </div>
-        <div className="md:hidden flex justify-center !mt-0">
-          <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
-            {(["overview", "finances"] as const).map((tab) => {
-              const isActive = innerTab === tab;
-              const Icon = tab === "overview" ? BarChart3 : Coins;
-              const label = tab === "overview" ? "Overview" : "Finances";
-              return (
-                <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-mobile-${tab}`}
-                  className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                  style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
-                  <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
-                  {label}
-                  {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-          <FinanceTab />
-        </Suspense>
-      </div>
-    );
+  // "Needs attention" = any league with a commissioner-actionable issue: a
+  // pending trade awaiting response, an open alert, an empty starter slot, an
+  // at-risk (inactive) manager, or a low activity score. Counted per-league so
+  // a league with several issues still counts once.
+  const attentionLeagueIds = new Set<string>();
+  for (const [id, count] of Object.entries(pendingTradesByLeague)) {
+    if (count > 0) attentionLeagueIds.add(id);
   }
+  for (const [id, row] of Object.entries(leagueRowsById)) {
+    const flagged =
+      row.openAlerts > 0 ||
+      (row.totalEmptyStarterSlots ?? 0) > 0 ||
+      (row.inactiveManagerCount ?? 0) > 0 ||
+      (row.hasData && (row.leagueActivityScore ?? 100) < 50);
+    if (flagged) attentionLeagueIds.add(id);
+  }
+  const needsAttentionCount = attentionLeagueIds.size;
+  const attentionReady = activityKpis != null || pendingTradeCount != null;
 
   return (
     <div className="space-y-8">
-      {/* Combined Welcome + Team Hub card. Identity-only on Portfolio —
-          no hydrated league/team is in scope here, so the Team Hub's
-          exposure row shows its friendly fallback. The MyTeam Overview
-          tab can re-render with `players` to fill in real numbers. */}
-      <DashboardGreeting />
       <div className="flex items-start justify-between gap-4">
-        <SectionHeader title="My Portfolio" subtitle="Overview of your dynasty portfolio across all leagues" />
-        <div className="hidden md:block pt-1">{portfolioToggle}</div>
-      </div>
-      <div className="md:hidden flex justify-center !mt-0">
-        <div className="grid w-[90vw]" style={{ gridTemplateColumns: "1fr 1fr", height: 48, borderRadius: 16, padding: 4, background: "var(--sc-toggle-bg)", border: "1px solid var(--sc-toggle-border)", gap: 4 }}>
-          {(["overview", "finances"] as const).map((tab) => {
-            const isActive = innerTab === tab;
-            const Icon = tab === "overview" ? BarChart3 : Coins;
-            const label = tab === "overview" ? "Overview" : "Finances";
-            return (
-              <button key={tab} onClick={() => setInnerTab(tab)} data-testid={`inner-tab-mobile-${tab}`}
-                className="relative flex items-center justify-center gap-2 font-semibold transition-all duration-200"
-                style={{ borderRadius: 12, fontSize: 13, letterSpacing: "0.01em", background: isActive ? "linear-gradient(135deg, rgba(11,58,122,0.85) 0%, rgba(11,58,122,0.65) 100%)" : "transparent", color: isActive ? "#fff" : "var(--sc-toggle-inactive-text)", border: isActive ? "1px solid rgba(212,175,55,0.30)" : "1px solid transparent", boxShadow: isActive ? "0 2px 12px rgba(11,58,122,0.40), inset 0 1px 0 rgba(255,255,255,0.06)" : "none" }}>
-                <Icon style={{ width: 15, height: 15, flexShrink: 0 }} />
-                {label}
-                {isActive && <span className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full" style={{ width: 28, height: 2, background: "#d4af37", opacity: 0.85 }} />}
-              </button>
-            );
-          })}
-        </div>
+        <SectionHeader title="My Leagues" subtitle="Monitor league health, pending trades, open teams, manager activity, and setup issues across every league you commission." />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} subtitle={`${bestBallCount} Best Ball · ${leagues.length - bestBallCount} Regular`} />
+      {/* Main summary — the four things a commissioner acts on first. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Total Leagues" value={leagues.length} icon={Trophy} subtitle="Commissioned" />
         <KpiCard
-          label="Trades in Inbox"
-          value={pendingTradeLoading ? "..." : pendingTradeCount !== null ? pendingTradeCount : "—"}
-          icon={ArrowRightLeft}
-          loading={pendingTradeLoading}
-          subtitle="Pending response"
+          label="Needs Attention"
+          value={attentionReady ? needsAttentionCount : "—"}
+          icon={AlertTriangle}
+          subtitle={attentionReady ? `${needsAttentionCount === 1 ? "league" : "leagues"} flagged` : undefined}
+          loading={activityLoading && !attentionReady}
         />
         <KpiCard
-          label="Win Rate"
-          value={summaryLoading ? "..." : summaryData ? `${summaryData.winRate}%` : "--"}
-          icon={TrendingUp}
-          subtitle={summaryData ? `${summaryData.totalWins}W - ${summaryData.totalLosses}L` : undefined}
-          loading={summaryLoading}
-        />
-        <KpiCard
-          label="Portfolio Value"
-          value={
-            portfolioValueLoading
-              ? "..."
-              : portfolioValue != null
-              ? portfolioValue >= 1_000_000
-                ? `${(portfolioValue / 1_000_000).toFixed(2)}M`
-                : portfolioValue.toLocaleString()
-              : "--"
-          }
-          icon={Coins}
-          subtitle={
-            portfolioChange6mo != null
-              ? `${portfolioChange6mo >= 0 ? "▲" : "▼"} ${Math.abs(portfolioChange6mo).toFixed(1)}% past 6 mo`
-              : "Current dynasty value"
-          }
-          trend={
-            portfolioChange6mo == null
-              ? undefined
-              : portfolioChange6mo > 0
-              ? "up"
-              : portfolioChange6mo < 0
-              ? "down"
-              : "neutral"
-          }
-          loading={portfolioValueLoading}
+          label="Open Teams"
+          value={activityKpis ? activityKpis.emptySlots : "—"}
+          icon={Users}
+          subtitle="Empty starter slots"
+          loading={activityLoading && !activityKpis}
         />
       </div>
+
+      {/* Secondary health row — league-level status at a glance. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="Healthy Leagues" icon={CheckCircle}
+          value={activityKpis ? activityKpis.healthy : "—"}
+          loading={activityLoading && !activityKpis}
+        />
+        <KpiCard
+          label="Low Activity" icon={Activity}
+          value={activityKpis ? activityKpis.lowActivity : "—"}
+          loading={activityLoading && !activityKpis}
+        />
+        <KpiCard
+          label="At-Risk Managers" icon={ShieldAlert}
+          value={activityKpis ? activityKpis.atRiskManagers : "—"}
+          loading={activityLoading && !activityKpis}
+        />
+        <KpiCard
+          label="Open Alerts" icon={Inbox}
+          value={activityKpis ? activityKpis.openAlerts : "—"}
+          loading={activityLoading && !activityKpis}
+        />
+      </div>
+
+      {/* Commissioner Action Center — action-first deep links to resolve the
+          flagged items above. Only surfaces actions backed by real data. */}
+      <Card className="p-4 md:p-5" data-testid="commissioner-action-center">
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-foreground">Commissioner Action Center</h3>
+          <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <ActionTile
+            icon={ArrowRightLeft} label="Pending Trades" cta="Review trades"
+            count={pendingTradeCount} loading={pendingTradeLoading}
+            onClick={onNavigate ? () => onNavigate("trade-center", "trade-review") : undefined}
+          />
+          <ActionTile
+            icon={Users} label="Open Teams" cta="Manage rosters"
+            count={activityKpis ? activityKpis.emptySlots : null} loading={activityLoading && !activityKpis}
+            onClick={onNavigate ? () => onNavigate("league-analyzer", "league-activity") : undefined}
+          />
+          <ActionTile
+            icon={ShieldAlert} label="At-Risk Managers" cta="Review managers"
+            count={activityKpis ? activityKpis.atRiskManagers : null} loading={activityLoading && !activityKpis}
+            onClick={onNavigate ? () => onNavigate("league-analyzer", "league-activity") : undefined}
+          />
+          <ActionTile
+            icon={Inbox} label="Open Alerts" cta="View alerts"
+            count={activityKpis ? activityKpis.openAlerts : null} loading={activityLoading && !activityKpis}
+            onClick={onNavigate ? () => onNavigate("league-analyzer", "league-activity") : undefined}
+          />
+        </div>
+      </Card>
 
       {/* Live Startup Drafts — surfaces fresh-startup leagues that aren't
           in the user's main league list yet (no roster players → filtered
@@ -986,20 +1152,17 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
 
       {summaryData && (
         <>
-          <PortfolioValueChart handle={user?.userId ?? null} />
-
           <Card className="p-6" data-testid="portfolio-performance">
             <div className="mb-4">
-              <h3 className="text-base font-bold text-foreground">League Breakdown</h3>
+              <h3 className="text-base font-bold text-foreground">League Command Center</h3>
               <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
             </div>
 
             <p className="flex items-start gap-1.5 text-[11px] leading-snug text-muted-foreground mb-4">
               <Info className="w-3.5 h-3.5 mt-px flex-shrink-0 text-muted-foreground/60" />
               <span>
-                Shows your active dynasty leagues only. Redraft &amp; keeper leagues,
-                undrafted leagues, leagues where you aren&apos;t assigned a team, and
-                mostly-unclaimed (orphan) pools are filtered out automatically.
+                Showing leagues you actively manage. Use filters to include
+                inactive, draft-only, redraft, best ball, keeper, or orphan leagues.
                 {onNavigate && (
                   <>
                     {" "}
@@ -1017,176 +1180,20 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
               </span>
             </p>
 
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-4">
-              {([
-                { key: "all",       label: "All",                count: summaryData.leagueRecords.length, icon: null,                                  inactive: "bg-muted/40 text-muted-foreground border-border hover:border-[#0b3a7a]/40" },
-                { key: "contender", label: "Contenders",         count: summaryData.contenderCount,       icon: <Crown className="w-3.5 h-3.5" />,     inactive: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-800/30 hover:border-emerald-500" },
-                { key: "middle",    label: "Bubble",             count: summaryData.middleCount,          icon: <BarChart3 className="w-3.5 h-3.5" />, inactive: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200/50 dark:border-blue-800/30 hover:border-blue-500" },
-                { key: "rebuild",   label: "Rebuilding",         count: summaryData.rebuildCount,         icon: <Target className="w-3.5 h-3.5" />,    inactive: "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border-red-200/50 dark:border-red-800/30 hover:border-red-500" },
-              ] as const).map(({ key, label, count, icon, inactive }) => {
-                const isActive = leagueFilter === key;
-                const activeClass = key === "all" ? "bg-[#0b3a7a] text-white border-[#0b3a7a]" : key === "contender" ? "bg-emerald-600 text-white border-emerald-600" : key === "middle" ? "bg-blue-600 text-white border-blue-600" : "bg-red-600 text-white border-red-600";
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setLeagueFilter(key)}
-                    className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all", isActive ? activeClass : inactive)}
-                    data-testid={`filter-league-${key}`}
-                  >
-                    {icon}{label}: {count}
-                  </button>
-                );
-              })}
-            </div>
-
             {summaryData.leagueRecords.length > 0 && (() => {
-              // Bucket by win-now starter rank percentile (mirrors the counts in
-              // sleeperApi.ts/fetchPortfolioSummary). Leagues without a win-now
-              // rank yet are silently dropped from the bucketed views.
-              const filtered = leagueFilter === "all"
-                ? summaryData.leagueRecords
-                : summaryData.leagueRecords.filter((r: any) => {
-                    if (!r.redraftRank || r.redraftRank <= 0 || !r.totalRosters) return false;
-                    const pct = r.redraftRank / r.totalRosters;
-                    if (leagueFilter === "contender") return pct <= 0.30;
-                    if (leagueFilter === "middle")    return pct > 0.30 && pct <= 0.70;
-                    return pct > 0.70;
-                  });
-              return <SortableLeagueRecords records={filtered} />;
-            })()}
-          </Card>
-
-          <Card className="p-6" data-testid="player-exposure">
-            <button
-              type="button"
-              onClick={() => setExposureCollapsed((c) => !c)}
-              className={cn("flex items-center justify-between w-full text-left", exposureCollapsed ? "" : "mb-5")}
-              data-testid="toggle-player-exposure"
-            >
-              <div>
-                <h3 className="text-base font-bold text-foreground">Most Rostered Players</h3>
-                <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
-              </div>
-              {exposureCollapsed ? (
-                <ArrowDown className="w-4 h-4 text-muted-foreground" />
-              ) : (
-                <ArrowUp className="w-4 h-4 text-muted-foreground" />
-              )}
-            </button>
-
-            {!exposureCollapsed && (
-              <div className="space-y-4">
-            {summaryData.playerExposure.length > 0 ? (() => {
-              const handleExposureSort = (col: typeof exposureSortCol) => {
-                if (exposureSortCol === col) {
-                  setExposureSortDir(d => d === "desc" ? "asc" : "desc");
-                } else {
-                  setExposureSortCol(col);
-                  setExposureSortDir(col === "name" || col === "pos" ? "asc" : "desc");
-                }
-              };
-              const SortIcon = ({ col }: { col: typeof exposureSortCol }) => {
-                if (exposureSortCol !== col) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
-                return exposureSortDir === "desc" ? <ArrowDown className="w-3 h-3 text-[#d4af37]" /> : <ArrowUp className="w-3 h-3 text-[#d4af37]" />;
-              };
-              const top100 = [...summaryData.playerExposure]
-                .sort((a: any, b: any) => b.leagueCount - a.leagueCount || b.exposure - a.exposure)
-                .slice(0, 100);
-              const sorted = [...top100].sort((a: any, b: any) => {
-                const dir = exposureSortDir === "asc" ? 1 : -1;
-                if (exposureSortCol === "name") return dir * a.name.localeCompare(b.name);
-                if (exposureSortCol === "pos") return dir * a.pos.localeCompare(b.pos);
-                if (exposureSortCol === "value") return dir * ((valuesBySleeperId[a.playerId] ?? 0) - (valuesBySleeperId[b.playerId] ?? 0));
-                if (exposureSortCol === "leagueCount") return dir * (a.leagueCount - b.leagueCount);
-                return dir * (a.exposure - b.exposure);
-              });
               return (
-                <div>
-                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-1 md:gap-x-3 px-1 pb-1.5 mb-1 border-b border-border/30">
-                    <button onClick={() => handleExposureSort("name")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors text-left" data-testid="sort-player">
-                      Player <SortIcon col="name" />
-                    </button>
-                    <button onClick={() => handleExposureSort("pos")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-8 md:w-10 justify-center" data-testid="sort-pos">
-                      Pos <SortIcon col="pos" />
-                    </button>
-                    <button onClick={() => handleExposureSort("value")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-11 md:w-14 justify-end" data-testid="sort-value">
-                      Val <SortIcon col="value" />
-                    </button>
-                    <button onClick={() => handleExposureSort("exposure")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-8 md:w-10 justify-end" data-testid="sort-exposure">
-                      % <SortIcon col="exposure" />
-                    </button>
-                    <button onClick={() => handleExposureSort("leagueCount")} className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors w-10 md:w-16 justify-end" data-testid="sort-leagues">
-                      Lgs <SortIcon col="leagueCount" />
-                    </button>
-                  </div>
-                  <div className="space-y-0">
-                    {sorted.slice(0, exposureVisible).map((player: any) => {
-                      const isOverexposed = player.exposure >= 50;
-                      const dynastyValue = valuesBySleeperId[player.playerId] ?? 0;
-                      return (
-                        <div key={player.playerId} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-1 md:gap-x-3 items-center py-2 border-b border-border/20 last:border-0" data-testid={`exposure-${player.playerId}`}>
-                          <div className="flex items-center gap-1.5 md:gap-2.5 min-w-0">
-                            <PlayerAvatar
-                              id={player.playerId}
-                              name={player.name}
-                              pos={player.pos}
-                              team={player.team}
-                              size="sm"
-                            />
-                          </div>
-                          <div className="w-8 md:w-10 flex justify-center">
-                            <Badge variant="outline" className={`text-[9px] md:text-[10px] px-1 py-0 h-4 ${getPositionColor(player.pos)}`} data-testid={`pos-${player.playerId}`}>{player.pos}</Badge>
-                          </div>
-                          <span className={`text-[11px] md:text-xs font-bold w-11 md:w-14 text-right ${dynastyValue > 0 ? "text-foreground" : "text-muted-foreground"}`} data-testid={`value-${player.playerId}`}>
-                            {dynastyValue > 0 ? dynastyValue.toLocaleString() : "0"}
-                          </span>
-                          <div className="flex items-center gap-0.5 md:gap-1 w-8 md:w-10 justify-end">
-                            {isOverexposed && <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />}
-                            <span className={`text-[11px] md:text-xs font-bold ${isOverexposed ? "text-amber-500" : ""}`}>{player.exposure}%</span>
-                          </div>
-                          <span className="text-[11px] md:text-xs text-muted-foreground w-10 md:w-16 text-right">{player.leagueCount}/{leagues.length}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {exposureVisible < sorted.length && (
-                    <button
-                      onClick={() => setExposureVisible(v => v + 25)}
-                      className="mt-3 w-full text-xs font-semibold text-muted-foreground hover:text-foreground py-2 rounded-md border border-border/30 hover:border-border/60 hover:bg-muted/20 transition-all"
-                      data-testid="btn-show-more-exposure"
-                    >
-                      Show 25 more ({sorted.length - exposureVisible} remaining)
-                    </button>
-                  )}
-                </div>
+                <SortableLeagueRecords
+                  records={summaryData.leagueRecords}
+                  pendingTradesByLeague={pendingTradesByLeague}
+                  pendingTradesLoading={pendingTradeLoading}
+                  activityByLeague={activityByLeague}
+                  activityLoading={activityLoading}
+                  txnsByLeague={txnsByLeague}
+                  leagueRowsById={leagueRowsById}
+                  onViewLeague={handleViewLeague}
+                />
               );
-            })() : (
-              <p className="text-sm text-muted-foreground">No player data available.</p>
-            )}
-
-            {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).length > 0 && (
-              <div className="mt-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">Overexposure Warning</span>
-                </div>
-                <div className="space-y-0.5">
-                  {summaryData.playerExposure.filter((p: any) => p.exposure >= 50).map((p: any) => (
-                    <p key={p.playerId} className="text-xs text-amber-700 dark:text-amber-400">
-                      <span
-                        className="font-semibold"
-                        data-testid={`player-link-${p.playerId}`}
-                      >
-                        {p.name}
-                      </span>
-                      : {p.exposure}% exposure across your portfolio
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-              </div>
-            )}
+            })()}
           </Card>
 
         </>
@@ -1199,10 +1206,10 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
             <span className="block h-[2.5px] w-10 bg-[#d4af37] rounded-full mt-1.5" />
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            You are managing <strong className="text-foreground">{leagues.length}</strong> dynasty league{leagues.length !== 1 ? "s" : ""} across{" "}
+            You commission <strong className="text-foreground">{leagues.length}</strong> league{leagues.length !== 1 ? "s" : ""} across{" "}
             {seasons.length} season{seasons.length !== 1 ? "s" : ""}. Your portfolio includes{" "}
             <strong className="text-foreground">{bestBallCount}</strong> Best Ball and{" "}
-            <strong className="text-foreground">{leagues.length - bestBallCount}</strong> regular dynasty league{leagues.length - bestBallCount !== 1 ? "s" : ""}.
+            <strong className="text-foreground">{leagues.length - bestBallCount}</strong> standard league{leagues.length - bestBallCount !== 1 ? "s" : ""}.
             Connect your Sleeper account in the <strong>Connect</strong> tab to dive into detailed analysis.
           </p>
         </Card>

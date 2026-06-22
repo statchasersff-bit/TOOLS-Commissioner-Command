@@ -24,8 +24,9 @@ import {
   getTeamName,
   getWeeksToScan,
 } from "./helpers";
-import { parseTransactionEvents, countAddsDropsForRoster } from "./parseTransactions";
+import { parseTransactionEvents, countAddsDropsForRoster, type PlayersById } from "./parseTransactions";
 import { parseLineupEvents } from "./parseMatchups";
+import { getSleeperPlayers } from "../../sleeper";
 import { scoreManagerActivity } from "./scoreManagerActivity";
 import { scoreLeagueActivity } from "./scoreLeagueActivity";
 import { generateActivityAlerts } from "./generateActivityAlerts";
@@ -86,6 +87,15 @@ export async function ingestLeagueActivityForLeague(input: IngestInput): Promise
   ]);
 
   const userById = buildUserMap(users);
+
+  // Player map (/players/nfl, cached ~24h) for resolving names in feed events.
+  // Degrade gracefully to ids if the (large) payload can't be loaded.
+  let players: PlayersById = {};
+  try {
+    players = (await getSleeperPlayers()) as unknown as PlayersById;
+  } catch {
+    players = {};
+  }
 
   const settings = await getActivitySettings(input.leagueId);
   const context = await getLeagueActivityContext(input.leagueId);

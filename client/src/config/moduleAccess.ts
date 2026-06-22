@@ -11,11 +11,11 @@
  *                StatChasers-account-linked Sleeper account (full mode) or a
  *                read-only public-API connection (no StatChasers login).
  *                Used for portfolio summary, my team, league analyzer, and the
- *                trade Finder / Calculator / Intel surfaces.
+ *                trade Finder / Calculator surfaces.
  *
  *   "full"     — a StatChasers account is logged in AND an authenticated
  *                Sleeper token is attached. Required for action tools:
- *                Lineup Command, Waiver Command, My Trades, and the Draft Board.
+ *                Lineup Command, My Trades, and the Draft Board.
  *
  * Keys use the existing `<tab>:<sub>` URL convention. Tab-only keys
  * (e.g. "about") match when a sub-tab is not specified.
@@ -28,41 +28,35 @@ export type AccessRequirement = "public" | "readonly" | "full";
 
 export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // Command Center (Portfolio tab). The module opens with a Sleeper username;
-  // Lineup Command and Waiver Command are action tools that require a logged-in
+  // Lineup Command is an action tool that requires a logged-in
   // StatChasers account (full).
   "portfolio:connect": "public", // legacy connect screen — no gate
   "portfolio:portfolio-summary": "readonly",
+  "portfolio:finances": "readonly",
   "portfolio:lineup-command": "full",
-  "portfolio:waiver-command": "full",
+
+  // Lineup Integrity — standalone module (cross-league dashboard). A
+  // Commissioner Command surface that self-resolves the commissioner's leagues
+  // and shows its own connect prompt when none is loaded.
+  "lineup-integrity:lineup-integrity": "readonly", // cross-league lineup integrity dashboard
+  "lineup-integrity:league-audit": "readonly",     // Weekly audit — needs a league
 
   // League Analyzer
-  "league-analyzer:power-rankings": "readonly",
-  "league-analyzer:roster-comparison": "readonly",
-  "league-analyzer:playoff-calculator": "readonly",
-  "league-analyzer:transactions": "readonly",
+  "league-analyzer:league-activity": "readonly",    // Transactions live here as a sub-tab
   "league-analyzer:commanders-report": "readonly",
 
-  // Trade Center. My Trades (Trade Inbox) requires a logged-in StatChasers
-  // account (full). Finder / Calculator / Intel / Database are league-scoped
-  // analytics — they can't render without a loaded league, so they need at
-  // least a connected Sleeper username (readonly).
-  "trade-center:trade-sync": "full",
-  "trade-center:trade-database": "readonly",       // Database — needs a league
-  "trade-center:positional-analysis": "readonly",  // Finder
+  // Trade Center. Calculator is a league-scoped analytic — it can't render
+  // without a loaded league, so it needs at least a connected Sleeper username
+  // (readonly).
   "trade-center:trade-calculator": "readonly",      // Calculator
+  "trade-center:trade-review": "readonly",          // Review Center — needs a league
   "trade-center:bulk-trade": "readonly",
   "trade-center:bulk-trades": "readonly",
-  "trade-center:trade-block": "readonly",           // Intel
-  "trade-center:trade-review": "readonly",          // Review Center — needs a league
 
-  // Research (league-market). Resources (analysis) is self-contained and
-  // viewable by anyone. Market Value is league-scoped, so it needs a Sleeper
-  // username (readonly). Advanced Stats (position-stats) is public.
+  // Research (league-market). Market Value is league-scoped, so it needs a
+  // Sleeper username (readonly). User Search is a self-contained lookup.
   "league-market:user-search": "public",        // self-contained Sleeper lookup
-  "league-market:analysis": "public",          // Resources
   "league-market:market-value": "readonly",    // needs a league
-  "league-market:value-finder": "public", // self-contained; includes the former Market Inefficiency views
-  "league-market:position-stats": "public",
 
   // Draft — ADP data is public. The Draft Board (live Sleeper draft tracker) is
   // an action tool requiring a logged-in StatChasers account (full).
@@ -75,7 +69,6 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "about": "public",
   "feedback": "public",
   "redraft-command": "public",
-  "commissioner-command": "public",
   "manage-account": "public",
   "terms": "public",
   "privacy": "public",

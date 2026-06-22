@@ -1,16 +1,17 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from "@/components/ui/select";
 import { useSleeper } from "@/contexts/SleeperContext";
-import { useValueModel } from "@/contexts/ValueModelContext";
 import { API_BASE } from "@/lib/apiBase";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
+import { SectionHeader } from "@/components/SectionHeader";
 import { TeamLoader } from "@/components/TeamLoader";
 import {
   DollarSign,
-  TrendingUp,
-  TrendingDown,
   Plus,
   Trash2,
   Trophy,
@@ -19,305 +20,230 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Target,
-  Flame,
-  Wrench,
   EyeOff,
   Eye,
   Tag,
   ExternalLink,
+  Wallet,
+  Receipt,
+  Trophy as TrophyIcon,
+  Banknote,
+  Link2,
+  Scale,
+  ArrowRight,
+  Search,
+  Users,
+  StickyNote,
+  SlidersHorizontal,
 } from "lucide-react";
 
-interface PrizeSlot { place: number; amount: number; }
-interface LeagueFinanceData { leagueId: string; buyIn: number; prizes: PrizeSlot[]; notes: string; isFree: boolean; ignored: boolean; leagueSafeUrl: string; }
+// ─── Data model ───────────────────────────────────────────────────────────────
+// All persisted through the existing finance storage layer. `prizes` and
+// `payments` are schemaless jsonb on the server, so the richer commissioner
+// shapes below load alongside legacy rows (old prizes were { place, amount }
+// only; old rows have no payments — both fall back cleanly).
 
-type PaymentStatus = "complete" | "partial" | "empty" | "free";
-function paymentStatus(f: LeagueFinanceData): PaymentStatus {
-  if (f.isFree) return "free";
-  const hasBuyIn = f.buyIn > 0;
-  const hasPrizes = f.prizes.length > 0;
-  if (hasBuyIn && hasPrizes) return "complete";
-  if (hasBuyIn || hasPrizes) return "partial";
-  return "empty";
+interface PrizeSlot {
+  place: number;        // ordering key + default label source
+  amount: number;
+  label?: string;       // e.g. "1st", "Regular Season Points", "Side Pot"
+  paid?: boolean;
+  paidDate?: string;    // optional ISO date
+  notes?: string;       // optional
 }
-const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; cls: string; dot: string }> = {
-  complete: { label: "Set up", cls: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-  partial:  { label: "Partial", cls: "border-amber-500/40 text-amber-600 dark:text-amber-400",   dot: "bg-amber-500"   },
-  empty:    { label: "Not set", cls: "border-border/50 text-muted-foreground",                     dot: "bg-muted-foreground/40" },
-  free:     { label: "Free",    cls: "border-sky-500/40 text-sky-600 dark:text-sky-400",           dot: "bg-sky-500"    },
+
+type ManagerPaymentStatus = "paid" | "partial" | "unpaid" | "waived";
+
+interface ManagerPayment {
+  rosterId: string;     // stable Sleeper roster id (string)
+  paid: number;         // amount collected from this manager
+  status: ManagerPaymentStatus;
+  paidDate?: string;
+  notes?: string;
+}
+
+interface LeagueFinanceData {
+  leagueId: string;
+  buyIn: number;
+  prizes: PrizeSlot[];
+  payments: ManagerPayment[];
+  notes: string;
+  isFree: boolean;
+  ignored: boolean;
+  leagueSafeUrl: string;
+}
+
+const DEFAULT_FINANCE: LeagueFinanceData = {
+  leagueId: "", buyIn: 0, prizes: [], payments: [], notes: "", isFree: false, ignored: false, leagueSafeUrl: "",
 };
-interface LeagueStanding {
-  leagueId: string; rank: number; totalTeams: number; wins: number; losses: number; ties: number;
-  ptsFor: number; playoffSpots: number; inPlayoffs: boolean;
-  valueRank: number;
-  valueCenterRank: number;
-  loading: boolean; error: boolean;
-}
+
+// Manager roster info, fetched lazily from Sleeper when a league is expanded so
+// the commissioner can track dues per real manager / team name.
+interface ManagerInfo { rosterId: string; managerName: string; teamName: string; avatarUrl?: string; }
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-async function fetchLeagueStanding(
-  leagueId: string,
-  userId: string,
-  redraftValues: Record<string, number> = {},
-): Promise<Omit<LeagueStanding, "leagueId" | "loading" | "error">> {
-  const [rostersRaw, leagueRaw] = await Promise.all([
+// Resolve a Sleeper avatar to a thumbnail URL. Team avatars (metadata.avatar)
+// can already be a full URL; user avatars are bare ids served from the CDN.
+function sleeperAvatarUrl(u: any): string | undefined {
+  const teamAvatar: string | undefined = u?.metadata?.avatar;
+  if (teamAvatar) return teamAvatar.startsWith("http") ? teamAvatar : `https://sleepercdn.com/avatars/thumbs/${teamAvatar}`;
+  if (u?.avatar) return `https://sleepercdn.com/avatars/thumbs/${u.avatar}`;
+  return undefined;
+}
+
+async function fetchLeagueManagers(leagueId: string): Promise<ManagerInfo[]> {
+  const [rostersRaw, usersRaw] = await Promise.all([
     fetch(`${SLEEPER_API}/league/${leagueId}/rosters`).then(r => r.json()),
-    fetch(`${SLEEPER_API}/league/${leagueId}`).then(r => r.json()),
+    fetch(`${SLEEPER_API}/league/${leagueId}/users`).then(r => r.json()),
   ]);
   const rosters: any[] = rostersRaw || [];
-  const playoffTeams = leagueRaw?.settings?.playoff_teams ?? Math.floor((leagueRaw?.total_rosters ?? 12) / 3);
-  const sorted = [...rosters].sort((a, b) => {
-    const wDiff = (b.settings?.wins ?? 0) - (a.settings?.wins ?? 0);
-    if (wDiff !== 0) return wDiff;
-    const pfA = (a.settings?.fpts ?? 0) + (a.settings?.fpts_decimal ?? 0) / 100;
-    const pfB = (b.settings?.fpts ?? 0) + (b.settings?.fpts_decimal ?? 0) / 100;
-    return pfB - pfA;
-  });
-  const userRoster = rosters.find((r: any) => r.owner_id === userId);
-  const userPlayers = userRoster?.players?.length ?? 0;
-  const hasRealTeam = userRoster !== undefined && userPlayers > 0;
-  const rank = hasRealTeam ? sorted.findIndex((r: any) => r.roster_id === userRoster!.roster_id) + 1 : -1;
+  const users: any[] = usersRaw || [];
+  const userMap = new Map<string, any>(users.map((u: any) => [u.user_id, u]));
+  return rosters
+    .map((r: any) => {
+      const u = r.owner_id ? userMap.get(r.owner_id) : undefined;
+      const teamName = u?.metadata?.team_name?.trim();
+      const displayName = u?.display_name?.trim();
+      return {
+        rosterId: String(r.roster_id),
+        managerName: displayName || teamName || "Unclaimed",
+        teamName: teamName || displayName || `Team ${r.roster_id}`,
+        avatarUrl: u ? sleeperAvatarUrl(u) : undefined,
+      };
+    })
+    .sort((a, b) => Number(a.rosterId) - Number(b.rosterId));
+}
 
-  let valueRank = 0;
-  let valueCenterRank = 0;
-  const hasValues = Object.keys(redraftValues).length > 0;
-  if (hasRealTeam && hasValues) {
-    const rosterValued = rosters.map((r: any) => {
-      const starters: string[] = (r.starters || []).filter((p: string) => p && p !== "0");
-      const players: string[] = starters.length > 0 ? starters : (r.players || []);
-      const val = players.reduce((sum: number, pid: string) => sum + (redraftValues[pid] || 0), 0);
-      return { rosterId: r.roster_id, val };
-    });
-    rosterValued.sort((a, b) => b.val - a.val);
-    valueRank = rosterValued.findIndex((r) => r.rosterId === userRoster!.roster_id) + 1 || 0;
+// ─── Money + label helpers ─────────────────────────────────────────────────────
 
-    const userVal = rosterValued.find((r) => r.rosterId === userRoster!.roster_id)?.val ?? 0;
-    const maxVal = rosterValued[0]?.val ?? 0;
-    const minVal = rosterValued[rosterValued.length - 1]?.val ?? 0;
-    valueCenterRank = maxVal > minVal
-      ? 1 + ((maxVal - userVal) / (maxVal - minVal)) * (rosters.length - 1)
-      : (rosters.length + 1) / 2;
-  }
+function fmtDollar(n: number) {
+  if (!n) return "$0";
+  return `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString()}`;
+}
+
+function ordinal(place: number) {
+  if (place === 1) return "1st";
+  if (place === 2) return "2nd";
+  if (place === 3) return "3rd";
+  return `${place}th`;
+}
+
+function prizeLabel(p: PrizeSlot) {
+  return p.label?.trim() || ordinal(p.place);
+}
+
+// ─── Per-league derived finance metrics ────────────────────────────────────────
+
+interface LeagueMetrics {
+  teams: number;
+  waivedCount: number;
+  /** Expected dues after waivers (buyIn × non-waived teams). */
+  dues: number;
+  collected: number;
+  outstanding: number;
+  /** Managers marked paid or waived (settled), out of `teams`. */
+  paidCount: number;
+  prizePool: number;
+  payoutsPending: number;   // dollar total of prize rows not yet paid out
+  hasUnpaidPayouts: boolean;
+  // Issue flags
+  missingBuyIn: boolean;
+  missingPrizes: boolean;
+  missingLeagueSafe: boolean;
+  hasMissingPayments: boolean;
+  reconIssue: boolean;
+  hasIssue: boolean;
+}
+
+function computeMetrics(f: LeagueFinanceData, teams: number): LeagueMetrics {
+  const payments = f.payments || [];
+  const prizes = f.prizes || [];
+  const waivedCount = payments.filter(p => p.status === "waived").length;
+  const effectiveTeams = Math.max(0, teams - waivedCount);
+  const dues = f.isFree ? 0 : f.buyIn * effectiveTeams;
+  const collected = payments.reduce((s, p) => s + (p.status === "waived" ? 0 : (p.paid || 0)), 0);
+  const outstanding = Math.max(0, dues - collected);
+  const paidCount = payments.filter(p => p.status === "paid" || p.status === "waived").length;
+  const prizePool = prizes.reduce((s, p) => s + (p.amount || 0), 0);
+  const payoutsPending = prizes.filter(p => !p.paid).reduce((s, p) => s + (p.amount || 0), 0);
+  const hasUnpaidPayouts = prizes.length > 0 && prizes.some(p => !p.paid);
+
+  const missingBuyIn = !f.isFree && f.buyIn <= 0;
+  const missingPrizes = !f.isFree && prizes.length === 0;
+  const missingLeagueSafe = !f.isFree && !f.leagueSafeUrl?.trim();
+  const hasMissingPayments = !f.isFree && dues > 0 && collected < dues;
+  // Reconciliation: prizes over-allocated vs available pool, or more collected
+  // than expected (data entry drift).
+  const reconIssue = (prizePool > 0 && dues > 0 && prizePool > dues) || (dues > 0 && collected > dues);
+
+  const hasIssue = !f.isFree && (missingBuyIn || missingPrizes || missingLeagueSafe || hasMissingPayments || reconIssue);
 
   return {
-    rank, totalTeams: rosters.length,
-    wins: userRoster?.settings?.wins ?? 0, losses: userRoster?.settings?.losses ?? 0, ties: userRoster?.settings?.ties ?? 0,
-    ptsFor: (userRoster?.settings?.fpts ?? 0) + (userRoster?.settings?.fpts_decimal ?? 0) / 100,
-    playoffSpots: playoffTeams, inPlayoffs: rank > 0 && rank <= playoffTeams,
-    valueRank, valueCenterRank,
+    teams, waivedCount, dues, collected, outstanding, paidCount,
+    prizePool, payoutsPending, hasUnpaidPayouts,
+    missingBuyIn, missingPrizes, missingLeagueSafe, hasMissingPayments, reconIssue, hasIssue,
   };
 }
 
-function fmtDollar(n: number) {
-  if (n === 0) return "$0";
-  return `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString()}`;
-}
-function plColor(pl: number) {
-  if (pl > 0) return "text-emerald-600 dark:text-emerald-400";
-  if (pl < 0) return "text-red-500 dark:text-red-400";
-  return "text-muted-foreground";
-}
-function plBg(pl: number) {
-  if (pl > 0) return "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200/50 dark:border-emerald-800/30";
-  if (pl < 0) return "bg-red-50 dark:bg-red-950/30 border-red-200/50 dark:border-red-800/30";
-  return "bg-muted/30 border-border/40";
+// ─── Status pills ───────────────────────────────────────────────────────────────
+
+type StatusKey =
+  | "ready" | "missing-payments" | "prize-setup" | "leaguesafe-missing"
+  | "payout-pending" | "free" | "hidden";
+
+// Color signals STATE, not category: green = settled/ready, amber = needs action
+// (payments, setup, payouts), muted = low-priority/neutral. The label carries the
+// specific meaning so we don't need a distinct hue per status.
+const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string; dot: string }> = {
+  ready:               { label: "Ready",            cls: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5", dot: "bg-emerald-500" },
+  "missing-payments":  { label: "Missing Payments", cls: "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5",        dot: "bg-amber-500" },
+  "prize-setup":       { label: "Prize Setup Needed", cls: "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5",      dot: "bg-amber-500" },
+  "leaguesafe-missing":{ label: "LeagueSafe Missing", cls: "border-border/50 text-muted-foreground bg-muted/20",                          dot: "bg-muted-foreground/40" },
+  "payout-pending":    { label: "Payout Pending",   cls: "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5",        dot: "bg-amber-500" },
+  free:                { label: "Free League",      cls: "border-slate-500/30 text-slate-500 dark:text-slate-400 bg-slate-500/5",        dot: "bg-slate-500" },
+  hidden:              { label: "Hidden",           cls: "border-border/50 text-muted-foreground",                                        dot: "bg-muted-foreground/40" },
+};
+
+// Single most-blocking status for a league row. Order = what the commissioner
+// should fix first (setup → payments → payouts → ready).
+function leagueStatus(f: LeagueFinanceData, m: LeagueMetrics): StatusKey {
+  if (f.isFree) return "free";
+  if (m.missingBuyIn || m.missingPrizes) return "prize-setup";
+  if (m.missingLeagueSafe) return "leaguesafe-missing";
+  if (m.hasMissingPayments || m.reconIssue) return "missing-payments";
+  if (m.hasUnpaidPayouts) return "payout-pending";
+  return "ready";
 }
 
-const DEFAULT_FINANCE: LeagueFinanceData = { leagueId: "", buyIn: 0, prizes: [], notes: "", isFree: false, ignored: false, leagueSafeUrl: "" };
+function StatusPill({ status, className = "" }: { status: StatusKey; className?: string }) {
+  const cfg = STATUS_CONFIG[status];
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold whitespace-nowrap ${cfg.cls} ${className}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
+
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
-type Tier = "contender" | "bubble" | "rebuild";
-
-// Bucket leagues by win-now starter rank percentile — same rule the Portfolio
-// "League Breakdown" pills use (top 30% / middle 31–69% / bottom 30%).
-// Leagues without a win-now value rank yet (valueRank=0) are reported as
-// "unknown" so we don't bucket them on stale data.
-function classifyTeam(s: LeagueStanding | undefined): Tier | "unknown" {
-  if (!s || s.loading || s.error || s.totalTeams < 2) return "unknown";
-  if (s.valueRank <= 0) return "unknown";
-  const pct = s.valueRank / s.totalTeams;
-  if (pct <= 0.30) return "contender";
-  if (pct <= 0.70) return "bubble";
-  return "rebuild";
-}
-
-function approxPlayoffPct(s: LeagueStanding): number {
-  if (s.rank <= 0 || s.totalTeams < 2) return 0;
-  const { rank, playoffSpots, totalTeams, valueRank, valueCenterRank } = s;
-  const gamesPlayed = s.wins + s.losses + s.ties;
-  const regularSeasonGames = 14;
-  const seasonProgress = Math.min(gamesPlayed / regularSeasonGames, 1);
-
-  let standingScore: number;
-  if (rank <= playoffSpots) {
-    const comfort = playoffSpots > 1 ? (playoffSpots - rank) / (playoffSpots - 1) : 1;
-    standingScore = 0.55 + comfort * 0.40;
-  } else {
-    const spotsBack = rank - playoffSpots;
-    const maxSpotsBack = Math.max(1, totalTeams - playoffSpots);
-    standingScore = 0.45 * (1 - spotsBack / maxSpotsBack);
-  }
-
-  let talentScore: number;
-  const vRank = valueCenterRank > 0 ? valueCenterRank : (valueRank > 0 ? valueRank : 0);
-  if (vRank === 0 || totalTeams <= 1) {
-    talentScore = playoffSpots / totalTeams;
-  } else if (vRank <= playoffSpots) {
-    const comfort = playoffSpots > 1 ? (playoffSpots - vRank) / (playoffSpots - 1) : 1;
-    talentScore = 0.55 + comfort * 0.40;
-  } else {
-    const spotsBack = vRank - playoffSpots;
-    const maxSpotsBack = Math.max(1, totalTeams - playoffSpots);
-    talentScore = 0.45 * (1 - spotsBack / maxSpotsBack);
-  }
-
-  const standingWeight = 0.15 + 0.70 * seasonProgress;
-  const rawOdds = standingWeight * standingScore + (1 - standingWeight) * talentScore;
-  return Math.min(99, Math.max(1, Math.round(rawOdds * 100)));
-}
-
-function placementProbs(s: LeagueStanding, maxPlace: number): Map<number, number> {
-  const { rank, totalTeams, wins, losses, ties, valueRank, valueCenterRank } = s;
-  const gamesPlayed = wins + losses + ties;
-  const seasonProgress = Math.min(1, gamesPlayed / 14);
-  const centerRank = gamesPlayed === 0 && valueCenterRank > 0
-    ? valueCenterRank
-    : gamesPlayed === 0 && valueRank > 0 ? valueRank : rank;
-  const sigma = Math.max(0.5, (1 - seasonProgress) * totalTeams / 3);
-  const raw: number[] = [];
-  for (let k = 1; k <= totalTeams; k++) {
-    const z = (k - centerRank) / sigma;
-    raw.push(Math.exp(-0.5 * z * z));
-  }
-  const total = raw.reduce((a, b) => a + b, 0);
-  const probs = new Map<number, number>();
-  for (let k = 1; k <= Math.min(maxPlace, totalTeams); k++) {
-    probs.set(k, raw[k - 1] / total);
-  }
-  return probs;
-}
-
-const TIER_CONFIG: Record<Tier, {
-  label: string; short: string; desc: string;
-  headerCls: string; bgCls: string; badgeCls: string;
-}> = {
-  contender: {
-    label: "Contenders",
-    short: "Contender",
-    desc: "Top 30% by win-now value. Maximize focus here.",
-    headerCls: "text-emerald-600 dark:text-emerald-400",
-    bgCls: "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30",
-    badgeCls: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
-  },
-  bubble: {
-    label: "Bubble",
-    short: "Bubble",
-    desc: "Middle 40% by win-now value. On the playoff edge.",
-    headerCls: "text-amber-600 dark:text-amber-400",
-    bgCls: "bg-amber-50/70 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/30",
-    badgeCls: "border-amber-500/50 text-amber-600 dark:text-amber-400",
-  },
-  rebuild: {
-    label: "Rebuilds",
-    short: "Rebuild",
-    desc: "Bottom 30% by win-now value. Buy-in likely sunk cost.",
-    headerCls: "text-slate-500 dark:text-slate-400",
-    bgCls: "bg-muted/30 border-border/40",
-    badgeCls: "border-border/50 text-slate-500 dark:text-slate-400",
-  },
-};
-
-// Focus Zones panel styling — separate from TIER_CONFIG (used in the per-
-// league table) so the dashboard zone cards can have their own premium
-// treatment: layered gradient, soft glow, distinct CTAs per tier.
-const FOCUS_ZONE_CONFIG: Record<Tier, {
-  label: string;
-  pillText: string;
-  description: string;
-  ctaLabel: string;
-  ctaText: string;
-  emptyText: string;
-  // Tailwind class fragments — kept as static strings so the JIT picks them up.
-  glowBorder: string;     // outer border + shadow color
-  gradientBg: string;     // card background gradient
-  accentText: string;     // headline + count tint
-  accentDot: string;      // league-row dot tint
-  countPill: string;      // count badge background + border
-  ctaBg: string;          // bottom CTA strip background
-  iconBg: string;         // icon chip background
-}> = {
-  contender: {
-    label: "Contender",
-    pillText: "Title Window",
-    description: "Your strongest title windows. Prioritize upgrades and weekly optimization.",
-    ctaLabel: "Suggested action",
-    ctaText: "Push for title",
-    emptyText: "No contenders right now.",
-    glowBorder: "border-emerald-500/30 hover:border-emerald-500/55 shadow-[0_0_0_1px_rgba(16,185,129,0.05)] hover:shadow-[0_10px_30px_-12px_rgba(16,185,129,0.35)]",
-    gradientBg: "bg-[linear-gradient(180deg,rgba(16,185,129,0.10),rgba(16,185,129,0.02))]",
-    accentText: "text-emerald-600 dark:text-emerald-300",
-    accentDot: "bg-emerald-500",
-    countPill: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200 border border-emerald-500/40",
-    ctaBg: "bg-emerald-500/10 border-t border-emerald-500/20 text-emerald-700 dark:text-emerald-200",
-    iconBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500/30",
-  },
-  bubble: {
-    label: "Bubble",
-    pillText: "Playoff Race",
-    description: "One move away from contention. Explore aggressive trades.",
-    ctaLabel: "Suggested action",
-    ctaText: "Buy or sell decisively",
-    emptyText: "No bubble teams, every league is leaning contend or rebuild.",
-    glowBorder: "border-[#d4af37]/35 hover:border-[#d4af37]/60 shadow-[0_0_0_1px_rgba(212,175,55,0.05)] hover:shadow-[0_10px_30px_-12px_rgba(212,175,55,0.40)]",
-    gradientBg: "bg-[linear-gradient(180deg,rgba(212,175,55,0.10),rgba(212,175,55,0.02))]",
-    accentText: "text-[#d4af37]",
-    accentDot: "bg-[#d4af37]",
-    countPill: "bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/45",
-    ctaBg: "bg-[#d4af37]/10 border-t border-[#d4af37]/25 text-[#d4af37]",
-    iconBg: "bg-[#d4af37]/15 text-[#d4af37] ring-1 ring-[#d4af37]/35",
-  },
-  rebuild: {
-    label: "Rebuild",
-    pillText: "Asset Build",
-    description: "Focus on youth, picks, and long-term value accumulation.",
-    ctaLabel: "Suggested action",
-    ctaText: "Stockpile picks and youth",
-    emptyText: "No rebuild teams detected, every league is at least bubble or better.",
-    glowBorder: "border-indigo-500/30 hover:border-indigo-500/55 shadow-[0_0_0_1px_rgba(99,102,241,0.05)] hover:shadow-[0_10px_30px_-12px_rgba(99,102,241,0.40)]",
-    gradientBg: "bg-[linear-gradient(180deg,rgba(99,102,241,0.10),rgba(99,102,241,0.02))]",
-    accentText: "text-indigo-500 dark:text-indigo-300",
-    accentDot: "bg-indigo-500",
-    countPill: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-200 border border-indigo-500/40",
-    ctaBg: "bg-indigo-500/10 border-t border-indigo-500/25 text-indigo-700 dark:text-indigo-200",
-    iconBg: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/35",
-  },
-};
-
-
 // ─── Expanded-row editor (module scope) ───────────────────────────────────────
-// IMPORTANT: this component MUST live at module scope. When it was defined
-// inside FinanceTab's body, every parent re-render produced a new component
-// type, causing React to unmount and remount the entire editor on each
-// keystroke — which is why inputs lost focus after typing one character.
-// Lifting it here makes the component identity stable across renders so React
-// reconciles existing DOM nodes (and preserves input focus).
-
-interface FinanceCalcResult {
-  projectedPrize: number;
-  pl: number;
-  breakdown: { place: number; amount: number; probability: number }[];
-}
+// IMPORTANT: this component MUST live at module scope so its identity is stable
+// across parent re-renders — otherwise the text inputs lose focus on each
+// keystroke (React unmounts/remounts a fresh component type every render).
 
 interface FinanceLeagueEditorProps {
   leagueId: string;
   finance: LeagueFinanceData;
-  standing: LeagueStanding | undefined;
-  calc: FinanceCalcResult | null;
+  metrics: LeagueMetrics;
+  managers: ManagerInfo[] | undefined;
+  managersLoading: boolean;
   onUpdate: (leagueId: string, patch: Partial<LeagueFinanceData>) => void;
   onAddPrize: (leagueId: string) => void;
   onRemovePrize: (leagueId: string, place: number) => void;
-  onUpdatePrize: (leagueId: string, place: number, amount: number) => void;
+  onUpdatePrize: (leagueId: string, place: number, patch: Partial<PrizeSlot>) => void;
+  onUpdatePayment: (leagueId: string, rosterId: string, patch: Partial<ManagerPayment>) => void;
 }
 
 function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
@@ -330,25 +256,66 @@ function SectionLabel({ children, action }: { children: React.ReactNode; action?
   );
 }
 
+function Stat({ label, value, valueCls = "" }: { label: string; value: string; valueCls?: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={`font-semibold tabular-nums ${valueCls}`}>{value}</span>
+    </div>
+  );
+}
+
+// Compact status dropdown for a manager's payment state, color-tinted to match
+// the soft STATUS_CHIP palette.
+function PaymentStatusSelect({
+  value, onChange, testId,
+}: { value: ManagerPaymentStatus; onChange: (v: ManagerPaymentStatus) => void; testId?: string }) {
+  return (
+    <Select value={value} onValueChange={v => onChange(v as ManagerPaymentStatus)}>
+      <SelectTrigger
+        className={`h-7 w-[108px] px-2 text-[11px] font-semibold rounded-md border ${STATUS_CHIP[value]}`}
+        data-testid={testId}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {PAYMENT_STATUS_OPTIONS.map(opt => (
+          <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const PAYMENT_STATUS_OPTIONS: { value: ManagerPaymentStatus; label: string }[] = [
+  { value: "paid",    label: "Paid" },
+  { value: "partial", label: "Partial" },
+  { value: "unpaid",  label: "Unpaid" },
+  { value: "waived",  label: "Waived" },
+];
+
+// Soft status chips — strong color reserved for true alerts (outstanding dues,
+// setup needed), so the manager list reads calmly even when nobody has paid yet.
+const STATUS_CHIP: Record<ManagerPaymentStatus, string> = {
+  paid:    "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+  partial: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30",
+  unpaid:  "text-red-600/90 dark:text-red-400/90 bg-red-500/[0.06] border-red-500/20",
+  waived:  "text-slate-500 dark:text-slate-400 bg-slate-500/10 border-slate-500/25",
+};
+
 function FinanceLeagueEditor({
-  leagueId, finance, standing, calc,
-  onUpdate, onAddPrize, onRemovePrize, onUpdatePrize,
+  leagueId, finance, metrics, managers, managersLoading,
+  onUpdate, onAddPrize, onRemovePrize, onUpdatePrize, onUpdatePayment,
 }: FinanceLeagueEditorProps) {
-  // Local drafts for the two text fields per the spec. Numeric fields
-  // (buyIn / prize amounts) flow straight to the parent for immediate table
-  // feedback — focus is no longer at risk now that the component is stable.
+  // Local drafts for free-text fields → debounced upstream so the table reflects
+  // changes without thrashing the save endpoint or risking input focus.
   const [urlDraft, setUrlDraft] = useState(finance.leagueSafeUrl);
   const [notesDraft, setNotesDraft] = useState(finance.notes);
   const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Flush any pending text drafts on unmount (e.g. row collapse) so latest
-  // typing isn't lost if the user closes the row before the debounce fires.
-  useEffect(() => {
-    return () => {
-      if (urlTimer.current) clearTimeout(urlTimer.current);
-      if (notesTimer.current) clearTimeout(notesTimer.current);
-    };
+  useEffect(() => () => {
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    if (notesTimer.current) clearTimeout(notesTimer.current);
   }, []);
 
   const flushUrl = useCallback((v: string) => {
@@ -361,186 +328,270 @@ function FinanceLeagueEditor({
     notesTimer.current = setTimeout(() => onUpdate(leagueId, { notes: v }), 600);
   }, [leagueId, onUpdate]);
 
-  const s = standing;
   const f = finance;
-  const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
-  const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
-  const playoffPctVal = hasOddsData ? approxPlayoffPct(s) : null;
-  const playoffPctCls = playoffPctVal === null
-    ? "text-muted-foreground"
-    : playoffPctVal >= 50 ? "text-emerald-600 dark:text-emerald-400"
-    : playoffPctVal <= 20 ? "text-red-500 dark:text-red-400"
-    : "text-amber-600 dark:text-amber-400";
 
-  const standingVal = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? `#${s.rank}/${s.totalTeams}` : "N/A";
-  const recordVal   = s && !s.loading && !s.error && gamesPlayed > 0 ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}` : "Pre-season";
-  const pfVal       = s && !s.loading && !s.error && s.ptsFor > 0 ? s.ptsFor.toFixed(1) : "N/A";
+  // Manager-payment search + bulk actions.
+  const [search, setSearch] = useState("");
+  const owed = f.buyIn;
+
+  const filteredManagers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q || !managers) return managers ?? [];
+    return managers.filter(m =>
+      m.managerName.toLowerCase().includes(q) || m.teamName.toLowerCase().includes(q));
+  }, [managers, search]);
+
+  const paidStatusCount = useMemo(() => {
+    if (!managers) return { settled: 0, total: 0 };
+    const settled = managers.filter(m => {
+      const s = f.payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid";
+      return s === "paid" || s === "waived";
+    }).length;
+    return { settled, total: managers.length };
+  }, [managers, f.payments]);
+
+  // Build the full payments array in one update so a bulk action isn't lost to
+  // stale per-roster closures.
+  const markAll = useCallback((status: ManagerPaymentStatus) => {
+    if (!managers) return;
+    const next: ManagerPayment[] = managers.map(m => {
+      const existing = f.payments.find(p => p.rosterId === m.rosterId);
+      return {
+        rosterId: m.rosterId,
+        paid: status === "paid" ? owed : 0,
+        status,
+        ...(existing?.paidDate ? { paidDate: existing.paidDate } : {}),
+        ...(existing?.notes ? { notes: existing.notes } : {}),
+      };
+    });
+    onUpdate(leagueId, { payments: next });
+  }, [managers, f.payments, owed, leagueId, onUpdate]);
 
   return (
-    <div className="border-t border-border/30 bg-muted/10 p-4 space-y-3">
-      {/* Summary strip */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Standing</span>
-          <span className={`font-semibold ${s?.inPlayoffs && gamesPlayed > 0 ? "text-emerald-500 dark:text-emerald-400" : ""}`}>{standingVal}</span>
+    <div className="border-t border-border/30 bg-muted/10 p-4 md:p-5 space-y-5">
+      {/* Tight summary strip */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 px-3 py-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
+        <Stat label="Expected" value={f.isFree ? "Free" : fmtDollar(metrics.dues)} />
+        <Stat label="Collected" value={fmtDollar(metrics.collected)} valueCls="text-emerald-600 dark:text-emerald-400" />
+        <Stat label="Outstanding" value={f.isFree ? "—" : fmtDollar(metrics.outstanding)}
+          valueCls={metrics.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"} />
+        <Stat label="Paid" value={f.isFree ? "—" : `${metrics.paidCount} / ${metrics.teams}`} />
+      </div>
+
+      {/* Setup: two columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
+        {/* Financial Setup */}
+        <div className="space-y-3">
+          <SectionLabel>Financial Setup</SectionLabel>
+          <div className="space-y-2">
+            <div>
+              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Entry Fee</label>
+              <div className="relative sm:w-40">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                <Input type="number" min="0" className="pl-6 h-9 text-sm" value={f.buyIn || ""} placeholder="0"
+                  onChange={e => onUpdate(leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
+                  data-testid={`input-buyin-${leagueId}`} />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">LeagueSafe Link</label>
+              <div className="relative">
+                <Input type="url" placeholder="https://leaguesafe.com/league/…"
+                  value={urlDraft}
+                  onChange={e => { setUrlDraft(e.target.value); flushUrl(e.target.value); }}
+                  onBlur={() => {
+                    if (urlTimer.current) { clearTimeout(urlTimer.current); urlTimer.current = null; }
+                    if (urlDraft !== finance.leagueSafeUrl) onUpdate(leagueId, { leagueSafeUrl: urlDraft });
+                  }}
+                  className={`h-9 text-sm ${urlDraft ? "pr-9" : ""}`}
+                  data-testid={`input-leaguesafe-${leagueId}`} />
+                {urlDraft && (
+                  <a href={urlDraft} target="_blank" rel="noopener noreferrer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#d4af37] hover:opacity-70 transition-opacity"
+                    data-testid={`link-leaguesafe-${leagueId}`} onClick={e => e.stopPropagation()}>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <StickyNote className="w-3 h-3" /> Notes
+              </label>
+              <Textarea placeholder="Payout method, side pots, dues deadline…"
+                value={notesDraft}
+                onChange={e => { setNotesDraft(e.target.value); flushNotes(e.target.value); }}
+                onBlur={() => {
+                  if (notesTimer.current) { clearTimeout(notesTimer.current); notesTimer.current = null; }
+                  if (notesDraft !== finance.notes) onUpdate(leagueId, { notes: notesDraft });
+                }}
+                className="text-sm min-h-[60px] resize-y" data-testid={`input-notes-${leagueId}`} />
+            </div>
+          </div>
         </div>
-        <span className="text-border/60">|</span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Record</span>
-          <span className="font-semibold">{recordVal}</span>
-        </div>
-        <span className="text-border/60">|</span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">PF</span>
-          <span className="font-semibold">{pfVal}</span>
-        </div>
-        <span className="text-border/60">|</span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Playoff Odds</span>
-          <span className={`font-semibold ${playoffPctCls}`}>{playoffPctVal !== null ? `~${playoffPctVal}%` : "N/A"}</span>
-          {playoffPctVal !== null && s && (
-            <span className="text-[10px] text-muted-foreground">
-              {gamesPlayed > 0 ? (s.inPlayoffs ? "In ✓" : `${s.rank - s.playoffSpots} back`) : "talent-based"}
-            </span>
+
+        {/* Prize Setup */}
+        <div className="space-y-3">
+          <SectionLabel action={
+            <button
+              onClick={() => onAddPrize(leagueId)}
+              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
+              data-testid={`button-add-prize-${leagueId}`}>
+              <Plus className="w-3 h-3" /> Add Place
+            </button>
+          }>Prize Setup</SectionLabel>
+          {f.prizes.length === 0 ? (
+            <button onClick={() => onAddPrize(leagueId)}
+              className="w-full text-left text-xs text-muted-foreground italic leading-relaxed rounded-lg border border-dashed border-border/50 px-3 py-4 hover:border-border hover:text-foreground transition-colors"
+              data-testid={`prize-empty-${leagueId}`}>
+              No prize structure set. <span className="text-[#d4af37] not-italic font-semibold">+ Add a payout place</span> to track expected payouts and reconciliation.
+            </button>
+          ) : (
+            <div className="space-y-1.5">
+              {[...f.prizes].sort((a, b) => a.place - b.place).map(prize => (
+                <div key={prize.place}
+                  className={`flex flex-wrap items-center gap-2 px-2.5 py-1.5 rounded-md border ${prize.paid ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/30 bg-muted/20"}`}
+                  data-testid={`prize-row-${leagueId}-${prize.place}`}>
+                  <Input
+                    className="h-8 text-sm w-24 flex-shrink-0"
+                    value={prize.label ?? ordinal(prize.place)}
+                    placeholder="Place / label"
+                    onChange={e => onUpdatePrize(leagueId, prize.place, { label: e.target.value })}
+                    data-testid={`input-prize-label-${leagueId}-${prize.place}`} />
+                  <div className="relative w-24 flex-shrink-0">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                    <Input type="number" min="0" className="pl-6 h-8 text-sm" value={prize.amount || ""} placeholder="0"
+                      onChange={e => onUpdatePrize(leagueId, prize.place, { amount: parseFloat(e.target.value) || 0 })}
+                      data-testid={`input-prize-${leagueId}-${prize.place}`} />
+                  </div>
+                  <button
+                    onClick={() => onUpdatePrize(leagueId, prize.place, { paid: !prize.paid })}
+                    className={`flex items-center gap-1 px-2 h-8 rounded-md text-[11px] font-medium border transition-colors flex-shrink-0 ${prize.paid ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10" : "border-border/40 text-muted-foreground hover:text-foreground"}`}
+                    data-testid={`button-prize-paid-${leagueId}-${prize.place}`}>
+                    <CheckCircle2 className="w-3 h-3" />{prize.paid ? "Paid out" : "Mark paid"}
+                  </button>
+                  <button onClick={() => onRemovePrize(leagueId, prize.place)}
+                    className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-1 ml-auto"
+                    data-testid={`button-remove-prize-${leagueId}-${prize.place}`}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {/* Prize pool vs collected reconciliation hint */}
+              <div className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg border text-xs ${metrics.reconIssue ? "border-amber-500/40 bg-amber-500/5" : "bg-muted/20 border-border/30"}`}>
+                <Stat label="Pool" value={fmtDollar(metrics.prizePool)} />
+                <span className="text-border/60">|</span>
+                <Stat label="Collected" value={fmtDollar(metrics.collected)} />
+                {metrics.reconIssue && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> Pool exceeds collected dues
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {s?.error && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <AlertCircle className="w-3.5 h-3.5" /><span>Could not load standings for this league.</span>
-        </div>
-      )}
-
-      {/* Financial Details */}
-      <div>
-        <SectionLabel>Financial Details</SectionLabel>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative sm:w-36">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-            <Input type="number" min="0" className="pl-6 h-9 text-sm" value={f.buyIn || ""} placeholder="Buy-in"
-              onChange={e => onUpdate(leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
-              data-testid={`input-buyin-${leagueId}`} />
-          </div>
-          <div className="relative flex-1 min-w-0">
-            <Input type="url" placeholder="LeagueSafe link (https://leaguesafe.com/league/...)"
-              value={urlDraft}
-              onChange={e => {
-                setUrlDraft(e.target.value);
-                flushUrl(e.target.value);
-              }}
-              onBlur={() => {
-                if (urlTimer.current) { clearTimeout(urlTimer.current); urlTimer.current = null; }
-                if (urlDraft !== finance.leagueSafeUrl) onUpdate(leagueId, { leagueSafeUrl: urlDraft });
-              }}
-              className={`h-9 text-sm ${urlDraft ? "pr-9" : ""}`}
-              data-testid={`input-leaguesafe-${leagueId}`} />
-            {urlDraft && (
-              <a href={urlDraft} target="_blank" rel="noopener noreferrer"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#0b3a7a] dark:text-blue-400 hover:opacity-70 transition-opacity"
-                data-testid={`link-leaguesafe-${leagueId}`} onClick={e => e.stopPropagation()}>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+      {/* Manager Payments — full width */}
+      {!f.isFree && (
+        <div>
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <div className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Manager Payments</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{paidStatusCount.settled} paid</span>
+              {" / "}
+              <span className="font-semibold">{Math.max(0, paidStatusCount.total - paidStatusCount.settled)} unpaid</span>
+            </span>
+            <div className="flex-1" />
+            {managers && managers.length > 0 && (
+              <>
+                <div className="relative w-full sm:w-44">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Search manager…" className="pl-8 h-8 text-xs"
+                    data-testid={`input-payment-search-${leagueId}`} />
+                </div>
+                <button onClick={() => markAll("paid")}
+                  className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border/50 text-[11px] font-semibold text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40 transition-colors"
+                  data-testid={`button-mark-all-paid-${leagueId}`}>
+                  <CheckCircle2 className="w-3 h-3" /> Mark all paid
+                </button>
+                <button onClick={() => markAll("unpaid")}
+                  className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border/50 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid={`button-mark-all-unpaid-${leagueId}`}>
+                  <SlidersHorizontal className="w-3 h-3" /> Mark all unpaid
+                </button>
+              </>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* Prize Structure */}
-      <div>
-        <SectionLabel action={
-          <button
-            onClick={() => onAddPrize(leagueId)}
-            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
-            data-testid={`button-add-prize-${leagueId}`}>
-            <Plus className="w-3 h-3" /> Add Place
-          </button>
-        }>Prize Structure</SectionLabel>
-        {f.prizes.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No prizes configured. Click Add Place to start.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {[...f.prizes].sort((a, b) => a.place - b.place).map(prize => {
-              const placeLabel = prize.place === 1 ? "🥇 1st" : prize.place === 2 ? "🥈 2nd" : prize.place === 3 ? "🥉 3rd" : `${prize.place}th`;
-              const isCurrentRank = s && !s.loading && s.rank === prize.place;
-              const prob = calc?.breakdown.find(b => b.place === prize.place)?.probability ?? 0;
-              const probPct = Math.round(prob * 1000) / 10;
-              const probBadgeCls = probPct >= 30 ? "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" : probPct >= 10 ? "border-[#d4af37]/50 text-amber-600 dark:text-amber-400" : "border-border/40 text-muted-foreground";
-              return (
-                <div key={prize.place} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border ${isCurrentRank ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/20"}`} data-testid={`prize-row-${leagueId}-${prize.place}`}>
-                  <span className="text-xs font-semibold w-14 flex-shrink-0">{placeLabel}</span>
-                  {probPct > 0 ? (
-                    <Badge variant="outline" className={`text-[10px] px-1.5 h-4 flex-shrink-0 ${probBadgeCls}`} data-testid={`badge-prob-${leagueId}-${prize.place}`}>~{probPct}%</Badge>
-                  ) : isCurrentRank ? (
-                    <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-[#d4af37]/50 text-amber-600 dark:text-amber-400 flex-shrink-0">Now</Badge>
-                  ) : (
-                    <span className="w-10 flex-shrink-0" />
-                  )}
-                  <div className="relative flex-1 max-w-[140px] ml-auto">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                    <Input type="number" min="0" className="pl-6 h-8 text-sm" value={prize.amount || ""} placeholder="0"
-                      onChange={e => onUpdatePrize(leagueId, prize.place, parseFloat(e.target.value) || 0)}
-                      data-testid={`input-prize-${leagueId}-${prize.place}`} />
-                  </div>
-                  <button onClick={() => onRemovePrize(leagueId, prize.place)} className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-1" data-testid={`button-remove-prize-${leagueId}-${prize.place}`}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {(f.buyIn > 0 || f.prizes.length > 0) && (() => {
-          const showCalc = !!calc;
-          const plValue = calc ? calc.pl : -f.buyIn;
-          const expectedPrize = calc ? fmtDollar(Math.round(calc.projectedPrize)) : "N/A";
-          const subtitle = calc ? `rank #${s?.rank} · prob-weighted` : f.prizes.length > 0 && s && !s.loading ? "standings loading…" : "";
-          return (
-            <div className={`mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 rounded-lg border text-xs ${showCalc ? plBg(plValue) : "bg-muted/20 border-border/30"}`}>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Buy-in</span>
-                  <span className="font-semibold">{fmtDollar(f.buyIn)}</span>
-                </div>
-                <span className="text-border/60">|</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Expected Prize</span>
-                  <span className="font-semibold">{expectedPrize}</span>
-                </div>
-                <span className="text-border/60">|</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Expected P&L</span>
-                  <span className={`font-bold text-sm ${plColor(plValue)}`}>{plValue >= 0 ? "+" : ""}{fmtDollar(Math.round(plValue))}</span>
-                </div>
-              </div>
-              {subtitle && <span className="text-[10px] text-muted-foreground">{subtitle}</span>}
+          {managersLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading managers…
             </div>
-          );
-        })()}
-      </div>
-
-      {/* Notes */}
-      <div>
-        <SectionLabel>Notes</SectionLabel>
-        <Input placeholder="e.g. best ball rules, side bets…"
-          value={notesDraft}
-          onChange={e => {
-            setNotesDraft(e.target.value);
-            flushNotes(e.target.value);
-          }}
-          onBlur={() => {
-            if (notesTimer.current) { clearTimeout(notesTimer.current); notesTimer.current = null; }
-            if (notesDraft !== finance.notes) onUpdate(leagueId, { notes: notesDraft });
-          }}
-          className="h-9 text-sm" data-testid={`input-notes-${leagueId}`} />
-      </div>
+          ) : managers && managers.length > 0 ? (
+            filteredManagers.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic px-1 py-2">No managers match "{search}".</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                {filteredManagers.map(m => {
+                  const pay = f.payments.find(p => p.rosterId === m.rosterId);
+                  const status: ManagerPaymentStatus = pay?.status ?? "unpaid";
+                  return (
+                    <div key={m.rosterId}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border/30 bg-muted/20 hover:bg-muted/30 transition-colors"
+                      data-testid={`payment-row-${leagueId}-${m.rosterId}`}>
+                      <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
+                        <Users className="w-3.5 h-3.5 text-[#0b3a7a]/60 dark:text-blue-400/60" />
+                        {m.avatarUrl && (
+                          <img src={m.avatarUrl} alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                            data-testid={`img-manager-avatar-${leagueId}-${m.rosterId}`} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold truncate leading-tight">{m.managerName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                          {m.teamName} <span className="text-muted-foreground/70">· {fmtDollar(owed)}</span>
+                        </p>
+                      </div>
+                      {status === "partial" && (
+                        <div className="relative w-16 flex-shrink-0">
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">$</span>
+                          <Input type="number" min="0" className="pl-4 h-7 text-xs" value={pay?.paid || ""} placeholder="0"
+                            onChange={e => onUpdatePayment(leagueId, m.rosterId, { paid: parseFloat(e.target.value) || 0 })}
+                            data-testid={`payment-amount-${leagueId}-${m.rosterId}`} />
+                        </div>
+                      )}
+                      <PaymentStatusSelect
+                        value={status}
+                        onChange={v => onUpdatePayment(leagueId, m.rosterId, {
+                          status: v,
+                          paid: v === "paid" ? owed : v === "unpaid" || v === "waived" ? 0 : (pay?.paid || 0),
+                        })}
+                        testId={`payment-status-${leagueId}-${m.rosterId}`} />
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            <p className="text-xs text-muted-foreground italic">Could not load this league's managers from Sleeper.</p>
+          )}
+        </div>
+      )}
 
       {/* Secondary actions */}
       <div className="flex flex-wrap justify-end gap-1.5">
         <button
-          onClick={() => onUpdate(leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes })}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.isFree ? "bg-sky-500/10 text-sky-500 dark:text-sky-400 hover:bg-sky-500/15" : "text-muted-foreground hover:bg-muted/50 hover:text-sky-500 dark:hover:text-sky-400"}`}
+          onClick={() => onUpdate(leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes, payments: !f.isFree ? [] : f.payments })}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.isFree ? "bg-slate-500/10 text-slate-500 dark:text-slate-400 hover:bg-slate-500/15" : "text-muted-foreground hover:bg-muted/50 hover:text-slate-500 dark:hover:text-slate-400"}`}
           data-testid={`button-toggle-free-${leagueId}`}>
           <Tag className="w-3 h-3" />{f.isFree ? "Free League ✓" : "Mark as Free League"}
         </button>
@@ -549,35 +600,64 @@ function FinanceLeagueEditor({
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.ignored ? "bg-muted text-muted-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
           data-testid={`button-toggle-ignore-${leagueId}`}>
           {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-          {f.ignored ? "Unhide League" : "Hide from Summary"}
+          {f.ignored ? "Unhide from Summary" : "Hide from Summary"}
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Main Finance Tab ─────────────────────────────────────────────────────────
+// ─── Summary card ──────────────────────────────────────────────────────────────
+
+function SummaryCard({ icon: Icon, label, value, sub, accent, testId }: {
+  icon: typeof Wallet; label: string; value: string; sub?: string; accent?: string; testId?: string;
+}) {
+  return (
+    <Card className="p-3 md:p-4" data-testid={testId}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className={`w-3.5 h-3.5 ${accent ?? "text-muted-foreground"}`} />
+        <p className="text-[10px] md:text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+      </div>
+      <p className={`text-lg md:text-xl font-bold ${accent ?? "text-foreground"}`}>{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+    </Card>
+  );
+}
+
+// ─── Action Required bucket ──────────────────────────────────────────────────────
+
+interface ActionBucket {
+  key: string;
+  title: string;
+  cta: string;
+  icon: typeof Wallet;
+  accent: string;       // severity text color — used only for the icon + count badge
+  leagues: { leagueId: string; name: string }[];
+}
+
+// Shared neutral league chip for every action bucket — color lives in the icon
+// and count badge, so the repeated chips stay calm and scannable.
+const ACTION_CHIP =
+  "max-w-full truncate px-2 py-0.5 rounded-md border border-border/50 bg-muted/30 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors";
+
+// ─── Main League Treasury Tab ────────────────────────────────────────────────────
 
 export function FinanceTab() {
   const { isConnected, user, leagues } = useSleeper();
-  const { redraftValuesBySleeperId } = useValueModel();
   const [token, setToken] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [finances, setFinances] = useState<Record<string, LeagueFinanceData>>({});
-  const [standings, setStandings] = useState<Record<string, LeagueStanding>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
+  const [managers, setManagers] = useState<Record<string, ManagerInfo[]>>({});
+  const [managersLoading, setManagersLoading] = useState<Record<string, boolean>>({});
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const dynastyLeagues = leagues.filter(l => l.status !== "archived");
-
-  const visibleLeagues = dynastyLeagues.filter(l => {
-    const s = standings[l.leagueId];
-    if (s && !s.loading && !s.error && s.rank === -1) return false;
-    return true;
-  });
+  // Every league this commissioner manages (Commissioner Command leagues).
+  const managedLeagues = leagues.filter(l => l.status !== "archived");
 
   useEffect(() => {
     if (!user?.userId) return;
@@ -606,6 +686,8 @@ export function FinanceTab() {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }), [token]);
 
+  // Load persisted finance rows. Migration/fallback: legacy rows have no
+  // `payments` and prizes with only { place, amount } — both default safely.
   useEffect(() => {
     if (!isConnected || !user?.userId || !token) return;
     setLoadingFinances(true);
@@ -615,28 +697,22 @@ export function FinanceTab() {
         if (!rows) return;
         const map: Record<string, LeagueFinanceData> = {};
         for (const row of rows) {
-          map[row.leagueId] = { leagueId: row.leagueId, buyIn: row.buyIn ?? 0, prizes: (row.prizes as PrizeSlot[]) ?? [], notes: row.notes ?? "", isFree: row.isFree ?? false, ignored: row.ignored ?? false, leagueSafeUrl: row.leagueSafeUrl ?? "" };
+          map[row.leagueId] = {
+            leagueId: row.leagueId,
+            buyIn: row.buyIn ?? 0,
+            prizes: Array.isArray(row.prizes) ? row.prizes as PrizeSlot[] : [],
+            payments: Array.isArray(row.payments) ? row.payments as ManagerPayment[] : [],
+            notes: row.notes ?? "",
+            isFree: row.isFree ?? false,
+            ignored: row.ignored ?? false,
+            leagueSafeUrl: row.leagueSafeUrl ?? "",
+          };
         }
         setFinances(map);
       })
       .catch(() => {})
       .finally(() => setLoadingFinances(false));
   }, [isConnected, user?.userId, token]);
-
-  const redraftValuesLoaded = Object.keys(redraftValuesBySleeperId).length > 0;
-
-  useEffect(() => {
-    if (!isConnected || !user?.userId || dynastyLeagues.length === 0) return;
-    dynastyLeagues.forEach(league => {
-      setStandings(prev => ({
-        ...prev,
-        [league.leagueId]: { leagueId: league.leagueId, rank: -1, totalTeams: 0, wins: 0, losses: 0, ties: 0, ptsFor: 0, playoffSpots: 0, inPlayoffs: false, valueRank: 0, valueCenterRank: 0, loading: true, error: false },
-      }));
-      fetchLeagueStanding(league.leagueId, user.userId, redraftValuesBySleeperId)
-        .then(s => setStandings(prev => ({ ...prev, [league.leagueId]: { leagueId: league.leagueId, ...s, loading: false, error: false } })))
-        .catch(() => setStandings(prev => ({ ...prev, [league.leagueId]: { ...prev[league.leagueId], loading: false, error: true } })));
-    });
-  }, [isConnected, user?.userId, dynastyLeagues.length, redraftValuesLoaded]);
 
   const getFinance = useCallback((leagueId: string): LeagueFinanceData =>
     finances[leagueId] ?? { ...DEFAULT_FINANCE, leagueId }, [finances]);
@@ -653,8 +729,8 @@ export function FinanceTab() {
           headers: authHeaders(),
           body: JSON.stringify({
             sleeperUserId: user.userId, leagueId,
-            season: dynastyLeagues.find(l => l.leagueId === leagueId)?.season ?? "2026",
-            buyIn: data.buyIn, prizes: data.prizes, notes: data.notes,
+            season: managedLeagues.find(l => l.leagueId === leagueId)?.season ?? "2026",
+            buyIn: data.buyIn, prizes: data.prizes, payments: data.payments, notes: data.notes,
             isFree: data.isFree, ignored: data.ignored, leagueSafeUrl: data.leagueSafeUrl || null,
           }),
         });
@@ -664,7 +740,7 @@ export function FinanceTab() {
       } catch {}
       setSaving(prev => ({ ...prev, [leagueId]: false }));
     }, 800);
-  }, [user?.userId, token, dynastyLeagues, authHeaders]);
+  }, [user?.userId, token, managedLeagues, authHeaders]);
 
   const updateFinance = useCallback((leagueId: string, patch: Partial<LeagueFinanceData>) => {
     setFinances(prev => {
@@ -678,7 +754,7 @@ export function FinanceTab() {
   const addPrize = useCallback((leagueId: string) => {
     const f = getFinance(leagueId);
     const nextPlace = (f.prizes.length > 0 ? Math.max(...f.prizes.map(p => p.place)) : 0) + 1;
-    updateFinance(leagueId, { prizes: [...f.prizes, { place: nextPlace, amount: 0 }] });
+    updateFinance(leagueId, { prizes: [...f.prizes, { place: nextPlace, amount: 0, label: ordinal(nextPlace), paid: false }] });
   }, [getFinance, updateFinance]);
 
   const removePrize = useCallback((leagueId: string, place: number) => {
@@ -686,36 +762,54 @@ export function FinanceTab() {
     updateFinance(leagueId, { prizes: f.prizes.filter(p => p.place !== place) });
   }, [getFinance, updateFinance]);
 
-  const updatePrize = useCallback((leagueId: string, place: number, amount: number) => {
+  const updatePrize = useCallback((leagueId: string, place: number, patch: Partial<PrizeSlot>) => {
     const f = getFinance(leagueId);
-    updateFinance(leagueId, { prizes: f.prizes.map(p => p.place === place ? { ...p, amount } : p) });
+    updateFinance(leagueId, { prizes: f.prizes.map(p => p.place === place ? { ...p, ...patch } : p) });
   }, [getFinance, updateFinance]);
 
-  function calcPL(leagueId: string) {
+  const updatePayment = useCallback((leagueId: string, rosterId: string, patch: Partial<ManagerPayment>) => {
     const f = getFinance(leagueId);
-    const s = standings[leagueId];
-    if (!s || s.loading || s.error || s.rank < 1 || f.prizes.length === 0) return null;
-    const prizes = [...f.prizes].sort((a, b) => a.place - b.place);
-    const maxPrizePlace = Math.max(...prizes.map(p => p.place));
-    const probs = placementProbs(s, maxPrizePlace);
-    let projectedPrize = 0;
-    const breakdown = prizes.map(prize => {
-      const prob = probs.get(prize.place) ?? 0;
-      projectedPrize += prob * prize.amount;
-      return { place: prize.place, amount: prize.amount, probability: prob };
+    const existing = f.payments.find(p => p.rosterId === rosterId);
+    let next: ManagerPayment[];
+    if (existing) {
+      next = f.payments.map(p => p.rosterId === rosterId ? { ...p, ...patch } : p);
+    } else {
+      next = [...f.payments, { rosterId, paid: 0, status: "unpaid", ...patch }];
+    }
+    updateFinance(leagueId, { payments: next });
+  }, [getFinance, updateFinance]);
+
+  // Lazily fetch managers when a league is first expanded.
+  const ensureManagers = useCallback((leagueId: string) => {
+    if (managers[leagueId] || managersLoading[leagueId]) return;
+    setManagersLoading(prev => ({ ...prev, [leagueId]: true }));
+    fetchLeagueManagers(leagueId)
+      .then(list => setManagers(prev => ({ ...prev, [leagueId]: list })))
+      .catch(() => setManagers(prev => ({ ...prev, [leagueId]: [] })))
+      .finally(() => setManagersLoading(prev => ({ ...prev, [leagueId]: false })));
+  }, [managers, managersLoading]);
+
+  const toggleExpand = useCallback((leagueId: string) => {
+    setExpanded(prev => {
+      const next = prev === leagueId ? null : leagueId;
+      if (next) ensureManagers(next);
+      return next;
     });
-    return { projectedPrize, pl: projectedPrize - f.buyIn, breakdown };
-  }
+  }, [ensureManagers]);
 
-  const totals = visibleLeagues.reduce((acc, league) => {
-    const f = getFinance(league.leagueId);
-    if (f.ignored || f.isFree) return acc;
-    const calc = calcPL(league.leagueId);
-    acc.invested += f.buyIn;
-    if (calc) { acc.expectedReturn += calc.projectedPrize; acc.netPL += calc.pl; acc.leaguesWithData++; }
-    return acc;
-  }, { invested: 0, expectedReturn: 0, netPL: 0, leaguesWithData: 0 });
+  // Jump to + open a league from an Action Required CTA.
+  const openLeague = useCallback((leagueId: string) => {
+    setExpanded(leagueId);
+    ensureManagers(leagueId);
+    requestAnimationFrame(() => {
+      rowRefs.current[leagueId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [ensureManagers]);
 
+  const teamsOf = useCallback((leagueId: string) =>
+    managedLeagues.find(l => l.leagueId === leagueId)?.totalRosters ?? 0, [managedLeagues]);
+
+  // ── Gating states ──────────────────────────────────────────────────────────
   if (!isConnected || !user) {
     return (
       <div className="flex items-center justify-center min-h-[50vh] px-4">
@@ -724,7 +818,7 @@ export function FinanceTab() {
             <DollarSign className="w-7 h-7 text-[#0b3a7a] dark:text-blue-400" />
           </div>
           <h3 className="text-lg font-bold mb-2">Connect Sleeper First</h3>
-          <p className="text-sm text-muted-foreground">Link your Sleeper account in the Portfolio tab to track your league finances.</p>
+          <p className="text-sm text-muted-foreground">Connect your Sleeper account to manage dues, prize pools, and payouts across your leagues.</p>
         </Card>
       </div>
     );
@@ -739,11 +833,11 @@ export function FinanceTab() {
       <div className="max-w-xl mx-auto px-4 py-12 space-y-6">
         <div className="text-center space-y-2 mb-4">
           <div className="w-12 h-12 rounded-2xl bg-[#d4af37]/10 flex items-center justify-center mx-auto ring-1 ring-[#d4af37]/20">
-            <DollarSign className="w-6 h-6 text-[#d4af37]" />
+            <Wallet className="w-6 h-6 text-[#d4af37]" />
           </div>
-          <h3 className="text-lg font-bold">Connect Sleeper to Access Finances</h3>
+          <h3 className="text-lg font-bold">Connect Sleeper to Access League Treasury</h3>
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Connect your Sleeper account via the form below to unlock the league finance tracker. Your session is saved automatically.
+            Connect your Sleeper account via the form below to track dues, prize pools, and payouts. Your session is saved automatically.
           </p>
         </div>
         <SleeperAuthCard />
@@ -752,445 +846,334 @@ export function FinanceTab() {
   }
 
   if (loadingFinances) {
-    return <div className="min-h-[40vh] flex items-center justify-center"><TeamLoader size="lg" context="Loading league finances" /></div>;
+    return <div className="min-h-[40vh] flex items-center justify-center"><TeamLoader size="lg" context="Loading league treasury" /></div>;
   }
 
-  const plSign = totals.netPL > 0 ? "+" : "";
+  // ── Derived state across visible leagues ─────────────────────────────────────
+  const visibleLeagues = managedLeagues.filter(l => !getFinance(l.leagueId).ignored);
+  const hiddenLeagues = managedLeagues.filter(l => getFinance(l.leagueId).ignored);
+
+  const metricsByLeague: Record<string, LeagueMetrics> = {};
+  managedLeagues.forEach(l => { metricsByLeague[l.leagueId] = computeMetrics(getFinance(l.leagueId), teamsOf(l.leagueId)); });
+
+  // Summary totals (visible, non-free count toward dues math).
+  const totals = visibleLeagues.reduce((acc, l) => {
+    const f = getFinance(l.leagueId);
+    const m = metricsByLeague[l.leagueId];
+    acc.dues += m.dues;
+    acc.collected += m.collected;
+    acc.prizePool += m.prizePool;
+    acc.payoutsPending += m.payoutsPending;
+    if (m.hasUnpaidPayouts) acc.payoutLeagues++;
+    if (!f.isFree && m.hasIssue) acc.issueLeagues++;
+    return acc;
+  }, { dues: 0, collected: 0, prizePool: 0, payoutsPending: 0, payoutLeagues: 0, issueLeagues: 0 });
+  const outstanding = Math.max(0, totals.dues - totals.collected);
+
+  // Action Required buckets.
+  const inBucket = (pred: (m: LeagueMetrics, f: LeagueFinanceData) => boolean) =>
+    visibleLeagues
+      .filter(l => { const f = getFinance(l.leagueId); return !f.isFree && pred(metricsByLeague[l.leagueId], f); })
+      .map(l => ({ leagueId: l.leagueId, name: l.name }));
+
+  const AMBER = "text-amber-600 dark:text-amber-400";
+  const buckets: ActionBucket[] = [
+    { key: "missing-payments", title: "Missing Payments", cta: "Review dues", icon: Wallet,
+      accent: AMBER, leagues: inBucket(m => m.hasMissingPayments) },
+    { key: "prize-setup", title: "Prize Setup Needed", cta: "Configure prizes", icon: TrophyIcon,
+      accent: AMBER, leagues: inBucket(m => m.missingPrizes || m.missingBuyIn) },
+    { key: "leaguesafe-missing", title: "LeagueSafe Missing", cta: "Add LeagueSafe link", icon: Link2,
+      accent: "text-muted-foreground", leagues: inBucket(m => m.missingLeagueSafe) },
+    { key: "payout-pending", title: "Payouts Pending", cta: "Mark payouts", icon: Banknote,
+      accent: AMBER, leagues: inBucket(m => m.hasUnpaidPayouts) },
+    { key: "recon", title: "Reconciliation Issues", cta: "Reconcile", icon: Scale,
+      accent: "text-red-600 dark:text-red-400", leagues: inBucket(m => m.reconIssue) },
+  ];
+  const activeBuckets = buckets.filter(b => b.leagues.length > 0);
+
+  const stillLoadingTeams = managedLeagues.some(l => teamsOf(l.leagueId) === 0);
+
+  // Desktop grid: League | Format | Teams | Buy-In | Paid | Outstanding | Prize Pool | LeagueSafe | Status | Actions
+  const COL = "grid-cols-[minmax(160px,1.4fr)_minmax(120px,1fr)_52px_64px_60px_84px_84px_72px_140px_84px]";
+
+  function renderLeagueRow(league: typeof managedLeagues[number]) {
+    const f = getFinance(league.leagueId);
+    const m = metricsByLeague[league.leagueId];
+    const status = leagueStatus(f, m);
+    const isExpanded = expanded === league.leagueId;
+    const hasSafe = !!f.leagueSafeUrl?.trim();
+
+    return (
+      <div key={league.leagueId}
+        ref={el => { rowRefs.current[league.leagueId] = el; }}
+        className={`border-b border-border/20 last:border-b-0 scroll-mt-24 ${isExpanded ? "bg-muted/10" : ""}`}
+        data-testid={`finance-card-${league.leagueId}`}>
+
+        {/* ── Mobile card ── */}
+        <div className="md:hidden p-3 cursor-pointer" data-testid={`finance-mobile-${league.leagueId}`}
+          role="button" tabIndex={0}
+          aria-expanded={isExpanded}
+          onClick={() => toggleExpand(league.leagueId)}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(league.leagueId); } }}>
+          <div className="flex items-start gap-2.5">
+            <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative mt-0.5">
+              <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
+              {league.avatar && (
+                <img src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`} alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-[13px] leading-tight truncate">{league.name}</p>
+              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 truncate">
+                {league.totalRosters}T · {league.scoringFormat} · {league.format} · {league.season}
+              </p>
+              {!f.isFree && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px]">
+                  <span className="text-muted-foreground">Paid <span className="font-semibold text-foreground">{m.paidCount}/{m.teams}</span></span>
+                  <span className="text-muted-foreground">Out <span className={`font-semibold ${m.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{fmtDollar(m.outstanding)}</span></span>
+                  <span className="text-muted-foreground">Pool <span className="font-semibold text-foreground">{fmtDollar(m.prizePool)}</span></span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <StatusPill status={status} />
+                <button
+                  onClick={e => { e.stopPropagation(); toggleExpand(league.leagueId); }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border/50 text-[11px] font-semibold hover:bg-muted/50 transition-colors"
+                  data-testid={`button-manage-mobile-${league.leagueId}`}>
+                  Manage {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Desktop row ── */}
+        <div className={`hidden md:grid w-full ${COL} gap-x-2 px-4 py-2.5 items-center cursor-pointer ${isExpanded ? "" : "hover:bg-muted/30"} transition-colors`}
+          role="button" tabIndex={0}
+          aria-expanded={isExpanded}
+          onClick={() => toggleExpand(league.leagueId)}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(league.leagueId); } }}
+          data-testid={`finance-row-${league.leagueId}`}>
+          {/* League */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
+              <Trophy className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
+              {league.avatar && (
+                <img src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`} alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                  data-testid={`img-league-avatar-${league.leagueId}`} />
+              )}
+            </div>
+            <p className="font-semibold text-xs truncate leading-tight">{league.name}</p>
+          </div>
+          {/* Format */}
+          <span className="text-[11px] text-muted-foreground truncate">{league.scoringFormat} · {league.format} · {league.season}</span>
+          {/* Teams */}
+          <span className="text-xs font-medium text-center">{league.totalRosters}</span>
+          {/* Buy-In */}
+          <div className="text-right">
+            {f.isFree ? <span className="text-[10px] text-slate-500 font-semibold">Free</span>
+              : f.buyIn > 0 ? <span className="text-xs font-medium">{fmtDollar(f.buyIn)}</span>
+              : <span className="text-[10px] text-muted-foreground">—</span>}
+          </div>
+          {/* Paid */}
+          <span className="text-xs font-medium text-center tabular-nums">{f.isFree ? "—" : `${m.paidCount}/${m.teams}`}</span>
+          {/* Outstanding */}
+          <div className="text-right">
+            {f.isFree ? <span className="text-[10px] text-muted-foreground">—</span>
+              : <span className={`text-xs font-semibold ${m.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>{fmtDollar(m.outstanding)}</span>}
+          </div>
+          {/* Prize Pool */}
+          <div className="text-right">
+            {m.prizePool > 0 ? <span className="text-xs font-medium">{fmtDollar(m.prizePool)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
+          </div>
+          {/* LeagueSafe */}
+          <div className="flex justify-center">
+            {f.isFree ? <span className="text-[10px] text-muted-foreground">—</span>
+              : hasSafe ? (
+                <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#d4af37] hover:underline"
+                  onClick={e => e.stopPropagation()}
+                  data-testid={`row-leaguesafe-${league.leagueId}`}>
+                  Added <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              ) : <span className="text-[10px] font-semibold text-muted-foreground">Missing</span>}
+          </div>
+          {/* Status */}
+          <div className="flex items-center gap-1.5">
+            <StatusPill status={status} />
+            {saving[league.leagueId] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            {saved[league.leagueId] && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
+          </div>
+          {/* Actions */}
+          <div className="flex justify-end">
+            <button
+              onClick={e => { e.stopPropagation(); toggleExpand(league.leagueId); }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border/50 text-[11px] font-semibold hover:bg-muted/50 transition-colors"
+              data-testid={`button-manage-${league.leagueId}`}>
+              Manage {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <FinanceLeagueEditor
+            leagueId={league.leagueId}
+            finance={f}
+            metrics={m}
+            managers={managers[league.leagueId]}
+            managersLoading={!!managersLoading[league.leagueId]}
+            onUpdate={updateFinance}
+            onAddPrize={addPrize}
+            onRemovePrize={removePrize}
+            onUpdatePrize={updatePrize}
+            onUpdatePayment={updatePayment}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <SectionHeader title="League Treasury" subtitle="Track dues, prize pools, LeagueSafe links, and payout readiness across your leagues." />
 
-      {/* Summary Header */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="p-4 text-center">
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-1">Total Invested</p>
-          <p className="text-xl font-bold text-foreground" data-testid="text-total-invested">{fmtDollar(totals.invested)}</p>
-        </Card>
-        <Card className="p-4 text-center">
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-1">Expected Return</p>
-          <p className="text-xl font-bold text-foreground" data-testid="text-expected-return">{fmtDollar(totals.expectedReturn)}</p>
-          {totals.leaguesWithData < visibleLeagues.length && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">{totals.leaguesWithData} of {visibleLeagues.length} leagues</p>
-          )}
-        </Card>
-        <Card className={`p-4 text-center border ${plBg(totals.netPL)}`}>
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mb-1">Net P&L</p>
-          <p className={`text-xl font-bold flex items-center justify-center gap-1 ${plColor(totals.netPL)}`} data-testid="text-net-pl">
-            {totals.netPL > 0 ? <TrendingUp className="w-4 h-4" /> : totals.netPL < 0 ? <TrendingDown className="w-4 h-4" /> : null}
-            {plSign}{fmtDollar(totals.netPL)}
-          </p>
-        </Card>
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 md:gap-3">
+        <SummaryCard icon={Wallet}   label="Total League Dues" value={fmtDollar(totals.dues)} testId="card-total-dues" />
+        <SummaryCard icon={Receipt}  label="Collected"   value={fmtDollar(totals.collected)} accent="text-emerald-600 dark:text-emerald-400" testId="card-collected" />
+        <SummaryCard icon={Receipt}  label="Outstanding" value={fmtDollar(outstanding)} accent={outstanding > 0 ? "text-amber-600 dark:text-amber-400" : undefined} testId="card-outstanding" />
+        <SummaryCard icon={TrophyIcon} label="Prize Pool" value={fmtDollar(totals.prizePool)} testId="card-prize-pool" />
+        <SummaryCard icon={Banknote} label="Payouts Pending" value={fmtDollar(totals.payoutsPending)} sub={totals.payoutLeagues > 0 ? `${totals.payoutLeagues} league${totals.payoutLeagues > 1 ? "s" : ""}` : undefined} accent={totals.payoutsPending > 0 ? "text-amber-600 dark:text-amber-400" : undefined} testId="card-payouts-pending" />
+        <SummaryCard icon={AlertCircle} label="Issues" value={String(totals.issueLeagues)} sub={totals.issueLeagues === 1 ? "league" : "leagues"} accent={totals.issueLeagues > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"} testId="card-issues" />
       </div>
 
-      {visibleLeagues.length === 0 && !dynastyLeagues.some(l => { const s = standings[l.leagueId]; return !s || s.loading; }) && (
+      {visibleLeagues.length === 0 && !stillLoadingTeams && (
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground text-sm">No dynasty leagues found where you have an active team.</p>
+          <p className="text-muted-foreground text-sm">No leagues found for your account.</p>
         </Card>
       )}
 
-      {/* Focus Zones — portfolio-management dashboard. Each tier is a
-          strategy card (header + description + leagues + CTA) so the user
-          can see at a glance where to push, where to fish for trades, and
-          where to retool. */}
-      {visibleLeagues.length > 1 && (() => {
-        const groups: Record<Tier | "unknown", string[]> = { contender: [], bubble: [], rebuild: [], unknown: [] };
-        visibleLeagues.forEach(l => groups[classifyTeam(standings[l.leagueId])].push(l.name));
-        const readyCount = visibleLeagues.length - groups.unknown.length;
-        if (readyCount === 0) return null;
-
-        const summaryParts: string[] = [];
-        (["contender", "bubble", "rebuild"] as Tier[]).forEach(t => {
-          const n = groups[t].length;
-          summaryParts.push(`${n} ${n === 1 ? FOCUS_ZONE_CONFIG[t].label : FOCUS_ZONE_CONFIG[t].label + "s"}`);
-        });
-
-        return (
-          <Card
-            className="p-4 md:p-5 space-y-4 border border-border/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] backdrop-blur-sm shadow-inner"
-            data-testid="card-focus-zones"
-          >
-            {/* Section header + portfolio summary row */}
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center ring-1 ring-[#0b3a7a]/20 dark:ring-blue-400/20">
-                  <Target className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold tracking-tight">Focus Zones</h3>
-                  <p className="text-[10.5px] text-muted-foreground/85 leading-tight">Where to compete, retool, and trade across your portfolio.</p>
-                </div>
-              </div>
-              <div
-                className="flex items-center gap-2 text-[10.5px] font-medium text-muted-foreground tabular-nums"
-                data-testid="focus-zones-summary"
-              >
-                <span className="uppercase tracking-wider text-[9.5px] text-muted-foreground/70">Portfolio</span>
-                <span className="text-foreground/80">{summaryParts.join(" · ")}</span>
-              </div>
+      {/* Action Required */}
+      {visibleLeagues.length > 0 && (
+        <Card className="p-4 md:p-5 space-y-3 border border-border/50" data-testid="card-action-required">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center ring-1 ring-[#0b3a7a]/20 dark:ring-blue-400/20">
+              <AlertCircle className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
             </div>
+            <div>
+              <h3 className="text-sm font-bold tracking-tight">Action Required</h3>
+              <p className="text-[10.5px] text-muted-foreground/85 leading-tight">Quickly find leagues with missing payments, incomplete prize setup, or payout issues.</p>
+            </div>
+          </div>
 
-            {/* Strategy cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {(["contender", "bubble", "rebuild"] as Tier[]).map(tier => {
-                const cfg = FOCUS_ZONE_CONFIG[tier];
-                const names = groups[tier];
-                const Icon = tier === "contender" ? Flame : tier === "bubble" ? Target : Wrench;
-                const hasLeagues = names.length > 0;
+          {activeBuckets.length === 0 ? (
+            <div className="flex items-center gap-2 px-3 py-4 rounded-lg border border-dashed border-emerald-500/30 bg-emerald-500/5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <p className="text-xs text-emerald-700 dark:text-emerald-300">All leagues are squared away — dues collected, prizes configured, and LeagueSafe links in place.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {activeBuckets.map(bucket => {
+                const Icon = bucket.icon;
                 return (
-                  <div
-                    key={tier}
-                    className={`group relative rounded-xl border ${cfg.glowBorder} ${cfg.gradientBg} overflow-hidden transition-all duration-200 hover:-translate-y-px`}
-                    data-testid={`zone-card-${tier}`}
-                  >
-                    {/* Header row */}
-                    <div className="px-3.5 pt-3 pb-2 flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg.iconBg}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <h4 className={`text-[13px] font-bold uppercase tracking-wider ${cfg.accentText} leading-none`}>{cfg.label}</h4>
-                          <span className="text-[8.5px] uppercase tracking-wider text-muted-foreground/70 leading-none mt-px">· {cfg.pillText}</span>
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 inline-flex items-center justify-center min-w-[28px] h-[22px] px-2 rounded-full text-[11.5px] font-bold tabular-nums leading-none ${cfg.countPill}`}
-                        data-testid={`zone-count-${tier}`}
-                      >
-                        {names.length}
+                  <div key={bucket.key} className="rounded-xl border border-border/50 bg-muted/10 overflow-hidden flex flex-col" data-testid={`bucket-${bucket.key}`}>
+                    <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
+                      <Icon className={`w-3.5 h-3.5 ${bucket.accent}`} />
+                      <h4 className="text-[12px] font-bold flex-1 min-w-0 truncate">{bucket.title}</h4>
+                      <span className={`shrink-0 inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full text-[11px] font-bold tabular-nums ${bucket.accent} bg-foreground/[0.04] border border-border/40`} data-testid={`bucket-count-${bucket.key}`}>
+                        {bucket.leagues.length}
                       </span>
                     </div>
-
-                    {/* Strategy text */}
-                    <p className="px-3.5 text-[11.5px] text-foreground/70 leading-snug">
-                      {cfg.description}
-                    </p>
-
-                    {/* League list (or empty state) */}
-                    <div className="px-3.5 mt-2.5 mb-3 min-h-[58px]">
-                      {hasLeagues ? (
-                        <ul className="space-y-1" data-testid={`zone-league-list-${tier}`}>
-                          {names.map(n => (
-                            <li key={n} className="flex items-center gap-2 text-[11.5px] text-foreground/90 truncate">
-                              <span className={`w-1.5 h-1.5 rounded-full ${cfg.accentDot} shrink-0`} />
-                              <span className="truncate">{n}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div
-                          className="h-full flex items-center justify-center text-center px-2 py-3 rounded-md border border-dashed border-border/40 bg-foreground/[0.015]"
-                          data-testid={`zone-empty-${tier}`}
-                        >
-                          <p className="text-[10.5px] text-muted-foreground/80 leading-snug italic">
-                            {cfg.emptyText}
-                          </p>
-                        </div>
+                    <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                      {bucket.leagues.slice(0, 6).map(lg => (
+                        <button key={lg.leagueId}
+                          onClick={() => openLeague(lg.leagueId)}
+                          className={ACTION_CHIP}
+                          data-testid={`bucket-league-${bucket.key}-${lg.leagueId}`}>
+                          {lg.name}
+                        </button>
+                      ))}
+                      {bucket.leagues.length > 6 && (
+                        <span className="px-2 py-0.5 text-[10.5px] text-muted-foreground">+{bucket.leagues.length - 6} more</span>
                       )}
                     </div>
-
-                    {/* CTA strip */}
-                    {hasLeagues && (
-                      <div className={`px-3.5 py-2 ${cfg.ctaBg} flex items-center justify-between gap-2 transition-colors`}>
-                        <span className="text-[9.5px] uppercase tracking-wider opacity-70">{cfg.ctaLabel}</span>
-                        <span className="text-[11.5px] font-semibold">{cfg.ctaText} →</span>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => openLeague(bucket.leagues[0].leagueId)}
+                      className="mt-auto px-3 py-1.5 border-t border-border/40 flex items-center justify-between gap-2 text-[11px] font-semibold text-[#d4af37] hover:bg-muted/40 transition-colors"
+                      data-testid={`bucket-cta-${bucket.key}`}>
+                      {bucket.cta}
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
                   </div>
                 );
               })}
             </div>
+          )}
+        </Card>
+      )}
 
-            {groups.unknown.length > 0 && (
-              <p className="text-[10.5px] text-muted-foreground/80 text-center">
-                {groups.unknown.length} league{groups.unknown.length > 1 ? "s" : ""} still loading standings…
-              </p>
-            )}
-          </Card>
-        );
-      })()}
-
-      {/* Per-League Table */}
-      {visibleLeagues.length > 0 && (() => {
-        const ORDER: (Tier | "unknown")[] = ["contender", "bubble", "rebuild", "unknown"];
-        const ignoredLeagues: typeof visibleLeagues = [];
-        const activeLeagues = visibleLeagues.filter(l => {
-          const f = getFinance(l.leagueId);
-          if (f.ignored) { ignoredLeagues.push(l); return false; }
-          return true;
-        });
-        const sortedLeagues = [...activeLeagues].sort((a, b) => {
-          const ta = ORDER.indexOf(classifyTeam(standings[a.leagueId]));
-          const tb = ORDER.indexOf(classifyTeam(standings[b.leagueId]));
-          return ta - tb;
-        });
-
-        // Desktop-only grid template. Mobile uses a separate flex-based row
-        // (see the md:hidden button below); applying `grid` here unconditionally
-        // would race with `hidden md:grid` for the `display` property, so we
-        // keep only the column template here and apply `md:grid` at use sites.
-        const COL = "grid-cols-[minmax(160px,1fr)_72px_60px_72px_56px_68px_60px_52px_52px_52px_88px_28px]";
-
-        return (
-          <>
-            <Card className="overflow-hidden">
-              {/* On mobile the rows render as a flex list (no horizontal scroll);
-                  the desktop grid + min-width only kicks in at md and up. */}
-              <div className="md:overflow-x-auto">
-              <div className="md:min-w-[820px]">
-              {/* Table header — desktop only. Mobile uses a card-list layout
-                  that doesn't need a header row. */}
+      {/* League table */}
+      {visibleLeagues.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="md:overflow-x-auto">
+            <div className="md:min-w-[920px]">
+              {/* Desktop header */}
               <div className={`hidden md:grid ${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">League</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tier</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">RNK</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">REC</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">PF</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">PLYF%</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Buy-in</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥇</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥈</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">🥉</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Exp. P&L</span>
-                <span />
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Format</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Teams</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Buy-In</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Paid</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Outstanding</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Prize Pool</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">LeagueSafe</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Status</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Actions</span>
               </div>
+              {visibleLeagues.map(renderLeagueRow)}
+            </div>
+          </div>
+        </Card>
+      )}
 
-              {/* League rows */}
-              {sortedLeagues.map(league => {
-                const f = getFinance(league.leagueId);
-                const s = standings[league.leagueId];
-                const calc = calcPL(league.leagueId);
-                const isExpanded = expanded === league.leagueId;
-                const tier = classifyTeam(s);
-                const tierCfg = tier !== "unknown" ? TIER_CONFIG[tier] : null;
-                const gamesPlayed = s ? s.wins + s.losses + s.ties : 0;
-                const hasOddsData = s && !s.loading && !s.error && s.rank > 0 && (gamesPlayed > 0 || s.valueRank > 0);
-                const playoffPct = hasOddsData ? approxPlayoffPct(s) : null;
-                const prize1 = f.prizes.find(p => p.place === 1)?.amount;
-                const prize2 = f.prizes.find(p => p.place === 2)?.amount;
-                const prize3 = f.prizes.find(p => p.place === 3)?.amount;
-                const recordLabel = s && !s.loading && !s.error && gamesPlayed > 0
-                  ? `${s.wins}-${s.losses}${s.ties > 0 ? `-${s.ties}` : ""}`
-                  : null;
-                const rankLabel = s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0
-                  ? `#${s.rank}/${s.totalTeams}`
-                  : null;
-                const plDisplay = calc
-                  ? `${calc.pl >= 0 ? "+" : ""}${fmtDollar(Math.round(calc.pl))}`
-                  : null;
-                return (
-                  <div key={league.leagueId} className={`border-b border-border/20 last:border-b-0 ${isExpanded ? "bg-muted/10" : ""}`} data-testid={`finance-card-${league.leagueId}`}>
-                    {/* ── Mobile row (compact list, no horizontal scroll) ──
-                        Avatar + name/sub-line take the bulk of the width; the
-                        right cluster shows tier pill + P&L + chevron. Record
-                        hides under 430px so the row stays single-line. */}
-                    <button
-                      className="md:hidden w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/30 transition-colors text-left"
-                      onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
-                      data-testid={`toggle-finance-mobile-${league.leagueId}`}
-                    >
-                      <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
-                        <Trophy className="w-4 h-4 text-[#0b3a7a] dark:text-blue-400" />
-                        {league.avatar && (
-                          <img src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`} alt={league.name}
-                            className="absolute inset-0 w-full h-full object-cover"
-                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-[13px] leading-tight truncate">{league.name}</p>
-                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-tight mt-0.5 min-w-0">
-                          <span className="truncate">{league.totalRosters}T · {league.scoringFormat} {league.format}</span>
-                          {rankLabel && (
-                            <>
-                              <span className="flex-shrink-0">·</span>
-                              <span className={`flex-shrink-0 font-medium ${s.inPlayoffs ? "text-emerald-500 dark:text-emerald-400" : "text-foreground/70"}`}>{rankLabel}</span>
-                            </>
-                          )}
-                          {recordLabel && (
-                            <>
-                              <span className="flex-shrink-0 hidden min-[430px]:inline">·</span>
-                              <span className="flex-shrink-0 hidden min-[430px]:inline font-medium text-foreground/70">{recordLabel}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {tierCfg ? (
-                          <span className={`text-[10px] font-bold leading-none px-1.5 py-1 rounded-full border whitespace-nowrap ${tierCfg.badgeCls}`}>{tierCfg.short}</span>
-                        ) : s?.loading ? (
-                          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-                        ) : null}
-                        {plDisplay ? (
-                          <span className={`text-[13px] font-bold whitespace-nowrap ${plColor(calc!.pl)}`}>{plDisplay}</span>
-                        ) : f.isFree ? (
-                          <span className="text-[10px] font-semibold text-sky-500 whitespace-nowrap">Free</span>
-                        ) : f.buyIn > 0 ? (
-                          <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">{fmtDollar(f.buyIn)}</span>
-                        ) : null}
-                        {isExpanded
-                          ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-                          : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                      </div>
-                    </button>
-
-                    {/* ── Desktop row (existing grid layout, md+ only) ── */}
-                    <button
-                      className={`hidden md:grid w-full ${COL} gap-x-2 px-4 py-3 hover:bg-muted/30 transition-colors text-left items-center`}
-                      onClick={() => setExpanded(isExpanded ? null : league.leagueId)}
-                      data-testid={`toggle-finance-${league.leagueId}`}
-                    >
-                      {/* League name + settings */}
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
-                          <Trophy className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
-                          {league.avatar && (
-                            <img src={`https://sleepercdn.com/avatars/thumbs/${league.avatar}`} alt={league.name}
-                              className="absolute inset-0 w-full h-full object-cover"
-                              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                              data-testid={`img-league-avatar-${league.leagueId}`} />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-xs truncate leading-tight">{league.name}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{league.totalRosters}T · {league.scoringFormat} {league.format} · {league.season}</p>
-                        </div>
-                      </div>
-
-                      {/* Tier */}
-                      <div>
-                        {tierCfg ? (
-                          <span className={`text-[10px] font-bold ${tierCfg.headerCls}`}>{tierCfg.short}</span>
-                        ) : s?.loading ? (
-                          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">—</span>
-                        )}
-                      </div>
-
-                      {/* Standing */}
-                      <div className="text-center">
-                        {s && !s.loading && !s.error && s.rank > 0 && gamesPlayed > 0 ? (
-                          <span className={`text-xs font-semibold ${s.inPlayoffs ? "text-emerald-500 dark:text-emerald-400" : ""}`}>#{s.rank}/{s.totalTeams}</span>
-                        ) : s?.loading ? <span className="text-[10px] text-muted-foreground">…</span>
-                          : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* Record */}
-                      <div className="text-center">
-                        {s && !s.loading && !s.error && gamesPlayed > 0 ? (
-                          <span className="text-xs font-medium">{s.wins}-{s.losses}{s.ties > 0 ? `-${s.ties}` : ""}</span>
-                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* Pts For */}
-                      <div className="text-center">
-                        {s && !s.loading && !s.error && s.ptsFor > 0 ? (
-                          <span className="text-xs font-medium">{s.ptsFor.toFixed(0)}</span>
-                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* Playoff Odds */}
-                      <div className="text-center">
-                        {playoffPct !== null ? (
-                          <span className={`text-xs font-bold ${playoffPct >= 50 ? "text-emerald-500 dark:text-emerald-400" : playoffPct <= 20 ? "text-red-500 dark:text-red-400" : "text-amber-500 dark:text-amber-400"}`}>~{playoffPct}%</span>
-                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* Buy-in */}
-                      <div className="text-right">
-                        {f.isFree ? <span className="text-[10px] text-sky-500 font-semibold">Free</span>
-                          : f.buyIn > 0 ? <span className="text-xs font-medium">{fmtDollar(f.buyIn)}</span>
-                          : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* 1st */}
-                      <div className="text-right">
-                        {prize1 ? <span className="text-xs font-medium">{fmtDollar(prize1)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* 2nd */}
-                      <div className="text-right">
-                        {prize2 ? <span className="text-xs font-medium">{fmtDollar(prize2)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* 3rd */}
-                      <div className="text-right">
-                        {prize3 ? <span className="text-xs font-medium">{fmtDollar(prize3)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* Exp. P&L */}
-                      <div className="text-right flex items-center justify-end gap-1">
-                        {saving[league.leagueId] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-                        {saved[league.leagueId] && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                        {calc ? (
-                          <span className={`text-xs font-bold ${plColor(calc.pl)}`}>{calc.pl >= 0 ? "+" : ""}{fmtDollar(Math.round(calc.pl))}</span>
-                        ) : <span className="text-[10px] text-muted-foreground">—</span>}
-                      </div>
-
-                      {/* Chevron */}
-                      <div className="flex justify-end">
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <FinanceLeagueEditor
-                        leagueId={league.leagueId}
-                        finance={f}
-                        standing={s}
-                        calc={calc}
-                        onUpdate={updateFinance}
-                        onAddPrize={addPrize}
-                        onRemovePrize={removePrize}
-                        onUpdatePrize={updatePrize}
-                      />
-                    )}
+      {/* Hidden leagues */}
+      {hiddenLeagues.length > 0 && (
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center gap-2 text-muted-foreground/60">
+            <EyeOff className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide">Hidden from Summary ({hiddenLeagues.length})</span>
+            <div className="flex-1 h-px bg-border/30" />
+          </div>
+          {hiddenLeagues.map(league => {
+            const isExpanded = expanded === league.leagueId;
+            return (
+              <Card key={league.leagueId} className="overflow-hidden opacity-60 hover:opacity-90 transition-opacity" data-testid={`finance-card-hidden-${league.leagueId}`}>
+                <button className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => toggleExpand(league.leagueId)}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <EyeOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm text-muted-foreground truncate">{league.name}</span>
+                    <StatusPill status="hidden" />
                   </div>
-                );
-              })}
-              </div>
-              </div>
-            </Card>
-
-            {/* Hidden leagues */}
-            {ignoredLeagues.length > 0 && (
-              <div className="space-y-2 pt-2">
-                <div className="flex items-center gap-2 text-muted-foreground/60">
-                  <EyeOff className="w-3.5 h-3.5" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wide">Hidden Leagues ({ignoredLeagues.length})</span>
-                  <div className="flex-1 h-px bg-border/30" />
-                </div>
-                {ignoredLeagues.map(league => {
-                  const f = getFinance(league.leagueId);
-                  const isExpanded = expanded === league.leagueId;
-                  return (
-                    <Card key={league.leagueId} className="overflow-hidden opacity-50 hover:opacity-80 transition-opacity" data-testid={`finance-card-hidden-${league.leagueId}`}>
-                      <button className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => setExpanded(isExpanded ? null : league.leagueId)}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <EyeOff className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground truncate">{league.name}</span>
-                        </div>
-                        {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                      </button>
-                      {isExpanded && (
-                        <div className="border-t border-border/30 px-4 py-3">
-                          <button onClick={() => updateFinance(league.leagueId, { ignored: false })}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-                            data-testid={`button-unhide-${league.leagueId}`}>
-                            <Eye className="w-3 h-3" /> Unhide League
-                          </button>
-                        </div>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        );
-      })()}
-
+                  {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                </button>
+                {isExpanded && (
+                  <div className="border-t border-border/30 px-4 py-3">
+                    <button onClick={() => updateFinance(league.leagueId, { ignored: false })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                      data-testid={`button-unhide-${league.leagueId}`}>
+                      <Eye className="w-3 h-3" /> Unhide from Summary
+                    </button>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

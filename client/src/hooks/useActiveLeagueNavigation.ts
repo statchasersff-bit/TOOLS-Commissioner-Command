@@ -5,12 +5,11 @@ import { useSleeper } from "@/contexts/SleeperContext";
 // Module keys mapped to the existing /:tab/:sub route segments. To add support
 // for a new module's league view, add an entry here — call sites never need to
 // know the route shape.
-export type ModuleKey = "waivers" | "trades" | "finance" | "lineup";
+export type ModuleKey = "trades" | "finance" | "lineup";
 
 const MODULE_ROUTES: Record<ModuleKey, { tab: string; sub: string }> = {
-  waivers: { tab: "portfolio", sub: "waiver-command" },
-  trades:  { tab: "trade-center", sub: "trade-database" },
-  finance: { tab: "portfolio", sub: "finance" },
+  trades:  { tab: "trade-center", sub: "trade-review" },
+  finance: { tab: "portfolio", sub: "finances" },
   lineup:  { tab: "portfolio", sub: "lineup-command" },
 };
 

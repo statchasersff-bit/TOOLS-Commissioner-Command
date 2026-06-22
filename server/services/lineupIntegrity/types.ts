@@ -16,7 +16,13 @@
 export interface LineupIntegritySettings {
   enableEmptySlotChecks: boolean;
   enableByeStarterChecks: boolean;
+  /** Legacy master toggle for OUT/IR/doubtful; the three granular flags below
+   *  fall back to it when unset. Still read by older settings rows. */
   enableInactiveStarterChecks: boolean;
+  enableOutStarterChecks: boolean;
+  enableIrStarterChecks: boolean;
+  enableDoubtfulStarterChecks: boolean;
+  enableUnchangedLineupChecks: boolean;
   enableSuspiciousBenchingChecks: boolean;
   enableTankingRiskChecks: boolean;
 
@@ -32,6 +38,7 @@ export interface LineupIntegritySettings {
 
   ignoreLineupChecksInOffseason: boolean;
   ignoreLineupChecksForBestBall: boolean;
+  ignoreEliminatedTeams: boolean;
 
   autoCreateAlerts: boolean;
   autoCreateStrikes: boolean;
@@ -41,6 +48,10 @@ export const DEFAULT_LINEUP_INTEGRITY_SETTINGS: LineupIntegritySettings = {
   enableEmptySlotChecks: true,
   enableByeStarterChecks: true,
   enableInactiveStarterChecks: true,
+  enableOutStarterChecks: true,
+  enableIrStarterChecks: true,
+  enableDoubtfulStarterChecks: true,
+  enableUnchangedLineupChecks: false,
   enableSuspiciousBenchingChecks: true,
   enableTankingRiskChecks: true,
 
@@ -56,6 +67,7 @@ export const DEFAULT_LINEUP_INTEGRITY_SETTINGS: LineupIntegritySettings = {
 
   ignoreLineupChecksInOffseason: true,
   ignoreLineupChecksForBestBall: true,
+  ignoreEliminatedTeams: false,
 
   autoCreateAlerts: true,
   autoCreateStrikes: false,
@@ -182,6 +194,7 @@ export type LineupAlertType =
   | "inactive_starter"
   | "ir_starter"
   | "doubtful_starter"
+  | "unchanged_lineup"
   | "suspicious_benching"
   | "large_optimality_gap"
   | "repeat_lineup_issue"

@@ -531,41 +531,40 @@ export const NAV_CONFIG: MainTabConfig[] = [
     id: "portfolio",
     label: "Command Center",
     subTabs: [
-      { id: "portfolio-summary", label: "My Portfolio" },
+      { id: "portfolio-summary", label: "My Leagues" },
+      { id: "finances", label: "Finances" },
       { id: "lineup-command", label: "Lineup Command" },
-      { id: "waiver-command", label: "Waiver Command" },
+    ],
+  },
+  {
+    id: "lineup-integrity",
+    label: "Lineups",
+    subTabs: [
+      { id: "lineup-integrity", label: "All Leagues" },
+      { id: "league-audit", label: "Weekly Audit" },
     ],
   },
   {
     id: "league-analyzer",
     label: "League Analyzer",
     subTabs: [
-      { id: "power-rankings", label: "Rankings" },
-      { id: "roster-comparison", label: "Compare" },
-      { id: "playoff-calculator", label: "Playoff Calculator" },
-      { id: "transactions", label: "Transactions" },
+      { id: "league-activity", label: "League Activity" },
     ],
   },
   {
     id: "trade-center",
     label: "Trade Center",
     subTabs: [
-      { id: "trade-sync",          label: "My Trades"     },
-      { id: "trade-database",     label: "Database"      },
-      { id: "positional-analysis", label: "Finder" },
       { id: "trade-calculator", label: "Calculator" },
-      { id: "trade-block", label: "Intel" },
+      { id: "trade-review", label: "Review Center" },
     ],
   },
   {
     id: "league-market",
     label: "Research",
     subTabs: [
-      { id: "position-stats", label: "Advanced Stats" },
-      { id: "value-finder", label: "Value Finder" },
       { id: "user-search", label: "User Search" },
       { id: "market-value", label: "Market Value" },
-      { id: "analysis", label: "Resources" },
     ],
   },
   {

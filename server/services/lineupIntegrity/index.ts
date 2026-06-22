@@ -21,5 +21,7 @@ export {
   getLatestWeek,
 } from "./lineupIntegrityQueries";
 export { issueStrike, updateStrike, listStrikes } from "./strikeService";
+export { getLeagueWeekAudit, appendAuditEntry, listAuditLog } from "./lineupAuditView";
+export type { LeagueWeekAudit, AuditIssue, AuditMatchup, AuditTeam, AuditLogEntry } from "./lineupAuditView";
 export { buildCopyMessages, RECOMMENDED_POLICY_TEXT } from "./lineupIntegritySummary";
 export { DEFAULT_LINEUP_INTEGRITY_SETTINGS } from "./types";

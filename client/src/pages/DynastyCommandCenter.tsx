@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, startTransition, Component, type ReactNode, type ErrorInfo } from "react";
 
-// Lightweight error boundary isolating TradeDatabase so a render crash there
-// never takes down the whole Dynasty Command Center.
+// Lightweight error boundary isolating Trade Center surfaces (e.g. Trade Review)
+// so a render crash there never takes down the whole Dynasty Command Center.
 class TradeSectionBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(e: Error) { return { error: e }; }
@@ -44,7 +44,7 @@ import { FEATURES } from "@/config/features";
 import type { League, Team } from "@/types";
 import { fetchSleeperLeagueFull } from "@/lib/sleeperApi";
 import { DataDiagnostics } from "@/components/DataDiagnostics";
-import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle, Eye, Unlink, Star, Settings, Shield } from "lucide-react";
+import { LayoutDashboard, Loader2, Lock, Check, User, RefreshCw, AlertCircle, Wifi, WifiOff, ChevronDown, LogOut, Trophy, ArrowRightLeft, TrendingUp, Zap, X, MessageSquare, HelpCircle, Eye, Unlink, Star, Settings } from "lucide-react";
 import { AccessGate } from "@/components/AccessGate";
 import { UpgradeFlow } from "@/components/UpgradeFlow";
 import { resolveAccess } from "@/config/moduleAccess";
@@ -63,34 +63,23 @@ const ManagerPage       = lazy(() => import("@/pages/ManagerPage"));
 const MatchupDetail     = lazy(() => import("@/pages/MatchupDetail"));
 const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
-const WaiverCommand     = lazy(() => import("./tabs/WaiverCommand"));
-const DashboardSnapshot = lazy(() => import("./tabs/Dashboard").then(m => ({ default: m.DashboardSnapshot })));
-const RosterComparison  = lazy(() => import("./tabs/LeagueAnalyzer").then(m => ({ default: m.RosterComparison })));
-const PlayoffCalculator = lazy(() => import("./tabs/PlayoffCalculator").then(m => ({ default: m.PlayoffCalculator })));
-const Transactions      = lazy(() => import("./tabs/Transactions"));
+const FinanceTab        = lazy(() => import("./tabs/FinanceTab").then(m => ({ default: m.FinanceTab })));
 const CommandersReport  = lazy(() => import("./tabs/CommandersReport").then(m => ({ default: m.CommandersReport })));
-const TradeBlockScanner    = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeBlockScanner })));
 const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
-const TradeDatabase        = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeDatabase })));
 const TradeReviewCenter    = lazy(() => import("./tabs/TradeReviewCenter").then(m => ({ default: m.TradeReviewCenter })));
-const TradeSync         = lazy(() => import("./tabs/TradeSync"));
-const PositionalAnalysis= lazy(() => import("./tabs/PositionalAnalysis").then(m => ({ default: m.PositionalAnalysis })));
 const MarketValue       = lazy(() => import("./tabs/LeagueMarket").then(m => ({ default: m.MarketValue })));
-const ValueFinder = lazy(() => import("./tabs/ValueFinder").then(m => ({ default: m.ValueFinder })));
-const Analysis          = lazy(() => import("./tabs/Analysis"));
 const UserSearch        = lazy(() => import("./tabs/UserSearch"));
 const LiveDraft         = lazy(() => import("./tabs/LiveDraft"));
 const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
-const PositionStats     = lazy(() => import("./tabs/PositionStats"));
 const DraftCommand      = lazy(() => import("./tabs/DraftCommand").then(m => ({ default: m.DraftCommand })));
 const DraftAvailability = lazy(() => import("./tabs/DraftAvailability").then(m => ({ default: m.DraftAvailability })));
 const PickTracker       = lazy(() => import("./tabs/PickTracker").then(m => ({ default: m.PickTracker })));
 const AboutPage         = lazy(() => import("@/components/AboutModal").then(m => ({ default: m.AboutPage })));
 const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
-const CommissionerCommandPage  = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.CommissionerCommandPage })));
-const CommissionerActivity     = lazy(() => import("./tabs/CommissionerActivity"));
-const CommissionerCommand      = lazy(() => import("./tabs/CommissionerCommand"));
+const CommissionerActivity        = lazy(() => import("./tabs/CommissionerActivity"));
+const CommissionerLineupIntegrity = lazy(() => import("./tabs/CommissionerLineupIntegrity"));
+const LeagueLineupAudit        = lazy(() => import("./tabs/LeagueLineupAudit"));
 const ManageAccount            = lazy(() => import("./tabs/ManageAccount").then(m => ({ default: m.ManageAccount })));
 const SettingsPage             = lazy(() => import("./tabs/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const TermsPage         = lazy(() => import("@/components/LegalModals").then(m => ({ default: m.TermsPage })));
@@ -130,12 +119,75 @@ function getInitialState(pathTab?: string, pathSub?: string) {
     requestedSub = "portfolio-summary";
   }
 
+  // Legacy redirect — the standalone "Commissioner Command" module (logo menu)
+  // was folded into the Command Center module as sub-tabs. Map old URLs / saved
+  // state to the League Activity sub-tab.
+  if (requestedTab === "commissioner-command") {
+    requestedTab = "league-analyzer";
+    requestedSub = "league-activity";
+  }
+
+  // League Activity moved from the Command Center module (portfolio) to the
+  // League Analyzer module. Remap stale URLs / saved state to its new home.
+  if (requestedTab === "portfolio" && requestedSub === "league-activity") {
+    requestedTab = "league-analyzer";
+  }
+
+  // Lineup Integrity (cross-league dashboard) was promoted out of the Command
+  // Center module into its own top-level module. Remap stale URLs / saved state.
+  if (requestedTab === "portfolio" && requestedSub === "lineup-integrity") {
+    requestedTab = "lineup-integrity";
+  }
+
+  // The per-league weekly audit moved from the League Analyzer module into the
+  // Lineups module (as the "Weekly Audit" sub-tab). Remap stale URLs / saved state.
+  if (requestedTab === "league-analyzer" && requestedSub === "lineup-integrity") {
+    requestedTab = "lineup-integrity";
+    requestedSub = "league-audit";
+  }
+
   // Draft module temporarily hidden — see FEATURES.SHOW_DRAFT_MODULE.
   // Any stale URL/saved state that targets `draft` falls back to portfolio
   // so the user isn't dropped on a nav-less, unrenderable tab.
   if (!FEATURES.SHOW_DRAFT_MODULE && requestedTab === "draft") {
     requestedTab = "portfolio";
     requestedSub = "portfolio-summary";
+  }
+
+  // Removed Research sub-tabs — Advanced Stats (position-stats), Value Finder
+  // (value-finder), and Resources (analysis) were retired. Send any stale URL /
+  // saved state to the Research landing so the user isn't dropped on a nav-less,
+  // unrenderable sub-tab.
+  if (
+    requestedTab === "league-market" &&
+    ["position-stats", "value-finder", "analysis"].includes(requestedSub)
+  ) {
+    requestedSub = "user-search";
+  }
+
+  // Removed League Analyzer sub-tabs — Rankings (power-rankings), Compare
+  // (roster-comparison), and Playoff Calculator (playoff-calculator) were
+  // retired. Transactions also moved to a sub-tab inside League Activity. Send
+  // any stale URL / saved state to League Activity so the user isn't dropped on
+  // a nav-less, unrenderable sub-tab.
+  if (
+    requestedTab === "league-analyzer" &&
+    ["power-rankings", "roster-comparison", "playoff-calculator", "transactions"].includes(requestedSub)
+  ) {
+    requestedSub = "league-activity";
+  }
+
+  // Review Center now lives in the Trade Center module. Remap stale URLs /
+  // saved state (it previously lived under League Analyzer) to its new home.
+  if (requestedTab === "league-analyzer" && requestedSub === "trade-review") {
+    requestedTab = "trade-center";
+  }
+
+  // Removed Trade Center sub-tab — Intel (trade-block) was retired. Send any
+  // stale URL / saved state to the Calculator so the user isn't dropped on a
+  // nav-less, unrenderable sub-tab.
+  if (requestedTab === "trade-center" && requestedSub === "trade-block") {
+    requestedSub = "trade-calculator";
   }
 
   return {
@@ -164,14 +216,8 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     const t = setTimeout(() => {
       p(() => import("./tabs/LiveDraft"));
       p(() => import("./tabs/LeagueAnalyzer"));
-      p(() => import("./tabs/PlayoffCalculator"));
       p(() => import("./tabs/Transactions"));
-      p(() => import("./tabs/PositionalAnalysis"));
       p(() => import("./tabs/LeagueMarket"));
-      p(() => import("./tabs/Analysis"));
-      p(() => import("./tabs/PositionStats"));
-      p(() => import("./tabs/WaiverCommand"));
-      p(() => import("./tabs/TradeSync"));
       p(() => import("./tabs/LineupCommand"));
       p(() => import("./tabs/DraftAvailability"));
       p(() => import("./tabs/PickTracker"));
@@ -188,6 +234,8 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
   const [activeMainTab, setActiveMainTab] = useState(initial.tab);
   const [activeSubTab, setActiveSubTab] = useState(initial.sub);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  // Week to deep-link into when opening a league from the All Leagues audit view.
+  const [liInitialWeek, setLiInitialWeek] = useState<number | undefined>(undefined);
   const [fetchedLeague, setFetchedLeague] = useState<{ league: League; userTeamId: string | null } | null>(null);
   const [isLeagueLoading, setIsLeagueLoading] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -214,7 +262,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
   // Single source of truth for "which league are we looking at?" — lives in
   // SleeperContext so the header, every module page, and any future
   // league-specific tool all read the same value. The header dropdown writes
-  // to it; modules (e.g. WaiverCommand) also write to it on row clicks via
+  // to it; modules (e.g. LineupCommand) also write to it on row clicks via
   // useActiveLeagueNavigation. Persistence is handled inside SleeperContext.
   const selectedLeagueId = sleeper.activeLeagueId;
 
@@ -548,7 +596,6 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     if (activeMainTab === "manage-account") return <ManageAccount />;
     if (activeMainTab === "settings") return <SettingsPage initialTab={activeSubTab === "leagues" ? "leagues" : "general"} />;
     if (activeMainTab === "redraft-command") return <RedraftCommandPage onBack={() => handleMainTabChange("portfolio")} />;
-    if (activeMainTab === "commissioner-command") return <CommissionerCommand league={league} onBack={() => handleMainTabChange("portfolio")} />;
     if (activeMainTab === "terms") return <TermsPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
@@ -576,38 +623,36 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
         case "portfolio:connect":          return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:lineup-command":   return <LineupCommand />;
         case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} />;
-        case "portfolio:waiver-command":   return <WaiverCommand />;
+        case "portfolio:finances":         return <FinanceTab />;
         default:                           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
     }
 
-    // trade-sync doesn't need a selected league
-    if (activeMainTab === "trade-center" && activeSubTab === "trade-sync") {
-      return <TradeSync onNavigate={navigateToSubTab} />;
+    // Lineups → All Leagues — standalone module (cross-league dashboard). A
+    // Commissioner Command surface that self-resolves the commissioner's
+    // leagues (no single active league required), so it renders above the
+    // active-league guard. The "View" button deep-links into the per-league
+    // audit under Lineups → Weekly Audit.
+    if (activeMainTab === "lineup-integrity" && activeSubTab === "lineup-integrity") {
+      return (
+        <CommissionerLineupIntegrity
+          mode="multi"
+          onOpenLeague={(id, week) => { sleeper.setActiveLeague(id); setLiInitialWeek(week); navigateToSubTab("lineup-integrity", "league-audit"); }}
+        />
+      );
     }
 
-    // position-stats is fully self-contained (local bundled data, no Sleeper API)
-    if (activeMainTab === "league-market" && activeSubTab === "position-stats") {
-      return <PositionStats />;
+    // League Activity is a Commissioner Command surface that self-resolves the
+    // commissioner's leagues (cross-league, no single active league required),
+    // so it renders above the active-league guard like User Search.
+    if (activeMainTab === "league-analyzer" && activeSubTab === "league-activity") {
+      return <CommissionerActivity />;
     }
 
     // User Search is a self-contained Sleeper username lookup — no league/login
     // required, so it renders for guests above the active-league guard.
     if (activeMainTab === "league-market" && activeSubTab === "user-search") {
       return <UserSearch />;
-    }
-
-    // Resources (analysis) is self-contained — no league/Sleeper required, so
-    // it renders for guests too. Must sit above the active-league guard below.
-    if (activeMainTab === "league-market" && activeSubTab === "analysis") {
-      return <Analysis />;
-    }
-
-    // Value Finder runs on the bundled value model (no league/Sleeper
-    // required), so it renders above the active-league guard for guests too.
-    // The former Market Inefficiencies views now live inside Value Finder.
-    if (activeMainTab === "league-market" && activeSubTab === "value-finder") {
-      return <ValueFinder />;
     }
 
     // Trade Calculator has a guest-accessible "Quick" mode (no login/league), so
@@ -626,18 +671,10 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
 
     const key = `${activeMainTab}:${activeSubTab}`;
     switch (key) {
-      case "league-analyzer:power-rankings":     return <DashboardSnapshot league={league} userTeam={userTeam} />;
-      case "league-analyzer:roster-comparison":  return <RosterComparison league={league} />;
-      case "league-analyzer:playoff-calculator": return <PlayoffCalculator />;
-      case "league-analyzer:transactions":       return <Transactions leagueId={selectedLeagueId!} />;
-      case "league-analyzer:commanders-report":  return <CommandersReport leagueId={selectedLeagueId!} leagueName={league.name} />;
-      case "trade-center:trade-database":        return <TradeSectionBoundary><TradeDatabase league={league} /></TradeSectionBoundary>;
-      case "trade-center:positional-analysis":   return <PositionalAnalysis league={league} userTeam={userTeam} />;
-      case "trade-center:trade-block":           return <TradeBlockScanner league={league} />;
+      case "lineup-integrity:league-audit":      return <TradeSectionBoundary><LeagueLineupAudit league={league} initialWeek={liInitialWeek} /></TradeSectionBoundary>;
       case "trade-center:trade-review":          return <TradeSectionBoundary><TradeReviewCenter league={league} /></TradeSectionBoundary>;
+      case "league-analyzer:commanders-report":  return <CommandersReport leagueId={selectedLeagueId!} leagueName={league.name} />;
       case "league-market:market-value":         return <MarketValue league={league} />;
-      case "league-market:analysis":             return <Analysis />;
-      case "league-market:position-stats":       return <PositionStats />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
   };
@@ -653,14 +690,10 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     // Detailed single-matchup view renders inside the shell at /matchup/:leagueId.
     if (matchupDetailLeagueId) return <MatchupDetail leagueId={matchupDetailLeagueId} embedded />;
     const access = resolveAccess(activeMainTab, activeSubTab);
-    const isTradeInbox = activeMainTab === "trade-center" && activeSubTab === "trade-sync";
     return (
       <AccessGate
         requiredAccess={access}
         onBackToReadOnly={backToReadOnly}
-        gateTitle={isTradeInbox ? "Login required to see trade inbox." : undefined}
-        gateDescription={isTradeInbox ? "Create a free StatChasers account below." : undefined}
-        showBackButton={!isTradeInbox}
       >
         {renderModule()}
       </AccessGate>
@@ -766,15 +799,6 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
                     >
                       <Zap style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
                       <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Redraft Command</span>
-                      <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: "#d4af37", background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.25)" }}>Soon</span>
-                    </button>
-                    <button
-                      onClick={() => { setLogoMenuOpen(false); handleMainTabChange("commissioner-command"); }}
-                      data-testid="button-logo-commissioner-command"
-                      className="sc-logo-menu-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150 hover:bg-white/5"
-                    >
-                      <Shield style={{ width: 14, height: 14, flexShrink: 0, color: "rgba(212,175,55,0.65)" }} />
-                      <span className="sc-logo-menu-text" style={{ fontSize: 13, fontWeight: 500, color: "rgba(203,213,225,0.55)" }}>Commissioner Command</span>
                       <span className="ml-auto flex-shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ color: "#d4af37", background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.25)" }}>Soon</span>
                     </button>
                   </div>

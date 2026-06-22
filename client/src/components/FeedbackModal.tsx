@@ -29,12 +29,10 @@ function getTabLabel(tab: string, sub: string): string {
     "league-market": "Research",
   };
   const subLabels: Record<string, string> = {
-    "portfolio-summary": "My Portfolio", "lineup-command": "Lineup Command",
-    "waiver-command": "Waiver Command", "power-rankings": "Rankings",
+    "portfolio-summary": "My Leagues", "lineup-command": "Lineup Command",
+    "power-rankings": "Rankings",
     "roster-comparison": "Compare", "transactions": "Transactions",
-    "trade-sync": "My Trades", "trade-database": "Database",
-    "positional-analysis": "Finder", "trade-calculator": "Calculator",
-    "trade-block": "Intel", "analysis": "Resources",
+    "trade-calculator": "Calculator",
     "market-value": "Market Value", "compare-players": "Compare Players",
   };
   const tabName = labels[tab] ?? tab;

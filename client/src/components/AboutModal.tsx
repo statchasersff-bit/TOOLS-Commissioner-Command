@@ -1,4 +1,4 @@
-import { Crosshair, Waves, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
+import { Crosshair, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
 
 interface FeatureDef {
   id: string;
@@ -43,20 +43,6 @@ const FEATURES: FeatureDef[] = [
     sub: "lineup-command",
   },
   {
-    id: "waiver-command",
-    category: "Portfolio",
-    title: "Waiver Command",
-    icon: Waves,
-    description: "Find the best available players across all your leagues, compare waiver targets, and submit claims through Sleeper.",
-    bullets: [
-      "Cross-league waiver wire and FAAB dashboard",
-      "Available player rankings by dynasty and redraft value",
-      "One-click waiver claim submission via Sleeper",
-    ],
-    tab: "portfolio",
-    sub: "waiver-command",
-  },
-  {
     id: "league-analyzer",
     category: "League",
     title: "League Analyzer",
@@ -87,35 +73,6 @@ const FEATURES: FeatureDef[] = [
     sub: "trade-calculator",
   },
   {
-    id: "trade-finder",
-    category: "Trade",
-    title: "Trade Finder",
-    icon: Search,
-    description: "Generates trade ideas based on your team direction, roster needs, dynasty value, redraft value, age curve, and pick capital.",
-    bullets: [
-      "Filter trade targets by position, value tier, and team need",
-      "Weighted scoring by dynasty vs. redraft value",
-      "Sorts results by most impactful acquisition for your roster",
-    ],
-    tab: "trade-center",
-    sub: "positional-analysis",
-  },
-  {
-    id: "trade-sync",
-    category: "Trade",
-    title: "My Trades",
-    icon: Inbox,
-    description: "View all your Sleeper trade offers across every league: incoming, outgoing, completed, rejected, and cancelled.",
-    bullets: [
-      "Accept, reject, or withdraw active trade offers",
-      "Counter, edit, and resend proposals",
-      "Message trade partners directly from the offer view",
-      "Full trade history with outcome tracking",
-    ],
-    tab: "trade-center",
-    sub: "trade-sync",
-  },
-  {
     id: "trade-calculator",
     category: "Trade",
     title: "Trade Calculator",
@@ -128,20 +85,6 @@ const FEATURES: FeatureDef[] = [
     ],
     tab: "trade-center",
     sub: "trade-calculator",
-  },
-  {
-    id: "trade-database",
-    category: "Trade",
-    title: "Trade Database",
-    icon: Database,
-    description: "Search and compare real trade examples from active dynasty leagues to understand the going market rate for any player.",
-    bullets: [
-      "Filter by format (SF/1QB), scoring, and league size",
-      "Player name search across thousands of real trades",
-      "Anonymized data (no team names or manager identities stored)",
-    ],
-    tab: "trade-center",
-    sub: "trade-database",
   },
   {
     id: "bulk-trade",

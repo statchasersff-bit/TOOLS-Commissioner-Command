@@ -14,6 +14,8 @@ import type {
 export interface AlertContext {
   repeatIssueCount: number;
   playoffImpactMatchup: boolean;
+  /** Starters were identical to last week despite a bye/inactive/IR starter. */
+  unchangedLineup?: boolean;
 }
 
 export function generateLineupAlerts(
@@ -56,7 +58,7 @@ export function generateLineupAlerts(
     });
   }
 
-  if (settings.enableInactiveStarterChecks && check.inactiveStarters > 0) {
+  if (settings.enableOutStarterChecks && check.inactiveStarters > 0) {
     alerts.push({
       ...base,
       alertType: "inactive_starter",
@@ -67,7 +69,7 @@ export function generateLineupAlerts(
     });
   }
 
-  if (settings.enableInactiveStarterChecks && check.irStarters > 0) {
+  if (settings.enableIrStarterChecks && check.irStarters > 0) {
     alerts.push({
       ...base,
       alertType: "ir_starter",
@@ -78,7 +80,7 @@ export function generateLineupAlerts(
     });
   }
 
-  if (settings.enableInactiveStarterChecks && check.doubtfulStarters > 0) {
+  if (settings.enableDoubtfulStarterChecks && check.doubtfulStarters > 0) {
     alerts.push({
       ...base,
       alertType: "doubtful_starter",
@@ -86,6 +88,17 @@ export function generateLineupAlerts(
       title: "Doubtful Starter",
       description: `${team} started ${plural(check.doubtfulStarters, "player")} listed as Doubtful in Week ${wk}.`,
       suggestedAction: "Informational — monitor game-day inactives.",
+    });
+  }
+
+  if (settings.enableUnchangedLineupChecks && ctx.unchangedLineup) {
+    alerts.push({
+      ...base,
+      alertType: "unchanged_lineup",
+      severity: "low",
+      title: "Unchanged Lineup",
+      description: `${team} did not change their starting lineup from last week despite a bye or inactive starter in Week ${wk}.`,
+      suggestedAction: "Possible set-and-forget — send a reminder to confirm the manager is still active.",
     });
   }
 

@@ -3,10 +3,11 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { cn } from "@/lib/utils";
 import {
   BarChart2,
-  Trophy, GitCompare, Coins, ArrowLeftRight, Database, Search,
-  Calculator, Eye, LineChart, TrendingUp, Zap, ChevronDown, BarChart3,
-  LucideIcon, Waves, Crosshair, LayoutGrid, Inbox, MessageCircle,
-  Hexagon, ClipboardList, Target, ScrollText, Scale, ListOrdered,
+  Trophy, Coins, ArrowLeftRight, Database, Search,
+  Calculator, LineChart, TrendingUp, Zap, ChevronDown,
+  LucideIcon, Crosshair, LayoutGrid, Inbox, MessageCircle,
+  Hexagon, ClipboardList, ScrollText, ListOrdered,
+  Activity, ShieldAlert,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -32,9 +33,18 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Command Center",
       items: [
-        { subId: "portfolio-summary", label: "My Portfolio",     description: "Cross-league exposure, finances & metrics",    icon: BarChart2  },
+        { subId: "portfolio-summary", label: "My Leagues",       description: "Cross-league exposure & metrics",              icon: BarChart2  },
+        { subId: "finances",          label: "Finances",         description: "Track buy-ins, prizes & ROI across leagues",   icon: Coins      },
         { subId: "lineup-command",    label: "Lineup Command",   description: "Cross-league lineup war room & swap finder",   icon: Crosshair  },
-        { subId: "waiver-command",    label: "Waiver Command",   description: "Cross-league waiver wire & FAAB dashboard",    icon: Waves      },
+      ],
+    },
+  ],
+  "lineup-integrity": [
+    {
+      title: "Lineups",
+      items: [
+        { subId: "lineup-integrity",  label: "All Leagues",  description: "Cross-league lineup checks & anti-tanking signals", icon: ShieldAlert   },
+        { subId: "league-audit",      label: "Weekly Audit", description: "Weekly audit — affected matchups, lineup issues & commissioner actions", icon: ShieldAlert   },
       ],
     },
   ],
@@ -42,10 +52,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "League Analysis",
       items: [
-        { subId: "power-rankings",     label: "Rankings",           description: "Power rankings, tiers & scouting reports",        icon: Trophy         },
-        { subId: "roster-comparison",  label: "Compare",            description: "Head-to-head roster comparison",                  icon: GitCompare     },
-        { subId: "playoff-calculator", label: "Playoff Calculator", description: "Monte Carlo playoff odds, byes & championship %", icon: Target         },
-        { subId: "transactions",       label: "Transactions",       description: "Recent adds, drops & trades league-wide",         icon: ArrowLeftRight },
+        { subId: "league-activity",    label: "League Activity",    description: "Engagement, transactions & at-risk managers",      icon: Activity },
         // TEMPORARILY HIDDEN: Commander's Report nav entry. Component, route
         // (DynastyCommandCenter "league-analyzer:commanders-report"), API, and
         // public-share page are all still in place — re-enable by uncommenting.
@@ -57,11 +64,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Trade Tools",
       items: [
-        { subId: "trade-sync",           label: "My Trades",     description: "Pending trade inbox across all your leagues",    icon: Inbox          },
-        { subId: "trade-database",      label: "Database",      description: "Search real dynasty trades by player",           icon: Database       },
-        { subId: "positional-analysis", label: "Finder",     description: "Find trade targets by position & value",      icon: Search     },
         { subId: "trade-calculator",    label: "Calculator", description: "Value-based trade evaluator",                 icon: Calculator },
-        { subId: "trade-block",         label: "Intel",      description: "Trade block activity & hot markets",          icon: Eye        },
         { subId: "trade-review",        label: "Review Center", description: "Auto-track league trades, flag risk & document commissioner reviews", icon: ClipboardList },
       ],
     },
@@ -70,11 +73,8 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Research",
       items: [
-        { subId: "position-stats",  label: "Advanced Stats",  description: "Season QB/RB/WR/TE usage, efficiency, overview", icon: BarChart3  },
-        { subId: "value-finder", label: "Value Finder", description: "Buy-low & sell-high vs production, usage, age, trends, model value & roster fit", icon: Scale },
         { subId: "user-search",     label: "User Search",     description: "Find any Sleeper user & open their profile",     icon: Search     },
         { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
-        { subId: "analysis",        label: "Resources",       description: "League trends & positional insights",           icon: LineChart  },
       ],
     },
   ],
@@ -342,6 +342,7 @@ export function MegaMenuNav({ tabs, activeTab, activeSub, setActiveTab, onNaviga
 
 const TAB_ICONS: Record<string, typeof BarChart2> = {
   portfolio: BarChart2,
+  "lineup-integrity": ShieldAlert,
   "league-analyzer": Trophy,
   "trade-center": ArrowLeftRight,
   "league-market": LineChart,
@@ -350,6 +351,7 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
 
 const TAB_SHORT_LABELS: Record<string, string> = {
   portfolio: "Home",
+  "lineup-integrity": "Lineups",
   "league-analyzer": "League",
   "trade-center": "Trades",
   "league-market": "Research",

@@ -11,3 +11,5 @@ export { scoreTrade } from "./scoreTrade";
 export { generateTradeFlags } from "./generateTradeFlags";
 export { parseTradeTransaction } from "./parseTradeTransaction";
 export { valueAssets, valueForAsset } from "./tradeValueService";
+export { getLeagueDirectory } from "./sleeperClient";
+export type { LeagueDirectory } from "./sleeperClient";

@@ -81,6 +81,7 @@ export async function getTradedPicks(leagueId: string): Promise<TradedPick[]> {
 
 export interface SleeperLeagueMeta {
   league_id: string;
+  name?: string;
   season?: string;
   settings?: Record<string, number>;
   scoring_settings?: Record<string, number>;
@@ -89,6 +90,49 @@ export interface SleeperLeagueMeta {
 
 export async function getLeague(leagueId: string): Promise<SleeperLeagueMeta> {
   return fetchJson<SleeperLeagueMeta>(`${SLEEPER_API}/league/${leagueId}`);
+}
+
+/**
+ * League display directory: league name + a roster-id → {team, manager} map.
+ * Used to label cross-league trade feeds without re-fetching per request.
+ * Cached for a few minutes since names rarely change mid-season.
+ */
+export interface LeagueDirectory {
+  leagueId: string;
+  leagueName: string;
+  rosterNames: Record<number, { teamName: string; managerName: string }>;
+}
+
+const DIRECTORY_TTL_MS = 5 * 60 * 1000;
+const directoryCache = new Map<string, { ts: number; data: LeagueDirectory }>();
+
+export async function getLeagueDirectory(leagueId: string): Promise<LeagueDirectory> {
+  const cached = directoryCache.get(leagueId);
+  if (cached && Date.now() - cached.ts < DIRECTORY_TTL_MS) return cached.data;
+
+  const [meta, rosters, users] = await Promise.all([
+    getLeague(leagueId).catch(() => null),
+    getLeagueRosters(leagueId).catch(() => [] as SleeperRosterLite[]),
+    getLeagueUsers(leagueId).catch(() => [] as SleeperLeagueUserLite[]),
+  ]);
+
+  const usersById = new Map(users.map((u) => [u.user_id, u]));
+  const rosterNames: LeagueDirectory["rosterNames"] = {};
+  for (const r of rosters) {
+    const u = r.owner_id ? usersById.get(r.owner_id) : undefined;
+    rosterNames[r.roster_id] = {
+      teamName: u?.metadata?.team_name || u?.display_name || `Team ${r.roster_id}`,
+      managerName: u?.username || u?.display_name || `Team ${r.roster_id}`,
+    };
+  }
+
+  const data: LeagueDirectory = {
+    leagueId,
+    leagueName: meta?.name || `League ${leagueId}`,
+    rosterNames,
+  };
+  directoryCache.set(leagueId, { ts: Date.now(), data });
+  return data;
 }
 
 /** Re-export the shared cached players map for the ingest pipeline. */

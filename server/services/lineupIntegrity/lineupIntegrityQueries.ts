@@ -14,6 +14,7 @@ import {
 } from "@shared/schema";
 import { SEVERITY_RANK } from "./generateLineupAlerts";
 import { buildWeeklyReport, type WeeklyReportTeam } from "./lineupIntegritySummary";
+import { getLeague, getNflState } from "../commissionerActivity/sleeperActivityApi";
 
 const n = (v: unknown): number => {
   const x = typeof v === "string" ? parseFloat(v) : (v as number);
@@ -44,6 +45,8 @@ export interface ShapedCheck {
   projectedOptimalPoints: number;
   reviewStatus: string;
   flags: string[];
+  updatedAt: string | null;
+  matchupId: number | null;
 }
 
 function shapeCheck(r: typeof commissionerLineupChecks.$inferSelect): ShapedCheck {
@@ -71,6 +74,11 @@ function shapeCheck(r: typeof commissionerLineupChecks.$inferSelect): ShapedChec
     projectedOptimalPoints: n(r.projectedOptimalPoints),
     reviewStatus: r.reviewStatus ?? "none",
     flags: (r.flags as string[]) ?? [],
+    updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : null,
+    matchupId: (() => {
+      const id = (r.rawMatchup as any)?.matchup_id;
+      return typeof id === "number" ? id : null;
+    })(),
   };
 }
 
@@ -111,6 +119,8 @@ async function countOpenAlerts(leagueId: string, season: string, week?: number):
 }
 
 export async function getOverview(leagueId: string, season: string, week: number) {
+  const nflState = await getNflState().catch(() => null);
+  const currentWeek = nflState?.display_week ?? nflState?.week ?? null;
   const checks = await loadChecks(leagueId, season, week);
   const total = checks.length;
   const cleanLineups = checks.filter((c) => c.lineupIntegrityScore >= 90).length;
@@ -160,6 +170,7 @@ export async function getOverview(leagueId: string, season: string, week: number
 
   return {
     week,
+    currentWeek,
     summary: {
       totalTeamsChecked: total,
       cleanLineups,
@@ -414,41 +425,199 @@ export async function getWeeklyReport(
 }
 
 /** Per-league aggregate row for the multi-league dashboard. */
-export async function getMultiLeagueSummary(leagueIds: string[], season: string) {
-  if (!leagueIds.length) return [];
+export type MultiLeagueStatus =
+  | "clean"
+  | "needs_review"
+  | "critical"
+  | "resolved"
+  | "best_ball_excluded"
+  | "not_started"
+  | "data_pending";
 
-  const rows = await db
-    .select()
-    .from(commissionerLineupChecks)
-    .where(and(inArray(commissionerLineupChecks.leagueId, leagueIds), eq(commissionerLineupChecks.season, season)));
+/** Map an alert severity to the commissioner-facing Action Required bucket. */
+export function alertBucket(severity: string | null): "critical" | "warning" | "info" {
+  if (severity === "critical") return "critical";
+  if (severity === "high" || severity === "medium") return "warning";
+  return "info";
+}
 
-  const alertRows = await db
-    .select()
-    .from(commissionerLineupAlerts)
-    .where(
-      and(
-        inArray(commissionerLineupAlerts.leagueId, leagueIds),
-        eq(commissionerLineupAlerts.season, season),
-        eq(commissionerLineupAlerts.status, "open"),
-      ),
+export interface MultiLeagueOptions {
+  /** Specific week to summarize for every league. */
+  week?: number | null;
+  /** Aggregate all unresolved issues across every week instead of a single week. */
+  allOpen?: boolean;
+  /** Live (current-week) mode: scope every league to the current NFL week. */
+  live?: boolean;
+}
+
+/**
+ * Cross-league commissioner audit summary. For each league, resolves the week
+ * in scope (explicit week, the league's latest scanned week, or — in allOpen
+ * mode — every week's open issues), classifies a status pill, and returns the
+ * counts + the open alerts that drive the Action Required buckets.
+ *
+ * Best-ball / not-yet-drafted leagues are surfaced (not silently dropped) using
+ * lightweight, cached Sleeper league metadata.
+ */
+export async function getMultiLeagueSummary(
+  leagueIds: string[],
+  season: string,
+  opts: MultiLeagueOptions = {},
+) {
+  if (!leagueIds.length) return { week: opts.week ?? null, currentWeek: null, availableWeeks: [], leagues: [] };
+
+  // Current NFL week drives the live-vs-completed (audit) mode split on the
+  // client. Failure-tolerant: a missing state feed just leaves it null.
+  const nflState = await getNflState().catch(() => null);
+  const currentWeek = nflState?.display_week ?? nflState?.week ?? null;
+
+  const [checkRows, alertRows] = await Promise.all([
+    db
+      .select()
+      .from(commissionerLineupChecks)
+      .where(and(inArray(commissionerLineupChecks.leagueId, leagueIds), eq(commissionerLineupChecks.season, season))),
+    db
+      .select()
+      .from(commissionerLineupAlerts)
+      .where(and(inArray(commissionerLineupAlerts.leagueId, leagueIds), eq(commissionerLineupAlerts.season, season))),
+  ]);
+
+  const checks = checkRows.map(shapeCheck);
+  const availableWeeks = Array.from(new Set(checks.map((c) => c.week)))
+    .filter((w) => w > 0)
+    .sort((a, b) => a - b);
+
+  // League metadata (best ball + draft/season status), cached + failure-tolerant.
+  const metaEntries = await Promise.all(
+    leagueIds.map(async (id) => {
+      try {
+        const lg = await getLeague(id);
+        return [id, { bestBall: Boolean(lg?.settings?.best_ball), status: String(lg?.status ?? "") }] as const;
+      } catch {
+        return [id, { bestBall: false, status: "" }] as const;
+      }
+    }),
+  );
+  const metaById = new Map(metaEntries);
+
+  // Manager / team names live on checks, not alerts — index them for lookup.
+  const nameKey = (lid: string, wk: number, rid: number) => `${lid}|${wk}|${rid}`;
+  const nameMap = new Map<string, { managerName: string | null; teamName: string | null }>();
+  for (const c of checks) nameMap.set(nameKey(c.leagueId, c.week, c.rosterId), { managerName: c.managerName, teamName: c.teamName });
+
+  const leagues = leagueIds.map((leagueId) => {
+    const meta = metaById.get(leagueId) ?? { bestBall: false, status: "" };
+    const leagueChecks = checks.filter((c) => c.leagueId === leagueId);
+    const leagueAlerts = alertRows.filter((a) => a.leagueId === leagueId);
+
+    const latestWeek = leagueChecks.reduce((m, c) => Math.max(m, c.week), 0);
+    const targetWeek = opts.allOpen
+      ? null
+      : opts.live
+        ? (currentWeek ?? (latestWeek || null))
+        : (opts.week ?? (latestWeek || null));
+    // Count fields are week-scoped; in allOpen mode fall back to the latest week.
+    const countWeek = targetWeek ?? (latestWeek || null);
+    const weekChecks = countWeek == null ? [] : leagueChecks.filter((c) => c.week === countWeek);
+
+    const inScope = (wk: number) => (opts.allOpen ? true : wk === targetWeek);
+    const openAlerts = leagueAlerts.filter((a) => a.status === "open" && inScope(a.week));
+    const resolvedAlerts = leagueAlerts.filter(
+      (a) => (a.status === "resolved" || a.status === "dismissed") && inScope(a.week),
     );
 
-  return leagueIds.map((leagueId) => {
-    const leagueChecks = rows.filter((r) => r.leagueId === leagueId).map(shapeCheck);
-    const latestWeek = leagueChecks.reduce((m, c) => Math.max(m, c.week), 0);
-    const weekChecks = leagueChecks.filter((c) => c.week === latestWeek);
-    const openAlerts = alertRows.filter((a) => a.leagueId === leagueId && a.week === latestWeek).length;
+    const critical = openAlerts.filter((a) => alertBucket(a.severity) === "critical").length;
+    const warnings = openAlerts.filter((a) => alertBucket(a.severity) === "warning").length;
+    const info = openAlerts.filter((a) => alertBucket(a.severity) === "info").length;
+    const affectedManagers = new Set(openAlerts.map((a) => a.rosterId)).size;
+
+    // Matchups impacted (post-week audit metric): distinct matchups that contain
+    // at least one roster with an open issue. Maps roster→matchup via the stored
+    // raw Sleeper matchup (matchup_id), scoped to the same week(s) as the alerts.
+    const matchupByRosterWeek = new Map<string, number | null>();
+    for (const c of leagueChecks) matchupByRosterWeek.set(`${c.week}|${c.rosterId}`, c.matchupId);
+    const impactedMatchups = new Set<string>();
+    for (const a of openAlerts) {
+      const mid = matchupByRosterWeek.get(`${a.week}|${a.rosterId}`);
+      // Key by week+matchup so the same matchup_id across weeks isn't merged.
+      if (mid != null) impactedMatchups.add(`${a.week}|${mid}`);
+    }
+    const matchupsImpacted = impactedMatchups.size;
+
     const avg = weekChecks.length
       ? Math.round(weekChecks.reduce((s, c) => s + c.lineupIntegrityScore, 0) / weekChecks.length)
       : null;
+    const emptySlots = weekChecks.reduce((s, c) => s + c.emptyStarterSlots, 0);
+    const inactiveStarters = weekChecks.reduce((s, c) => s + c.inactiveStarters + c.irStarters, 0);
+    const byeStarters = weekChecks.reduce((s, c) => s + c.byeStarters, 0);
+    const needsReview = weekChecks.filter((c) => c.reviewStatus === "needs_review").length;
+    const scanned = leagueChecks.length > 0;
+    // Most recent scan time across all of this league's checks (any week).
+    const lastScanned = leagueChecks.reduce<string | null>((latest, c) => {
+      if (!c.updatedAt) return latest;
+      return latest == null || c.updatedAt > latest ? c.updatedAt : latest;
+    }, null);
+
+    let status: MultiLeagueStatus;
+    if (meta.bestBall) status = "best_ball_excluded";
+    else if (!scanned && (meta.status === "pre_draft" || meta.status === "drafting")) status = "not_started";
+    else if (!weekChecks.length) status = "data_pending";
+    else if (critical > 0) status = "critical";
+    else if (openAlerts.length > 0 || needsReview > 0) status = "needs_review";
+    else if (resolvedAlerts.length > 0) status = "resolved";
+    else status = "clean";
+
+    const alerts = openAlerts
+      .map((a) => {
+        const nm = nameMap.get(nameKey(leagueId, a.week, a.rosterId));
+        return {
+          id: a.id,
+          leagueId,
+          week: a.week,
+          rosterId: a.rosterId,
+          managerName: nm?.managerName ?? null,
+          teamName: nm?.teamName ?? null,
+          alertType: a.alertType,
+          severity: a.severity ?? "info",
+          bucket: alertBucket(a.severity),
+          title: a.title,
+          description: a.description,
+          suggestedAction: a.suggestedAction,
+          status: a.status ?? "open",
+        };
+      })
+      .sort(
+        (x, y) =>
+          (SEVERITY_RANK[y.severity as keyof typeof SEVERITY_RANK] ?? 0) -
+          (SEVERITY_RANK[x.severity as keyof typeof SEVERITY_RANK] ?? 0),
+      );
+
     return {
       leagueId,
-      week: latestWeek || null,
+      week: opts.allOpen ? null : (targetWeek || null),
+      status,
       averageIntegrity: avg,
-      needsReview: weekChecks.filter((c) => c.reviewStatus === "needs_review").length,
-      criticalIssues: weekChecks.filter((c) => c.lineupIntegrityScore < 25 || c.emptyStarterSlots > 0).length,
-      tankingSignals: weekChecks.filter((c) => c.tankingRiskScore >= 50).length,
-      openAlerts,
+      totalIssues: openAlerts.length,
+      critical,
+      warnings,
+      info,
+      affectedManagers,
+      emptySlots,
+      inactiveStarters,
+      byeStarters,
+      needsReview,
+      resolvedThisWeek: resolvedAlerts.length,
+      bestBall: meta.bestBall,
+      lastScanned,
+      matchupsImpacted,
+      alerts,
     };
   });
+
+  const week = opts.allOpen
+    ? null
+    : opts.live
+      ? (currentWeek ?? (availableWeeks[availableWeeks.length - 1] ?? null))
+      : (opts.week ?? (availableWeeks[availableWeeks.length - 1] ?? null));
+  return { week, currentWeek, availableWeeks, leagues };
 }

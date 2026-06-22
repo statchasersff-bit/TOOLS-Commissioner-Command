@@ -43,6 +43,10 @@ export interface TradeFlag {
 export interface TradeRow {
   id: number;
   leagueId: string;
+  /** Human-readable league name, resolved server-side (null if unavailable). */
+  leagueName: string | null;
+  /** roster id → team name, for labeling trades across leagues. */
+  rosterNames: Record<number, string>;
   sleeperTransactionId: string;
   season: string | null;
   week: number | null;
@@ -144,10 +148,11 @@ export function ingestTrades(
 }
 
 export function fetchTradeFeed(
-  leagueId: string,
+  leagueId: string | string[],
   filters?: { reviewStatus?: string; risk?: string; managerRosterId?: number },
-): Promise<{ leagueId: string; trades: TradeRow[] }> {
-  const params = new URLSearchParams({ leagueId });
+): Promise<{ leagueId: string; leagueIds: string[]; trades: TradeRow[] }> {
+  const ids = (Array.isArray(leagueId) ? leagueId : [leagueId]).filter(Boolean);
+  const params = new URLSearchParams({ leagueIds: ids.join(",") });
   if (filters?.reviewStatus && filters.reviewStatus !== "all") params.set("reviewStatus", filters.reviewStatus);
   if (filters?.risk && filters.risk !== "all") params.set("risk", filters.risk);
   if (filters?.managerRosterId != null) params.set("managerRosterId", String(filters.managerRosterId));

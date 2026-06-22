@@ -24,6 +24,7 @@ import { getLineupIntegritySettings } from "./lineupIntegritySettings";
 import { buildLineupValueLookup, fantasyCalcFormatForLeague } from "./lineupProjectionService";
 import { getPlayerAvailability, type SleeperPlayerMeta } from "./playerAvailabilityService";
 import { parseSleeperLineup, getStartingSlots, countEmptyStarterSlots } from "./parseSleeperLineups";
+import { didLineupChange } from "../commissionerActivity/compareLineups";
 import { buildOptimalLineup } from "./optimalLineupService";
 import { detectSuspiciousBenchings } from "./suspiciousBenchingService";
 import { scoreLineupIntegrity } from "./scoreLineupIntegrity";
@@ -69,18 +70,15 @@ export async function ingestLineupIntegrityForLeague(
   const force = Boolean(options.forceRefresh);
   const nflState = await getNflState(force);
   const season = options.season ?? String(nflState.season ?? new Date().getFullYear());
-  const currentWeek = nflState.display_week ?? nflState.week ?? 1;
+  // The global NFL state feed still reports `season_type: "off"` (and week 0)
+  // through the summer, even after leagues have drafted and set Week 1 lineups.
+  // So we DON'T gate the scan on that league-agnostic flag — we gate on whether
+  // THIS league actually has lineups set for the week (checked per-week below).
+  // A summer display_week is 0, so floor the default scan week at 1.
+  const currentWeek = Math.max(1, nflState.display_week ?? nflState.week ?? 1);
   const weeksToScan = options.weeks && options.weeks.length ? options.weeks : [currentWeek];
 
   const settings = await getLineupIntegritySettings(leagueId);
-
-  if (settings.ignoreLineupChecksInOffseason && nflState.season_type && nflState.season_type !== "regular") {
-    return {
-      success: true, leagueId, season, weeksScanned: [], lineupsChecked: 0,
-      alertsCreated: 0, criticalAlerts: 0, skipped: true,
-      reason: "Lineup checks are disabled outside the regular season.",
-    };
-  }
 
   const [league, users, rosters, players, tradedPicks] = await Promise.all([
     getLeague(leagueId, force),
@@ -125,10 +123,35 @@ export async function ingestLineupIntegrityForLeague(
   let criticalAlerts = 0;
   const weeksScanned: number[] = [];
 
+  let weeksWithNoLineups = 0;
+
   for (const week of weeksToScan) {
     const matchups = await getLeagueMatchups(leagueId, week, force);
     if (!matchups || matchups.length === 0) continue;
+
+    // Offseason guard, done right: leagues can expose placeholder matchups for
+    // an upcoming week before anyone has set a lineup. If NO roster in the
+    // league has a real starter set this week, there's nothing to check — skip
+    // the week (and report it) rather than flagging every team for empty slots.
+    const anyLineupSet = matchups.some((m) =>
+      (m.starters ?? []).some((s) => s && s !== "0" && s !== "null" && s !== "None"),
+    );
+    if (settings.ignoreLineupChecksInOffseason && !anyLineupSet) {
+      weeksWithNoLineups++;
+      continue;
+    }
     weeksScanned.push(week);
+
+    // Prior-week starters per roster — drives "unchanged lineup" detection (a
+    // set-and-forget signal). Only fetched when the check is enabled and there
+    // is a previous week to compare against.
+    const prevStartersByRoster = new Map<number, Array<string | null>>();
+    if (settings.enableUnchangedLineupChecks && week > 1) {
+      const prevMatchups = await getLeagueMatchups(leagueId, week - 1, force).catch(() => null);
+      for (const m of prevMatchups ?? []) {
+        prevStartersByRoster.set(Number(m.roster_id), (m.starters ?? []) as Array<string | null>);
+      }
+    }
 
     const matchupRosters = new Map<number, number[]>();
     for (const m of matchups) {
@@ -166,11 +189,11 @@ export async function ingestLineupIntegrityForLeague(
 
       const emptyStarterSlots = settings.enableEmptySlotChecks ? countEmptyStarterSlots(parsed.starters) : 0;
       const byeStarters = settings.enableByeStarterChecks ? starterChecks.filter((p) => p.isOnBye).length : 0;
-      const irStarters = settings.enableInactiveStarterChecks ? starterChecks.filter((p) => p.isIr).length : 0;
-      const inactiveStarters = settings.enableInactiveStarterChecks
+      const irStarters = settings.enableIrStarterChecks ? starterChecks.filter((p) => p.isIr).length : 0;
+      const inactiveStarters = settings.enableOutStarterChecks
         ? starterChecks.filter((p) => p.isInactive && !p.isIr).length
         : 0;
-      const doubtfulStarters = settings.enableInactiveStarterChecks
+      const doubtfulStarters = settings.enableDoubtfulStarterChecks
         ? starterChecks.filter((p) => p.isDoubtful).length
         : 0;
 
@@ -201,6 +224,16 @@ export async function ingestLineupIntegrityForLeague(
       const isEliminated = week >= settings.playoffIntegrityStartWeek && rank > playoffTeams + 2;
       const ownsOwnFirst = ownsOwnFutureFirst({ rosterId, season, tradedPicks });
 
+      // Unchanged lineup = identical starters to last week (set-and-forget). We
+      // only flag it when the manager actually had a reason to move (a bye or
+      // inactive/IR/OUT starter this week), so a perfectly fine static lineup
+      // isn't penalized.
+      const unchangedLineup =
+        settings.enableUnchangedLineupChecks &&
+        prevStartersByRoster.has(rosterId) &&
+        !didLineupChange(parsed.starters, prevStartersByRoster.get(rosterId)) &&
+        (byeStarters > 0 || inactiveStarters > 0 || irStarters > 0);
+
       const mid = Number(matchup.matchup_id ?? -1);
       const oppRosterIds = (matchupRosters.get(mid) ?? []).filter((r) => r !== rosterId);
       const anyInRace = [rosterId, ...oppRosterIds].some((r) =>
@@ -218,15 +251,24 @@ export async function ingestLineupIntegrityForLeague(
 
       const flags = buildFlags({
         emptyStarterSlots, byeStarters, inactiveStarters, irStarters, doubtfulStarters,
+        unchangedLineup,
         suspiciousBenchings, optimalityGap, optimalityGapWarning: settings.optimalityGapWarning,
         repeatIssueCount, repeatIssueWeeks: settings.repeatIssueWeeks,
         tankingRiskScore, playoffImpactMatchup, lineupIntegrityScore,
       });
 
+      // Commissioners can choose to ignore mathematically-eliminated teams — a
+      // tanking-prone roster late in the season — so they aren't surfaced as
+      // actionable issues. We still score + persist the check for the record;
+      // we just keep it out of the review queue and skip alert generation.
+      const suppressForElimination = settings.ignoreEliminatedTeams && isEliminated;
+
       const enteredQueue =
-        lineupIntegrityScore < 75 || tankingRiskScore >= 25 || emptyStarterSlots > 0 ||
+        !suppressForElimination &&
+        (lineupIntegrityScore < 75 || tankingRiskScore >= 25 || emptyStarterSlots > 0 ||
         byeStarters > 0 || inactiveStarters > 0 || irStarters > 0 || suspiciousBenchings > 0 ||
-        optimalityGap >= settings.optimalityGapWarning;
+        unchangedLineup ||
+        optimalityGap >= settings.optimalityGapWarning);
       const reviewStatus: ReviewStatus = enteredQueue ? "needs_review" : "none";
 
       const row: LineupCheckRow = {
@@ -245,14 +287,25 @@ export async function ingestLineupIntegrityForLeague(
       await saveLineupPlayerChecks(checkId, row);
       lineupsChecked++;
 
-      if (settings.autoCreateAlerts) {
-        const ctx: AlertContext = { repeatIssueCount, playoffImpactMatchup };
+      if (settings.autoCreateAlerts && !suppressForElimination) {
+        const ctx: AlertContext = { repeatIssueCount, playoffImpactMatchup, unchangedLineup };
         const alerts = generateLineupAlerts(row, settings, ctx);
         const inserted = await replaceOpenAlerts(checkId, alerts);
         alertsCreated += inserted;
         criticalAlerts += alerts.filter((a) => a.severity === "critical").length;
       }
     }
+  }
+
+  // Nothing scannable: every requested week was either missing or had no
+  // lineups set yet. Report it as a skip so the UI explains why (instead of
+  // showing a misleading "no issues detected").
+  if (weeksScanned.length === 0 && weeksWithNoLineups > 0) {
+    return {
+      success: true, leagueId, season, weeksScanned: [], lineupsChecked: 0,
+      alertsCreated: 0, criticalAlerts: 0, skipped: true,
+      reason: "No lineups are set yet for this week, so there's nothing to check.",
+    };
   }
 
   return { success: true, leagueId, season, weeksScanned, lineupsChecked, alertsCreated, criticalAlerts };
@@ -309,6 +362,7 @@ function buildFlags(input: {
   inactiveStarters: number;
   irStarters: number;
   doubtfulStarters: number;
+  unchangedLineup: boolean;
   suspiciousBenchings: number;
   optimalityGap: number;
   optimalityGapWarning: number;
@@ -324,6 +378,7 @@ function buildFlags(input: {
   if (input.inactiveStarters > 0) flags.push("inactive_starter");
   if (input.irStarters > 0) flags.push("ir_starter");
   if (input.doubtfulStarters > 0) flags.push("doubtful_starter");
+  if (input.unchangedLineup) flags.push("unchanged_lineup");
   if (input.suspiciousBenchings > 0) flags.push("suspicious_benching");
   if (input.optimalityGap >= input.optimalityGapWarning) flags.push("large_optimality_gap");
   if (input.repeatIssueCount >= input.repeatIssueWeeks) flags.push("repeat_lineup_issue");

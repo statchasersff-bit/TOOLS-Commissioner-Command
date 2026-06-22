@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useToast } from "@/hooks/use-toast";
+import { useSleeper } from "@/contexts/SleeperContext";
 import { cn } from "@/lib/utils";
 import type { League } from "@/types";
 import {
@@ -166,10 +167,183 @@ function ReviewChip({ status }: { status: ReviewStatus }) {
   );
 }
 
+// ── Commissioner-facing trade status ──────────────────────────────────────────
+// A single "what should I do?" verdict derived from review state + risk + flags.
+// Fair → nothing to do; Review → worth a manual look; Flagged → potential
+// integrity issue; Reviewed → commissioner already cleared it; Escalated →
+// needs action/discussion.
+type TradeStatus = "fair" | "review" | "flagged" | "reviewed" | "escalated";
+const STATUS_META: Record<TradeStatus, { label: string; cls: string }> = {
+  fair: { label: "Fair", cls: "bg-muted text-muted-foreground border-border" },
+  review: { label: "Review", cls: "bg-amber-500/15 text-amber-600 dark-any:text-amber-400 border-amber-500/30" },
+  flagged: { label: "Flagged", cls: "bg-orange-500/15 text-orange-600 dark-any:text-orange-400 border-orange-500/30" },
+  reviewed: { label: "Reviewed", cls: "bg-emerald-500/15 text-emerald-600 dark-any:text-emerald-400 border-emerald-500/30" },
+  escalated: { label: "Escalated", cls: "bg-red-500/15 text-red-600 dark-any:text-red-400 border-red-500/30" },
+};
+function tradeStatus(t: TradeRow): TradeStatus {
+  if (t.reviewStatus === "disputed") return "escalated";
+  if (t.reviewStatus === "reviewed" || t.reviewStatus === "no_action") return "reviewed";
+  if (t.reviewStatus === "watchlist") return "flagged";
+  // Unreviewed: lean on risk + flag severity to suggest the next action.
+  if (t.flags.some((f) => f.severity === "high" || f.severity === "critical")) return "flagged";
+  if (t.riskLabel === "high" || t.riskLabel === "critical" || t.flags.length > 0) return "review";
+  return "fair";
+}
+function StatusChip({ status }: { status: TradeStatus }) {
+  const m = STATUS_META[status];
+  return (
+    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold", m.cls)} data-testid={`chip-status-${status}`}>
+      {m.label}
+    </span>
+  );
+}
+
+// Risk as a commissioner-readable label ("Low Risk") — no raw score in the feed.
+function riskText(label: RiskLabel): string {
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)} Risk`;
+}
+
+// Short, scannable flag labels for the collapsed "Flags:" row.
+const FLAG_SHORT: Record<string, string> = {
+  lopsided: "Lopsided",
+  future_pick: "Future pick moved",
+  premium_pick: "Premium future asset",
+  repeat_partner: "Repeat partners",
+  orphan_risk: "Orphan risk",
+  league_balance: "League balance",
+  direction_mismatch: "Direction mismatch",
+};
+function flagShort(f: TradeFlag): string {
+  return FLAG_SHORT[f.flagType] ?? f.title;
+}
+
+// Left severity accent rail — only high-risk trades carry a strong color so the
+// feed stays calm and the dangerous trades pop.
+const RISK_BAR: Record<RiskLabel, string> = {
+  low: "bg-emerald-500/40",
+  medium: "bg-amber-500/70",
+  high: "bg-orange-500",
+  critical: "bg-red-500",
+};
+// Risk badge (leading visual signal): restrained tint, label like "Critical Risk".
+function RiskBadge({ label }: { label: RiskLabel }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
+        RISK_STYLES[label],
+      )}
+      data-testid={`badge-risk-${label}`}
+    >
+      {riskText(label)}
+    </span>
+  );
+}
+
+// CTA copy follows the trade's status: act vs. just look back at the decision.
+function ctaLabel(status: TradeStatus): string {
+  if (status === "reviewed") return "View Review →";
+  if (status === "flagged" || status === "escalated") return "Review Trade →";
+  if (status === "review") return "Review →";
+  return "View →";
+}
+
+// "Why flagged" chips — the meaningful (non-info) flags, restated as quiet,
+// scannable signals. Muted by default so they inform without shouting.
+function SignalChips({ flags }: { flags: TradeFlag[] }) {
+  const meaningful = flags.filter((f) => f.severity !== "info");
+  if (meaningful.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+        <Flag className="h-3 w-3" /> Why flagged:
+      </span>
+      {meaningful.map((f, i) => (
+        <span
+          key={i}
+          className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground"
+          title={f.description}
+        >
+          {flagShort(f)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// One "<Team> receives → assets" block. Both sides of a 2-team trade get one;
+// multi-team trades stack one per roster.
+function ReceivesBlock({
+  name,
+  assets,
+}: {
+  name: string;
+  assets: TradeAsset[];
+}) {
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {name} receives
+      </div>
+      <div className="mt-0.5 text-sm leading-snug text-foreground/90">
+        {assets.length === 0 ? "—" : assets.map(assetLabel).join(" · ")}
+      </div>
+    </div>
+  );
+}
+
+// Sort lenses — a commissioner shouldn't hunt through cleared low-risk trades.
+type SortKey = "priority" | "risk" | "gap" | "recent";
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: "priority", label: "Needs attention first" },
+  { value: "risk", label: "Highest risk" },
+  { value: "gap", label: "Largest gap" },
+  { value: "recent", label: "Most recent" },
+];
+const RISK_RANK: Record<RiskLabel, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+const STATUS_PRIORITY: Record<TradeStatus, number> = {
+  escalated: 4,
+  flagged: 3,
+  review: 2,
+  fair: 1,
+  reviewed: 0,
+};
+function tradeTs(t: TradeRow): number {
+  return t.statusUpdatedTs ?? t.createdTs ?? 0;
+}
+function sortTrades(list: TradeRow[], key: SortKey): TradeRow[] {
+  const arr = [...list];
+  switch (key) {
+    case "risk":
+      return arr.sort((a, b) => RISK_RANK[b.riskLabel] - RISK_RANK[a.riskLabel] || b.valueDiffPct - a.valueDiffPct);
+    case "gap":
+      return arr.sort((a, b) => b.valueDiffPct - a.valueDiffPct);
+    case "recent":
+      return arr.sort((a, b) => tradeTs(b) - tradeTs(a));
+    case "priority":
+    default:
+      return arr.sort(
+        (a, b) =>
+          STATUS_PRIORITY[tradeStatus(b)] - STATUS_PRIORITY[tradeStatus(a)] ||
+          RISK_RANK[b.riskLabel] - RISK_RANK[a.riskLabel] ||
+          tradeTs(b) - tradeTs(a),
+      );
+  }
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export function TradeReviewCenter({ league }: { league: League }) {
   const leagueId = league.id;
   const { toast } = useToast();
+  const sleeper = useSleeper();
+
+  // The Trade Feed aggregates every league the user commissions; the loaded
+  // league is always included even if the context list hasn't resolved yet.
+  const commishLeagueIds = useMemo(() => {
+    const ids = new Set<string>([leagueId]);
+    for (const lg of sleeper.leagues) ids.add(lg.leagueId);
+    return Array.from(ids);
+  }, [leagueId, sleeper.leagues]);
   const [section, setSection] = useState<SectionId>("feed");
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,14 +368,14 @@ export function TradeReviewCenter({ league }: { league: League }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchTradeFeed(leagueId);
+      const data = await fetchTradeFeed(commishLeagueIds);
       setTrades(data.trades);
     } catch (e: any) {
       setError(e?.message || "Failed to load trades");
     } finally {
       setLoading(false);
     }
-  }, [leagueId]);
+  }, [commishLeagueIds]);
 
   useEffect(() => {
     void loadFeed();
@@ -210,10 +384,28 @@ export function TradeReviewCenter({ league }: { league: League }) {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const result = await ingestTrades(leagueId, { forceRefresh: false });
+      // Scan every commissioned league so the feed stays complete. Failures on
+      // an individual league are tolerated — we still surface the rest.
+      const results = await Promise.allSettled(
+        commishLeagueIds.map((id) => ingestTrades(id, { forceRefresh: false })),
+      );
+      let newTrades = 0;
+      let scanned = 0;
+      let failures = 0;
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          newTrades += r.value.newTrades;
+          scanned += r.value.tradesFound;
+        } else {
+          failures++;
+        }
+      }
       toast({
         title: "Trade scan complete",
-        description: `${result.newTrades} new ${result.newTrades === 1 ? "trade" : "trades"} found (${result.tradesFound} scanned).`,
+        description:
+          `${newTrades} new ${newTrades === 1 ? "trade" : "trades"} found across ` +
+          `${commishLeagueIds.length} ${commishLeagueIds.length === 1 ? "league" : "leagues"} (${scanned} scanned).` +
+          (failures > 0 ? ` ${failures} league(s) could not be scanned.` : ""),
       });
       await loadFeed();
     } catch (e: any) {
@@ -221,7 +413,7 @@ export function TradeReviewCenter({ league }: { league: League }) {
     } finally {
       setRefreshing(false);
     }
-  }, [leagueId, loadFeed, toast]);
+  }, [commishLeagueIds, loadFeed, toast]);
 
   const openTrade = useCallback((id: number) => {
     setSelectedTradeId(id);
@@ -246,7 +438,7 @@ export function TradeReviewCenter({ league }: { league: League }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <SectionHeader
           title="Trade Review Center"
-          subtitle="Automatic trade tracking & commissioner review. Decision-support only — nothing here approves, rejects, or reverses trades."
+          subtitle="Automatic trade tracking across every league you commission. Decision-support only — nothing here approves, rejects, or reverses trades."
         />
         <Button onClick={handleRefresh} disabled={refreshing} className="shrink-0" data-testid="button-refresh-trades">
           {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -343,8 +535,13 @@ export function TradeReviewCenter({ league }: { league: League }) {
 }
 
 // ── Trade Feed ────────────────────────────────────────────────────────────────
-function tradeTeams(t: TradeRow, teamName: (r: number) => string): string {
-  return t.rosterIds.map(teamName).join(" ↔ ");
+// Prefer the trade's own roster→name map (resolved server-side, works across
+// every league) and fall back to the loaded league's map for older rows.
+function rosterLabel(t: TradeRow, rid: number, fallback: (r: number) => string): string {
+  return t.rosterNames?.[rid] ?? fallback(rid);
+}
+function tradeTeams(t: TradeRow, fallback: (r: number) => string): string {
+  return t.rosterIds.map((rid) => rosterLabel(t, rid, fallback)).join(" ↔ ");
 }
 function receivedBy(t: TradeRow, rosterId: number): TradeAsset[] {
   return t.assets.filter((a) => a.toRosterId === rosterId);
@@ -363,21 +560,44 @@ function TradeFeed({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
-  const [reviewFilter, setReviewFilter] = useState<string>("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [riskFilter, setRiskFilter] = useState<string>("all");
+  const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("priority");
 
-  const filtered = trades.filter(
-    (t) =>
-      (reviewFilter === "all" || t.reviewStatus === reviewFilter) &&
-      (riskFilter === "all" || t.riskLabel === riskFilter),
+  // Distinct leagues present in the feed, for the league filter dropdown.
+  const leagueOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const t of trades) {
+      if (!seen.has(t.leagueId)) seen.set(t.leagueId, t.leagueName || `League ${t.leagueId}`);
+    }
+    return [
+      { value: "all", label: "All leagues" },
+      ...Array.from(seen, ([value, label]) => ({ value, label })),
+    ];
+  }, [trades]);
+  const multiLeague = leagueOptions.length > 2;
+
+  const filtered = useMemo(
+    () =>
+      trades.filter(
+        (t) =>
+          matchesQuick(t, quickFilter) &&
+          (statusFilter === "all" || t.reviewStatus === statusFilter) &&
+          (riskFilter === "all" || t.riskLabel === riskFilter) &&
+          (leagueFilter === "all" || t.leagueId === leagueFilter),
+      ),
+    [trades, quickFilter, statusFilter, riskFilter, leagueFilter],
   );
+  const sorted = useMemo(() => sortTrades(filtered, sortKey), [filtered, sortKey]);
 
   if (trades.length === 0) {
     return (
       <EmptyState
         icon={ArrowLeftRight}
         title="No trades recorded yet"
-        body="Click Refresh Trades to scan this league's Sleeper transactions for completed trades."
+        body="Click Refresh Trades to scan your commissioned leagues' Sleeper transactions for completed trades."
         action={
           <Button onClick={onRefresh} disabled={refreshing}>
             {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -390,8 +610,28 @@ function TradeFeed({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap gap-3">
-        <FilterSelect label="Review" value={reviewFilter} onChange={setReviewFilter} options={[
+      {/* Quick filter pills — the fast "what needs me?" lens. */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {QUICK_FILTERS.map((qf) => (
+          <button
+            key={qf.value}
+            type="button"
+            onClick={() => setQuickFilter(qf.value)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              quickFilter === qf.value
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-transparent text-muted-foreground hover:bg-muted/60",
+            )}
+            data-testid={`pill-quick-${qf.value}`}
+          >
+            {qf.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={[
           { value: "all", label: "All statuses" },
           { value: "unreviewed", label: "Needs Review" },
           { value: "reviewed", label: "Reviewed" },
@@ -399,59 +639,132 @@ function TradeFeed({
           { value: "disputed", label: "Disputed" },
           { value: "no_action", label: "No Action" },
         ]} />
-        <FilterSelect label="Risk" value={riskFilter} onChange={setRiskFilter} options={[
-          { value: "all", label: "All risk" },
+        <FilterSelect label="Risk Level" value={riskFilter} onChange={setRiskFilter} options={[
+          { value: "all", label: "All risks" },
           { value: "low", label: "Low" },
           { value: "medium", label: "Medium" },
           { value: "high", label: "High" },
           { value: "critical", label: "Critical" },
         ]} />
+        {multiLeague && (
+          <FilterSelect label="League" value={leagueFilter} onChange={setLeagueFilter} options={leagueOptions} />
+        )}
+        <div className="ml-auto">
+          <FilterSelect label="Sort by" value={sortKey} onChange={(v) => setSortKey(v as SortKey)} options={SORT_OPTIONS} />
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {filtered.map((t) => (
-          <Card key={t.id} className="p-4 transition-colors hover:bg-muted/40">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span>{fmtDate(t.statusUpdatedTs ?? t.createdTs)}</span>
-                  {t.week != null && <span>· Week {t.week}</span>}
-                  {t.isMultiTeam && <Badge variant="outline" className="text-xs">Multi-Team</Badge>}
-                </div>
-                <div className="mt-1 font-semibold">{tradeTeams(t, teamName)}</div>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {t.rosterIds.map((rid) => (
-                    <div key={rid} className="rounded-md bg-muted/40 p-2 text-sm">
-                      <div className="text-xs font-medium text-muted-foreground">{teamName(rid)} receives</div>
-                      <div>{receivedBy(t, rid).map(assetLabel).join(", ") || "—"}</div>
-                    </div>
-                  ))}
-                </div>
-                {t.flags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {t.flags.map((f, i) => (
-                      <span key={i} className={cn("inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs", SEVERITY_STYLES[f.severity])}>
-                        <Flag className="h-3 w-3" /> {f.title}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
-                <div className="text-sm text-muted-foreground">Value gap: <span className="font-semibold text-foreground">{t.valueDiffPct}%</span></div>
-                <RiskChip label={t.riskLabel} score={t.riskScore} />
-                <ReviewChip status={t.reviewStatus} />
-                <Button size="sm" variant="outline" onClick={() => onOpen(t.id)} data-testid={`button-review-trade-${t.id}`}>Review</Button>
-              </div>
-            </div>
-          </Card>
-        ))}
-        {filtered.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">No trades match the current filters.</p>
-        )}
-      </div>
+      {sorted.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">No trades match the current filters.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {sorted.map((t) => (
+            <TradeCard
+              key={t.id}
+              trade={t}
+              teamName={teamName}
+              showLeague={multiLeague}
+              onOpen={onOpen}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+// ── Trade Card ────────────────────────────────────────────────────────────────
+// Hybrid feed-card: a severity rail leads, parties + gap + status sit on the
+// header line, each side's haul gets its own "receives" block, and the CTA
+// adapts to whether the commissioner still needs to act. Scannable like a table
+// row, readable like a card — and it stacks cleanly on mobile.
+function TradeCard({
+  trade: t,
+  teamName,
+  showLeague,
+  onOpen,
+}: {
+  trade: TradeRow;
+  teamName: (r: number) => string;
+  showLeague: boolean;
+  onOpen: (id: number) => void;
+}) {
+  const status = tradeStatus(t);
+  const quietCta = status === "reviewed" || status === "fair";
+  return (
+    <Card
+      className="group relative cursor-pointer overflow-hidden pl-3 transition-colors hover:bg-muted/30"
+      onClick={() => onOpen(t.id)}
+      data-testid={`card-trade-${t.id}`}
+    >
+      {/* Left severity accent rail */}
+      <div className={cn("absolute inset-y-0 left-0 w-1", RISK_BAR[t.riskLabel])} aria-hidden />
+
+      <div className="p-3 sm:p-4">
+        {/* Header: risk badge + parties on the left; gap + status on the right. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <RiskBadge label={t.riskLabel} />
+          <span className="min-w-0 truncate font-semibold">{tradeTeams(t, teamName)}</span>
+          {t.isMultiTeam && <Badge variant="outline" className="text-[10px]">Multi</Badge>}
+          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="whitespace-nowrap">
+              Gap <span className="font-semibold tabular-nums text-foreground">{t.valueDiffPct}%</span>
+            </span>
+            <StatusChip status={status} />
+          </span>
+        </div>
+
+        {/* Meta line */}
+        <div className="mt-1 text-xs text-muted-foreground">
+          {fmtDate(t.statusUpdatedTs ?? t.createdTs)}
+          {t.week != null ? ` · Week ${t.week}` : ""}
+          {showLeague && t.leagueName ? ` · ${t.leagueName}` : ""}
+        </div>
+
+        {/* Receives blocks — the core readability win. Two-up for 2-team trades. */}
+        <div className={cn("mt-3 grid gap-2", t.rosterIds.length === 2 ? "sm:grid-cols-2" : "")}>
+          {t.rosterIds.map((rid) => (
+            <ReceivesBlock key={rid} name={rosterLabel(t, rid, teamName)} assets={receivedBy(t, rid)} />
+          ))}
+        </div>
+
+        {/* Why-flagged signals + adaptive CTA */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <SignalChips flags={t.flags} />
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn("ml-auto h-7 px-2", quietCta ? "text-muted-foreground" : "text-primary")}
+            onClick={(e) => { e.stopPropagation(); onOpen(t.id); }}
+            data-testid={`button-review-trade-${t.id}`}
+          >
+            {ctaLabel(status)}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// Quick-filter pills: the fast "what needs me?" lens, ANDed with the dropdowns.
+type QuickFilter = "all" | "needs-review" | "flagged" | "reviewed" | "high-risk" | "unreviewed";
+const QUICK_FILTERS: Array<{ value: QuickFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "needs-review", label: "Needs Review" },
+  { value: "flagged", label: "Flagged" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "high-risk", label: "High Risk" },
+  { value: "unreviewed", label: "Unreviewed" },
+];
+function matchesQuick(t: TradeRow, q: QuickFilter): boolean {
+  switch (q) {
+    case "all": return true;
+    case "needs-review": return tradeStatus(t) === "review";
+    case "flagged": return tradeStatus(t) === "flagged" || tradeStatus(t) === "escalated";
+    case "reviewed": return t.reviewStatus === "reviewed" || t.reviewStatus === "no_action";
+    case "high-risk": return t.riskLabel === "high" || t.riskLabel === "critical";
+    case "unreviewed": return t.reviewStatus === "unreviewed";
+  }
 }
 
 // ── Review Queue ──────────────────────────────────────────────────────────────
@@ -649,6 +962,7 @@ function TradeDetails({
           <div>
             <div className="text-lg font-bold">{tradeTeams(t, teamName)}</div>
             <div className="text-sm text-muted-foreground">
+              {t.leagueName ? `${t.leagueName} · ` : ""}
               {t.week != null ? `Completed Week ${t.week}` : "Completed"} · {fmtDate(t.statusUpdatedTs ?? t.createdTs)}
             </div>
           </div>
@@ -667,7 +981,7 @@ function TradeDetails({
           const total = t.totalValueByRoster[String(rid)] ?? 0;
           return (
             <Card key={rid} className="p-4">
-              <div className="mb-2 font-semibold">{teamName(rid)} receives</div>
+              <div className="mb-2 font-semibold">{rosterLabel(t, rid, teamName)} receives</div>
               <ul className="space-y-1 text-sm">
                 {got.length === 0 && <li className="text-muted-foreground">—</li>}
                 {got.map((a, i) => (
@@ -699,7 +1013,7 @@ function TradeDetails({
           <div className="grid gap-1 text-sm sm:grid-cols-2">
             {t.rosterIds.map((rid) => (
               <div key={rid} className="flex justify-between">
-                <span className="text-muted-foreground">{teamName(rid)} total</span>
+                <span className="text-muted-foreground">{rosterLabel(t, rid, teamName)} total</span>
                 <span className="tabular-nums">{fmt(t.totalValueByRoster[String(rid)] ?? 0)}</span>
               </div>
             ))}

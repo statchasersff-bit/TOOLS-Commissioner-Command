@@ -18,6 +18,7 @@ export async function upsertLeagueFinance(data: {
   season: string;
   buyIn: number;
   prizes: { place: number; amount: number }[];
+  payments?: unknown[];
   notes?: string;
   isFree?: boolean;
   ignored?: boolean;
@@ -36,6 +37,7 @@ export async function upsertLeagueFinance(data: {
       .set({
         buyIn: data.buyIn,
         prizes: data.prizes as any,
+        payments: (data.payments ?? []) as any,
         notes: data.notes ?? null,
         season: data.season,
         isFree: data.isFree ?? false,
@@ -51,6 +53,7 @@ export async function upsertLeagueFinance(data: {
       season: data.season,
       buyIn: data.buyIn,
       prizes: data.prizes as any,
+      payments: (data.payments ?? []) as any,
       notes: data.notes ?? null,
       isFree: data.isFree ?? false,
       ignored: data.ignored ?? false,

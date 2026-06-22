@@ -38,6 +38,9 @@ import {
   issueStrike,
   updateStrike,
   listStrikes,
+  getLeagueWeekAudit,
+  appendAuditEntry,
+  listAuditLog,
 } from "./services/lineupIntegrity";
 import { buildCopyMessages, RECOMMENDED_POLICY_TEXT } from "./services/lineupIntegrity/lineupIntegritySummary";
 
@@ -146,6 +149,68 @@ export function registerLineupIntegrityRoutes(app: Express): void {
       res.json({ ...detail, copyMessages });
     } catch (err: any) {
       handleErr(res, err, "Failed to load check detail");
+    }
+  });
+
+  // ── League-specific weekly audit (Matchup Integrity Board + issue feed) ──────
+  app.get("/api/commissioner/lineup-integrity/league-week-audit", async (req, res) => {
+    if (!requireUser(req, res)) return;
+    const leagueId = String(req.query.leagueId || "");
+    if (!leagueId) return res.status(400).json({ error: "leagueId required" });
+    try {
+      const season = await resolveSeason(req.query.season);
+      const week = parseIntOrNull(req.query.week) ?? (await getLatestWeek(leagueId, season)) ?? 0;
+      const audit = await getLeagueWeekAudit(leagueId, season, week);
+      res.json(audit);
+    } catch (err: any) {
+      handleErr(res, err, "Failed to load league audit");
+    }
+  });
+
+  // ── Per-issue audit log (commissioner action trail / dispute protection) ─────
+  app.get("/api/commissioner/lineup-integrity/audit-log", async (req, res) => {
+    if (!requireUser(req, res)) return;
+    const leagueId = String(req.query.leagueId || "");
+    if (!leagueId) return res.status(400).json({ error: "leagueId required" });
+    try {
+      const season = await resolveSeason(req.query.season);
+      const entries = await listAuditLog({
+        leagueId,
+        season,
+        week: parseIntOrNull(req.query.week) ?? undefined,
+        lineupCheckId: parseIntOrNull(req.query.lineupCheckId) ?? undefined,
+        issueKey: req.query.issueKey ? String(req.query.issueKey) : undefined,
+      });
+      res.json({ leagueId, season, entries });
+    } catch (err: any) {
+      handleErr(res, err, "Failed to load audit log");
+    }
+  });
+
+  app.post("/api/commissioner/lineup-integrity/audit-log", async (req, res) => {
+    const uid = requireUser(req, res);
+    if (!uid) return;
+    const b = req.body || {};
+    if (!b.leagueId || !b.action || b.week == null) {
+      return res.status(400).json({ error: "leagueId, week, action required" });
+    }
+    try {
+      const season = await resolveSeason(b.season);
+      const entry = await appendAuditEntry({
+        leagueId: String(b.leagueId),
+        season,
+        week: parseInt(String(b.week), 10) || 0,
+        rosterId: b.rosterId != null ? parseInt(String(b.rosterId), 10) : null,
+        lineupCheckId: b.lineupCheckId != null ? parseInt(String(b.lineupCheckId), 10) : null,
+        issueKey: b.issueKey ?? null,
+        action: String(b.action),
+        actor: b.actor ? String(b.actor) : "Commissioner",
+        actorUserId: uid,
+        note: b.note ?? null,
+      });
+      res.json({ success: true, entry });
+    } catch (err: any) {
+      handleErr(res, err, "Failed to record audit entry");
     }
   });
 
@@ -277,8 +342,11 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     if (!leagueIds.length) return res.status(400).json({ error: "leagueIds required (comma-separated)" });
     try {
       const season = await resolveSeason(req.query.season);
-      const leagues = await getMultiLeagueSummary(leagueIds, season);
-      res.json({ season, leagues });
+      const week = parseIntOrNull(req.query.week);
+      const allOpen = req.query.allOpen === "true" || req.query.allOpen === "1";
+      const live = req.query.live === "true" || req.query.live === "1";
+      const result = await getMultiLeagueSummary(leagueIds, season, { week, allOpen, live });
+      res.json({ season, ...result });
     } catch (err: any) {
       handleErr(res, err, "Failed to load multi-league summary");
     }
@@ -302,11 +370,13 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId required" });
     const allowedKeys = new Set([
       "enableEmptySlotChecks", "enableByeStarterChecks", "enableInactiveStarterChecks",
+      "enableOutStarterChecks", "enableIrStarterChecks", "enableDoubtfulStarterChecks",
+      "enableUnchangedLineupChecks",
       "enableSuspiciousBenchingChecks", "enableTankingRiskChecks",
       "suspiciousBenchingValueGap", "suspiciousBenchingProjectionGap",
       "optimalityGapWarning", "optimalityGapCritical",
       "repeatIssueWeeks", "strikeAfterRepeatIssues", "playoffIntegrityStartWeek",
-      "ignoreLineupChecksInOffseason", "ignoreLineupChecksForBestBall",
+      "ignoreLineupChecksInOffseason", "ignoreLineupChecksForBestBall", "ignoreEliminatedTeams",
       "autoCreateAlerts", "autoCreateStrikes",
     ]);
     const patch: Record<string, unknown> = {};
