@@ -34,6 +34,7 @@ export async function saveLineupCheck(check: LineupCheckRow): Promise<number> {
     inactiveStarters: check.inactiveStarters,
     irStarters: check.irStarters,
     doubtfulStarters: check.doubtfulStarters,
+    questionableStarters: check.questionableStarters,
     suspiciousBenchings: check.suspiciousBenchings,
     optimalityGap: String(check.optimalityGap),
     optimalityGapPct: String(check.optimalityGapPct),

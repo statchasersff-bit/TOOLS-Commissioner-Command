@@ -1203,6 +1203,7 @@ export const commissionerLineupChecks = pgTable("commissioner_lineup_checks", {
   inactiveStarters: integer("inactive_starters").default(0),
   irStarters: integer("ir_starters").default(0),
   doubtfulStarters: integer("doubtful_starters").default(0),
+  questionableStarters: integer("questionable_starters").default(0),
 
   suspiciousBenchings: integer("suspicious_benchings").default(0),
   optimalityGap: numeric("optimality_gap").default("0"),
@@ -1362,6 +1363,7 @@ export const commissionerLineupSettings = pgTable("commissioner_lineup_settings"
   enableOutStarterChecks: boolean("enable_out_starter_checks"),
   enableIrStarterChecks: boolean("enable_ir_starter_checks"),
   enableDoubtfulStarterChecks: boolean("enable_doubtful_starter_checks"),
+  enableQuestionableStarterChecks: boolean("enable_questionable_starter_checks"),
   enableUnchangedLineupChecks: boolean("enable_unchanged_lineup_checks").default(false),
   enableSuspiciousBenchingChecks: boolean("enable_suspicious_benching_checks").default(true),
   enableTankingRiskChecks: boolean("enable_tanking_risk_checks").default(true),
@@ -1431,3 +1433,115 @@ export type CommissionerLineupStrike = typeof commissionerLineupStrikes.$inferSe
 export type InsertCommissionerLineupStrike = typeof commissionerLineupStrikes.$inferInsert;
 export type CommissionerLineupSettings = typeof commissionerLineupSettings.$inferSelect;
 export type InsertCommissionerLineupSettings = typeof commissionerLineupSettings.$inferInsert;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Dispersal Draft (Draft module → Dispersal Draft tab)
+//
+// A commissioner-run draft of orphan-team assets: create a room, add assets,
+// share a private link, managers claim slots, and a live board updates in real
+// time over Socket.io. Ported from a standalone app; tables are namespaced
+// `dispersal_*` to avoid colliding with the existing `drafts` / `draft_picks`
+// tables above. Auth is bridged to StatChasers accounts via `creatorUserId`
+// while the original share-code + commissioner-token model is retained.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export const dispersalRooms = pgTable("dispersal_rooms", {
+  id: serial("id").primaryKey(),
+  // StatChasers account that created the room (auth bridge). Null for legacy/
+  // anonymous rooms; commissioner actions also accept the commissioner token.
+  creatorUserId: varchar("creator_user_id"),
+  leagueName: text("league_name").notNull(),
+  shareCode: text("share_code").notNull().unique(),
+  commissionerToken: text("commissioner_token").notNull(),
+  numOrphanSlots: integer("num_orphan_slots").notNull(),
+  draftFormat: text("draft_format").notNull().default("snake"),
+  timeBankSeconds: integer("time_bank_seconds"),
+  isLocked: boolean("is_locked").notNull().default(false),
+  currentTurnStartedAt: timestamp("current_turn_started_at", { withTimezone: true }),
+  dailyPauseStart: text("daily_pause_start"),
+  dailyPauseEnd: text("daily_pause_end"),
+  pauseTimezone: text("pause_timezone").default("America/New_York"),
+  sleeperLeagueId: text("sleeper_league_id"),
+  status: text("status").notNull().default("setup"),
+  currentPickNumber: integer("current_pick_number").notNull().default(0),
+  currentRound: integer("current_round").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const dispersalParticipants = pgTable("dispersal_participants", {
+  id: serial("id").primaryKey(),
+  draftRoomId: integer("draft_room_id")
+    .notNull()
+    .references(() => dispersalRooms.id, { onDelete: "cascade" }),
+  username: text("username").notNull(),
+  isCommissioner: boolean("is_commissioner").notNull().default(false),
+  draftPosition: integer("draft_position"),
+  orphanTeamName: text("orphan_team_name"),
+  sleeperAvatarId: text("sleeper_avatar_id"),
+  timeBankRemainingSeconds: integer("time_bank_remaining_seconds"),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const dispersalAssets = pgTable("dispersal_assets", {
+  id: serial("id").primaryKey(),
+  draftRoomId: integer("draft_room_id")
+    .notNull()
+    .references(() => dispersalRooms.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  position: text("position"),
+  team: text("team"),
+  notes: text("notes"),
+  isDrafted: boolean("is_drafted").notNull().default(false),
+  draftedByParticipantId: integer("drafted_by_participant_id").references(
+    () => dispersalParticipants.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const dispersalPicks = pgTable("dispersal_picks", {
+  id: serial("id").primaryKey(),
+  draftRoomId: integer("draft_room_id")
+    .notNull()
+    .references(() => dispersalRooms.id, { onDelete: "cascade" }),
+  participantId: integer("participant_id")
+    .notNull()
+    .references(() => dispersalParticipants.id),
+  assetId: integer("asset_id")
+    .notNull()
+    .references(() => dispersalAssets.id),
+  pickNumber: integer("pick_number").notNull(),
+  round: integer("round").notNull(),
+  pickedAt: timestamp("picked_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const dispersalChatMessages = pgTable("dispersal_chat_messages", {
+  id: serial("id").primaryKey(),
+  roomId: integer("room_id")
+    .notNull()
+    .references(() => dispersalRooms.id, { onDelete: "cascade" }),
+  type: text("type").notNull().default("user"),
+  participantId: integer("participant_id").references(
+    () => dispersalParticipants.id,
+    { onDelete: "set null" },
+  ),
+  senderName: text("sender_name").notNull(),
+  message: text("message").notNull(),
+  pinned: boolean("pinned").notNull().default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  reactions: jsonb("reactions").$type<Record<string, number[]>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DispersalRoom = typeof dispersalRooms.$inferSelect;
+export type InsertDispersalRoom = typeof dispersalRooms.$inferInsert;
+export type DispersalParticipant = typeof dispersalParticipants.$inferSelect;
+export type InsertDispersalParticipant = typeof dispersalParticipants.$inferInsert;
+export type DispersalAsset = typeof dispersalAssets.$inferSelect;
+export type InsertDispersalAsset = typeof dispersalAssets.$inferInsert;
+export type DispersalPick = typeof dispersalPicks.$inferSelect;
+export type InsertDispersalPick = typeof dispersalPicks.$inferInsert;
+export type DispersalChatMessage = typeof dispersalChatMessages.$inferSelect;
+export type InsertDispersalChatMessage = typeof dispersalChatMessages.$inferInsert;

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   BarChart2,
   Trophy, Coins, ArrowLeftRight, Database, Search,
-  Calculator, LineChart, TrendingUp, Zap, ChevronDown,
+  Calculator, TrendingUp, Zap, ChevronDown,
   LucideIcon, Crosshair, LayoutGrid, Inbox, MessageCircle,
   Hexagon, ClipboardList, ScrollText, ListOrdered,
   Activity, ShieldAlert,
@@ -43,7 +43,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Lineups",
       items: [
-        { subId: "lineup-integrity",  label: "All Leagues",  description: "Cross-league lineup checks & anti-tanking signals", icon: ShieldAlert   },
+        { subId: "lineup-integrity",  label: "All-League Scan",  description: "Cross-league lineup checks & anti-tanking signals", icon: ShieldAlert   },
         { subId: "league-audit",      label: "Weekly Audit", description: "Weekly audit — affected matchups, lineup issues & commissioner actions", icon: ShieldAlert   },
       ],
     },
@@ -69,23 +69,14 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       ],
     },
   ],
-  "league-market": [
-    {
-      title: "Research",
-      items: [
-        { subId: "user-search",     label: "User Search",     description: "Find any Sleeper user & open their profile",     icon: Search     },
-        { subId: "market-value",    label: "Market Value",    description: "Player market values across formats",           icon: TrendingUp },
-      ],
-    },
-  ],
   draft: [
     {
-      title: "Draft",
+      title: "Tools",
       items: [
         { subId: "draft-board",  label: "Draft Board",  description: "Dynasty rankings board & live draft integration",     icon: Zap          },
-        { subId: "adp-explorer", label: "ADP Explorer", description: "Sleeper startup ADP, rookie picks & market trends",   icon: ClipboardList },
-        { subId: "player-availability", label: "Player Availability", description: "Probability each player is still on the board at every pick (startup & rookie)", icon: LayoutGrid },
         { subId: "pick-tracker", label: "Pick Tracker", description: "Rookie picks derived from kicker draft order, live during your startup draft", icon: ListOrdered },
+        { subId: "dispersal-draft", label: "Dispersal Draft", description: "Run a live dispersal draft of orphan-team assets with real-time board & chat", icon: Trophy },
+        { subId: "user-search",     label: "User Search",     description: "Find any Sleeper user & open their profile",     icon: Search     },
       ],
     },
   ],
@@ -345,17 +336,15 @@ const TAB_ICONS: Record<string, typeof BarChart2> = {
   "lineup-integrity": ShieldAlert,
   "league-analyzer": Trophy,
   "trade-center": ArrowLeftRight,
-  "league-market": LineChart,
   draft: ClipboardList,
 };
 
 const TAB_SHORT_LABELS: Record<string, string> = {
   portfolio: "Home",
   "lineup-integrity": "Lineups",
-  "league-analyzer": "League",
+  "league-analyzer": "Activity",
   "trade-center": "Trades",
-  "league-market": "Research",
-  draft: "Draft",
+  draft: "Tools",
 };
 
 // ── MobileBottomNav ────────────────────────────────────────────────────────────

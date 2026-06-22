@@ -22,6 +22,7 @@ export interface LineupIntegritySettings {
   enableOutStarterChecks: boolean;
   enableIrStarterChecks: boolean;
   enableDoubtfulStarterChecks: boolean;
+  enableQuestionableStarterChecks: boolean;
   enableUnchangedLineupChecks: boolean;
   enableSuspiciousBenchingChecks: boolean;
   enableTankingRiskChecks: boolean;
@@ -51,6 +52,7 @@ export const DEFAULT_LINEUP_INTEGRITY_SETTINGS: LineupIntegritySettings = {
   enableOutStarterChecks: true,
   enableIrStarterChecks: true,
   enableDoubtfulStarterChecks: true,
+  enableQuestionableStarterChecks: true,
   enableUnchangedLineupChecks: false,
   enableSuspiciousBenchingChecks: true,
   enableTankingRiskChecks: true,
@@ -162,6 +164,7 @@ export interface LineupCheckRow {
   inactiveStarters: number;
   irStarters: number;
   doubtfulStarters: number;
+  questionableStarters: number;
 
   suspiciousBenchings: number;
   optimalityGap: number;

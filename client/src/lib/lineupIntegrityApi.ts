@@ -159,6 +159,7 @@ export interface LineupIntegritySettings {
   enableOutStarterChecks: boolean;
   enableIrStarterChecks: boolean;
   enableDoubtfulStarterChecks: boolean;
+  enableQuestionableStarterChecks: boolean;
   enableUnchangedLineupChecks: boolean;
   enableSuspiciousBenchingChecks: boolean;
   enableTankingRiskChecks: boolean;
@@ -214,6 +215,9 @@ export interface MultiLeagueRow {
   emptySlots: number;
   inactiveStarters: number;
   byeStarters: number;
+  doubtfulStarters: number;
+  questionableStarters: number;
+  tankingTeams: number;
   needsReview: number;
   resolvedThisWeek: number;
   bestBall: boolean;

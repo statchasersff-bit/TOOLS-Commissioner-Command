@@ -44,6 +44,7 @@ export async function getLineupIntegritySettings(
     enableOutStarterChecks: bool(row.enableOutStarterChecks, inactiveMaster),
     enableIrStarterChecks: bool(row.enableIrStarterChecks, inactiveMaster),
     enableDoubtfulStarterChecks: bool(row.enableDoubtfulStarterChecks, inactiveMaster),
+    enableQuestionableStarterChecks: bool(row.enableQuestionableStarterChecks, inactiveMaster),
     enableUnchangedLineupChecks: bool(row.enableUnchangedLineupChecks, d.enableUnchangedLineupChecks),
     enableSuspiciousBenchingChecks: bool(row.enableSuspiciousBenchingChecks, d.enableSuspiciousBenchingChecks),
     enableTankingRiskChecks: bool(row.enableTankingRiskChecks, d.enableTankingRiskChecks),

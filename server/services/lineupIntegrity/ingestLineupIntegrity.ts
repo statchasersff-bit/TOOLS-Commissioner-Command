@@ -196,6 +196,12 @@ export async function ingestLineupIntegrityForLeague(
       const doubtfulStarters = settings.enableDoubtfulStarterChecks
         ? starterChecks.filter((p) => p.isDoubtful).length
         : 0;
+      const questionableStarters = settings.enableQuestionableStarterChecks
+        ? starterChecks.filter((p) => {
+            const inj = (p.injuryStatus ?? "").trim().toLowerCase();
+            return inj === "questionable" || inj === "q";
+          }).length
+        : 0;
 
       const { optimalSlots, projectedOptimalPoints } = buildOptimalLineup({
         rosterPlayers: allChecks,
@@ -275,6 +281,7 @@ export async function ingestLineupIntegrityForLeague(
         leagueId, season, week, rosterId, ownerId, managerName, teamName,
         starters: parsed.starters, benchPlayers: parsed.benchPlayers, allPlayers: parsed.allPlayers,
         emptyStarterSlots, byeStarters, inactiveStarters, irStarters, doubtfulStarters,
+        questionableStarters,
         suspiciousBenchings, optimalityGap, optimalityGapPct,
         projectedStarterPoints, projectedOptimalPoints,
         lineupIntegrityScore, tankingRiskScore,

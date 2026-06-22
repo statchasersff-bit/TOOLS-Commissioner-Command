@@ -22,7 +22,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity, RefreshCw, Users, AlertTriangle, ListChecks,
-  Settings as SettingsIcon, ArrowLeft, ArrowRightLeft,
+  Settings as SettingsIcon, ArrowLeft, ArrowRightLeft, ArrowRight,
   ShieldAlert, Inbox,
 } from "lucide-react";
 import Transactions from "@/pages/tabs/Transactions";
@@ -38,10 +38,12 @@ const GOLD = "#d4af37";
 type SubTab =
   | "overview" | "transactions" | "settings";
 
-const SUB_TABS: { id: SubTab; label: string; icon: typeof Activity }[] = [
+// Primary segments shown as a two-up pill toggle (mirrors the All-League Scan
+// "Live Scan / Post-Week Audit" modes). Settings is intentionally excluded — it
+// lives behind a gear button surfaced only inside the Overview area.
+const SEGMENTS: { id: Extract<SubTab, "overview" | "transactions">; label: string; icon: typeof Activity }[] = [
   { id: "overview", label: "Overview", icon: Activity },
   { id: "transactions", label: "Transactions", icon: ArrowRightLeft },
-  { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
 // ── Small shared UI ──────────────────────────────────────────────────────────
@@ -54,41 +56,33 @@ function Chip({ className = "", children }: { className?: string; children: Reac
   );
 }
 
-function KpiCard({ icon, label, value, sub, accent }: { icon?: typeof Activity; label: string; value: React.ReactNode; sub?: string; accent?: boolean }) {
+function KpiCard({ icon, label, value, sub, accent = "slate" }: {
+  icon?: typeof Activity; label: string; value: React.ReactNode; sub?: string;
+  accent?: "red" | "gold" | "blue" | "yellow" | "slate" | "emerald";
+}) {
   const Icon = icon;
+  // Per-accent icon-box style: tinted background + icon color.
+  const colorByAccent: Record<string, string> = {
+    red:    "bg-red-500/10 text-red-600 dark-any:text-red-400",
+    gold:   "bg-[#d4af37]/10 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]",
+    blue:   "bg-blue-500/10 text-blue-600 dark-any:text-blue-400",
+    emerald:"bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
+    yellow: "bg-yellow-500/10 text-yellow-600 dark-any:text-yellow-400",
+    slate:  "bg-slate-500/10 text-slate-500 dark-any:text-slate-400",
+  };
   return (
-    <Card className="p-4 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628]">
-      <div className="flex items-start gap-3">
-        {Icon && (
-          <div className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ring-1",
-            accent ? "bg-[#d4af37]/10 ring-[#d4af37]/15" : "bg-muted/40 ring-border/40",
-          )}>
-            <Icon className={cn("w-4 h-4", accent ? "text-[#d4af37]" : "text-muted-foreground")} />
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none">{label}</p>
-          <p className="text-xl font-bold mt-1 leading-tight text-foreground" style={accent ? { color: GOLD } : undefined}>
-            {value}
-          </p>
-          {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+    <Card className="p-4 flex items-start gap-3 min-w-0">
+      {Icon && (
+        <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5", colorByAccent[accent])}>
+          <Icon className="w-4 h-4" />
         </div>
+      )}
+      <div className="min-w-0">
+        <p className="text-xl font-bold tabular-nums leading-tight text-foreground">{value}</p>
+        <p className="text-[11px] font-medium leading-tight mt-0.5 text-muted-foreground">{label}</p>
+        {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{sub}</p>}
       </div>
     </Card>
-  );
-}
-
-// Gold-tick card section header bar, mirroring Waiver/Lineup Command panels.
-function CardHeaderBar({ title, right }: { title: React.ReactNode; right?: React.ReactNode }) {
-  return (
-    <div className="px-5 py-3.5 border-b border-border/40 dark:border-white/[0.06] flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
-        <h3 className="text-sm font-bold text-foreground">{title}</h3>
-      </div>
-      {right}
-    </div>
   );
 }
 
@@ -133,6 +127,13 @@ function timeAgo(ts: number | null | undefined): string {
   return `${weeks}w ago`;
 }
 
+function daysAgo(ts: number | null | undefined): string {
+  if (!ts) return "—";
+  const days = Math.floor((Date.now() - ts) / 86_400_000);
+  if (days <= 0) return "today";
+  return `${days}d`;
+}
+
 // ── Root component ───────────────────────────────────────────────────────────
 
 export default function CommissionerActivity({ onBack }: { onBack?: () => void }) {
@@ -141,6 +142,9 @@ export default function CommissionerActivity({ onBack }: { onBack?: () => void }
   const leagues = sleeper.leagues;
 
   const [sub, setSub] = useState<SubTab>("overview");
+  // Settings is treated as a child of the Overview area, so the toggle keeps
+  // "Overview" highlighted while the settings panel is open.
+  const activeSeg: "overview" | "transactions" = sub === "transactions" ? "transactions" : "overview";
   // League is fixed to the active league (or the first commissioner league).
   // The in-tab picker was removed; the tab auto-scans this league on open.
   const [leagueId] = useState<string>(
@@ -198,9 +202,71 @@ export default function CommissionerActivity({ onBack }: { onBack?: () => void }
     );
   }
 
+  // Sub-tab toggle — pill segments mirroring the All-League Scan modes. Lives in
+  // the page header (desktop) with a full-width variant below on mobile. Settings
+  // sits behind the gear and only appears within the Overview area.
+  const subTabs = (variant: "desktop" | "mobile") => (
+    <div className={cn("flex items-center gap-2", variant === "mobile" && "w-full")}>
+      <div
+        className={cn(
+          "grid rounded-2xl p-1 gap-1 h-12",
+          variant === "desktop" ? "flex-shrink-0 w-[300px]" : "flex-1",
+          "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
+          "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
+        )}
+        style={{ gridTemplateColumns: "1fr 1fr" }}
+        data-testid={`activity-sub-toggle-${variant}`}
+      >
+        {SEGMENTS.map((s) => {
+          const Icon = s.icon;
+          const isActive = activeSeg === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setSub(s.id)}
+              data-testid={`subtab-${s.id}${variant === "mobile" ? "-mobile" : ""}`}
+              className={cn(
+                "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]",
+                isActive
+                  ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark-any:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark-any:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark-any:border dark-any:border-[#d4af37]/30"
+                  : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark-any:text-white/45 dark-any:hover:bg-transparent dark-any:hover:text-white/70",
+              )}
+            >
+              <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+              {s.label}
+              {isActive && (
+                <span
+                  className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
+                  style={{ background: "#d6a21e", opacity: 0.95 }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Settings — only available from the Overview area; toggles the panel. */}
+      {activeSeg === "overview" && (
+        <Button
+          variant="outline"
+          onClick={() => setSub(sub === "settings" ? "overview" : "settings")}
+          data-testid={`subtab-settings${variant === "mobile" ? "-mobile" : ""}`}
+          aria-label="Settings"
+          aria-pressed={sub === "settings"}
+          className={cn(
+            "h-12 px-3.5 rounded-2xl flex-shrink-0",
+            sub === "settings" && "border-[#d4af37]/50 text-[#d4af37]",
+          )}
+        >
+          <SettingsIcon className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-5">
-      {/* Page header */}
+      {/* Page header — title left, sub-tab toggle top-right (desktop). */}
       <div className="flex items-start justify-between gap-4">
         <SectionHeader title="League Activity" subtitle="Spot disengaged managers and at-risk leagues before they go quiet." />
         <div className="flex items-center gap-3 flex-shrink-0 pt-1">
@@ -210,6 +276,7 @@ export default function CommissionerActivity({ onBack }: { onBack?: () => void }
               <span>Scanning…</span>
             </div>
           )}
+          <div className="hidden md:flex">{subTabs("desktop")}</div>
           {onBack && (
             <Button variant="ghost" size="sm" onClick={onBack} data-testid="button-activity-back">
               <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
@@ -218,24 +285,8 @@ export default function CommissionerActivity({ onBack }: { onBack?: () => void }
         </div>
       </div>
 
-      {/* Sub-tab nav */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border/40 dark:border-white/[0.06] -mx-1 px-1">
-        {SUB_TABS.map((t) => {
-          const Icon = t.icon;
-          const active = sub === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setSub(t.id)}
-              data-testid={`subtab-${t.id}`}
-              className={`relative inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              <Icon className="w-3.5 h-3.5" /> {t.label}
-              {active && <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full" style={{ background: GOLD }} />}
-            </button>
-          );
-        })}
-      </div>
+      {/* Sub-tab toggle (mobile) */}
+      <div className="md:hidden !mt-3">{subTabs("mobile")}</div>
 
       {leagueId && (
         <div key={leagueId}>
@@ -268,27 +319,12 @@ function OverviewTab({ leagueId }: { leagueId: string }) {
   const label = snap.leagueActivityLabel;
   return (
     <div className="space-y-5">
-      {/* Hero score */}
-      <Card className="px-5 py-5 border-border/60 dark:border-[#1a2d4a]/80 bg-gradient-to-br from-background to-muted/20 dark:from-[#0c1929] dark:to-[#0a1628] flex flex-wrap items-center gap-5">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">League Activity Score</div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-4xl font-black" style={{ color: GOLD }}>{snap.leagueActivityScore}</span>
-            <span className="text-lg text-muted-foreground font-bold">/100</span>
-          </div>
-        </div>
-        <Chip className={`${leagueLabelColor(label)} text-sm px-3 py-1`}>{LEAGUE_LABEL_DISPLAY[label]}</Chip>
-        <div className="text-xs text-muted-foreground ml-auto">Week {snap.week} · {snap.season}</div>
-      </Card>
-
       {/* KPI grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard icon={Users} label="Active Managers" value={snap.activeManagerCount} />
-        <KpiCard icon={ShieldAlert} label="Inactive Risk" value={snap.inactiveManagerCount} accent={snap.inactiveManagerCount > 0} />
-        <KpiCard icon={ListChecks} label="Transactions" value={snap.totalTransactions} sub={`${snap.totalTrades} trades`} />
-        <KpiCard icon={Activity} label="Lineup Changes" value={snap.totalLineupChanges} />
-        <KpiCard icon={AlertTriangle} label="Empty Slots" value={snap.totalEmptyStarterSlots} accent={snap.totalEmptyStarterSlots > 0} />
-        <KpiCard icon={Inbox} label="Open Alerts" value={data.openAlertCount} accent={data.openAlertCount > 0} />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard icon={Activity} label="League Activity Score" value={`${snap.leagueActivityScore}/100`} accent="gold" sub={`${LEAGUE_LABEL_DISPLAY[label]} · Week ${snap.week} · ${snap.season}`} />
+        <KpiCard icon={Users} label="Active Managers" value={snap.activeManagerCount} accent="emerald" sub="Engaged" />
+        <KpiCard icon={ShieldAlert} label="Inactive Risk" value={snap.inactiveManagerCount} accent="red" sub="At-risk" />
+        <KpiCard icon={ListChecks} label="Transactions" value={snap.totalTransactions} accent="blue" sub={`${snap.totalTrades} trades`} />
       </div>
 
       {/* Manager activity table */}
@@ -325,31 +361,59 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
 
   return (
     <div>
-      <Card className="overflow-hidden border-border/60 dark:border-[#1a2d4a]/80">
-        <CardHeaderBar title="Manager Activity" right={<span className="text-xs text-muted-foreground">{sorted.length} manager{sorted.length !== 1 ? "s" : ""}</span>} />
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      {/* Swipe hint — mobile only (mirrors Lineup Command table) */}
+      <div className="flex items-center justify-end gap-1.5 md:hidden mb-1 px-1">
+        <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/25">Swipe to view</span>
+        <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark-any:text-white/20" />
+      </div>
+
+      <div
+        className={cn(
+          "rounded-2xl overflow-hidden",
+          // Light: clean white wrapper, slate border, premium shadow.
+          "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+          // Dark: legacy gradient.
+          "dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
+        )}
+      >
+        {/* Title bar — gold tick + manager count */}
+        <div className="flex items-center justify-between px-4 md:px-5 py-3.5 border-b border-[var(--sc-border)] dark-any:border-white/6">
+          <div className="flex items-center gap-2">
+            <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
+            <h3 className="text-sm font-bold text-[var(--sc-text)] dark-any:text-white/90">Manager Activity</h3>
+          </div>
+          <span className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/35">{sorted.length} manager{sorted.length !== 1 ? "s" : ""}</span>
+        </div>
+
+        {/* Scroll container */}
+        <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+        <table className="w-full text-sm" style={{ minWidth: 720 }}>
           <thead>
-            <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/40 dark:border-white/[0.05] bg-muted/30 dark:bg-white/[0.02]">
-              <th className="text-left font-bold px-3 py-2.5">Manager / Team</th>
-              <th className="text-center font-bold px-2 py-2.5">Score</th>
-              <th className="text-center font-bold px-2 py-2.5">Risk</th>
-              <th className="text-center font-bold px-2 py-2.5">Txns</th>
-              <th className="text-center font-bold px-2 py-2.5">Trades</th>
-              <th className="text-center font-bold px-2 py-2.5">Waiv</th>
-              <th className="text-center font-bold px-2 py-2.5">FA</th>
-              <th className="text-center font-bold px-2 py-2.5">Lineup</th>
-              <th className="text-center font-bold px-2 py-2.5">Empty</th>
-              <th className="text-center font-bold px-2 py-2.5">Last Move</th>
-              <th className="text-left font-bold px-3 py-2.5">Flags</th>
+            {/* Header — navy in light mode, glass strip in dark. */}
+            <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
+              <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager / Team</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risk</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trades</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Waiv</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">FA</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Lineup</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</th>
+              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Last Move</th>
+              <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Flags</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((m) => {
               const rl = riskLabel(m.inactivityRiskScore);
               return (
-                <tr key={m.rosterId} className="border-b border-border/40 last:border-0 hover:bg-muted/20" data-testid={`manager-row-${m.rosterId}`}>
-                  <td className="px-3 py-2.5">
+                <tr
+                  key={m.rosterId}
+                  className="border-b border-[#edf2f7] dark-any:border-white/5 last:border-0 hover:bg-[var(--sc-card-soft)] dark-any:hover:bg-white/[0.02] transition-colors"
+                  data-testid={`manager-row-${m.rosterId}`}
+                >
+                  <td className="px-3 md:px-5 py-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <SleeperUserAvatar
                         username={m.managerName || m.teamName || "?"}
@@ -358,24 +422,24 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
                         compact
                       />
                       <div className="min-w-0">
-                        <div className="font-semibold text-foreground truncate">{m.teamName}</div>
-                        <div className="text-xs text-muted-foreground truncate">{m.managerName}</div>
+                        <div className="font-bold truncate text-[var(--sc-blue)] dark-any:text-white/90">{m.teamName}</div>
+                        <div className="text-xs truncate text-[var(--sc-text-muted)] dark-any:text-white/30">{m.managerName}</div>
                       </div>
                     </div>
                   </td>
                   <td className="text-center px-2"><Chip className={activityLabelColor(m.activityLabel)}>{m.activityScore}</Chip></td>
                   <td className="text-center px-2"><Chip className={rl.color}>{rl.text}</Chip></td>
-                  <td className="text-center px-2 text-foreground">{m.transactionsCount}</td>
-                  <td className="text-center px-2 text-muted-foreground">{m.tradesCount}</td>
-                  <td className="text-center px-2 text-muted-foreground">{m.waiverCount}</td>
-                  <td className="text-center px-2 text-muted-foreground">{m.freeAgentCount}</td>
-                  <td className="text-center px-2">{m.lineupChanged ? <span className="text-emerald-400">Yes</span> : <span className="text-muted-foreground">No</span>}</td>
-                  <td className="text-center px-2">{m.emptyStarterSlots > 0 ? <span className="text-orange-400 font-semibold">{m.emptyStarterSlots}</span> : <span className="text-muted-foreground">0</span>}</td>
-                  <td className="text-center px-2 text-xs text-muted-foreground">{m.weeksSinceTransaction != null ? `${m.weeksSinceTransaction}w` : timeAgo(m.lastTransactionTs)}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="text-center px-2 font-semibold tabular-nums text-[var(--sc-text)] dark-any:text-white/70">{m.transactionsCount}</td>
+                  <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{m.tradesCount}</td>
+                  <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{m.waiverCount}</td>
+                  <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{m.freeAgentCount}</td>
+                  <td className="text-center px-2">{m.lineupChanged ? <span className="font-semibold text-emerald-600 dark-any:text-emerald-400">Yes</span> : <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">No</span>}</td>
+                  <td className="text-center px-2">{m.emptyStarterSlots > 0 ? <span className="font-bold tabular-nums text-orange-600 dark-any:text-orange-400">{m.emptyStarterSlots}</span> : <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">0</span>}</td>
+                  <td className="text-center px-2 text-xs tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{daysAgo(m.lastTransactionTs)}</td>
+                  <td className="px-3 md:px-5 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {m.flags.map((f) => (
-                        <Chip key={f} className="border-border/60 text-muted-foreground">{FLAG_DISPLAY[f] ?? f}</Chip>
+                        <Chip key={f} className="border-[var(--sc-border)] text-[var(--sc-text-muted)] dark-any:border-white/10 dark-any:text-white/40">{FLAG_DISPLAY[f] ?? f}</Chip>
                       ))}
                     </div>
                   </td>
@@ -385,7 +449,7 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
           </tbody>
         </table>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

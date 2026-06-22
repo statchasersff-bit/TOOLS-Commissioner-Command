@@ -20,13 +20,10 @@ import { useSleeper } from "@/contexts/SleeperContext";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
-} from "@/components/ui/select";
-import {
   ShieldAlert, RefreshCw, ArrowLeft, Copy, AlertTriangle, ListChecks,
   FileText, Settings as SettingsIcon, Scale, CheckCircle2,
   AlertCircle, Info, MessageSquare, EyeOff, ExternalLink, ChevronLeft, ChevronRight,
-  Users, UserX, Inbox, CalendarClock,
+  UserX, CalendarClock, ArrowRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -151,6 +148,9 @@ export default function CommissionerLineupIntegrity({
 }) {
   const sleeper = useSleeper();
   const leagues = sleeper.leagues;
+  // Best ball leagues have no weekly lineup decisions to police, so they're
+  // always excluded from the multi-league scan.
+  const scanLeagues = leagues.filter((l) => !l.isBestBall);
   const { toast } = useToast();
 
   const isMulti = mode === "multi";
@@ -208,8 +208,9 @@ export default function CommissionerLineupIntegrity({
       )}
       {isMulti ? (
         <MultiLeagueDashboard
-          leagueIds={leagues.map((l) => l.leagueId)}
-          nameById={Object.fromEntries(leagues.map((l) => [l.leagueId, l.name]))}
+          leagueIds={scanLeagues.map((l) => l.leagueId)}
+          nameById={Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.name]))}
+          avatarById={Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.avatar ?? null]))}
           onOpenLeague={(id, wk) => onOpenLeague?.(id, wk)}
         />
       ) : (
@@ -730,6 +731,7 @@ const TOGGLES: { key: keyof LineupIntegritySettings; label: string }[] = [
   { key: "enableOutStarterChecks", label: "Flag OUT players" },
   { key: "enableIrStarterChecks", label: "Flag IR players" },
   { key: "enableDoubtfulStarterChecks", label: "Flag doubtful players" },
+  { key: "enableQuestionableStarterChecks", label: "Flag questionable players" },
   { key: "enableUnchangedLineupChecks", label: "Flag unchanged lineups" },
   { key: "enableSuspiciousBenchingChecks", label: "Suspicious benching checks" },
   { key: "enableTankingRiskChecks", label: "Tanking risk checks" },
@@ -847,14 +849,14 @@ const MODE_META: Record<ScanMode, {
   toggleLabel: string; scanLabel: string; tagline: string; statusLabel: string; statusColor: string;
 }> = {
   live: {
-    toggleLabel: "Current Week",
+    toggleLabel: "Live Scan",
     scanLabel: "Live Lineup Check",
     tagline: "Catch lineup issues before kickoff — prevention, not penalties.",
     statusLabel: "In progress",
     statusColor: "#eab308",
   },
   audit: {
-    toggleLabel: "Completed Weeks",
+    toggleLabel: "Post-Week Audit",
     scanLabel: "Post-Week Audit",
     tagline: "Review final lineup issues after results are complete — document & resolve.",
     statusLabel: "Final",
@@ -933,74 +935,6 @@ function ScanKpiCard({ icon: Icon, label, value, accent = "slate", sub }: {
   );
 }
 
-// ── Workflow guide: Scan → Review → Take Action ──────────────────────────────
-// The page's job isn't to display stats — it's to drive a three-step
-// commissioner workflow. This strip names the steps and shows live progress
-// through them, reworded per mode (prevention vs accountability).
-function WorkflowSteps({
-  mode, leaguesScanned, totalLeagues, totalIssues, resolved,
-}: {
-  mode: ScanMode;
-  leaguesScanned: number;
-  totalLeagues: number;
-  totalIssues: number;
-  resolved: number;
-}) {
-  const steps = [
-    {
-      icon: RefreshCw,
-      title: "Scan your leagues",
-      detail: `${leaguesScanned}/${totalLeagues} scanned`,
-      done: leaguesScanned > 0,
-    },
-    {
-      icon: ListChecks,
-      title: "Review what's flagged",
-      detail: totalIssues > 0
-        ? `${totalIssues} issue${totalIssues === 1 ? "" : "s"} to review`
-        : "Nothing flagged",
-      done: leaguesScanned > 0 && totalIssues === 0,
-    },
-    {
-      icon: CheckCircle2,
-      title: "Take action",
-      detail: mode === "audit"
-        ? (resolved > 0 ? `${resolved} reviewed/resolved` : "Document & resolve")
-        : (resolved > 0 ? `${resolved} resolved` : "Send reminders early"),
-      done: totalIssues > 0 && resolved >= totalIssues,
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-      {steps.map((s, i) => {
-        const Icon = s.icon;
-        return (
-          <div key={i} className="relative flex items-center gap-3 rounded-2xl border border-border/60 bg-card/40 px-3 py-2.5">
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-[13px] font-black"
-              style={s.done
-                ? { background: "#22c55e1a", color: "#22c55e", border: "1px solid #22c55e55" }
-                : { background: `${GOLD}1a`, color: GOLD, border: `1px solid ${GOLD}55` }}
-            >
-              {s.done ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold leading-tight flex items-center gap-1.5">
-                <Icon className="w-3.5 h-3.5 text-muted-foreground" /> {s.title}
-              </p>
-              <p className="text-[11px] text-muted-foreground leading-tight mt-0.5 truncate">{s.detail}</p>
-            </div>
-            {i < steps.length - 1 && (
-              <ChevronRight className="hidden sm:block w-4 h-4 text-muted-foreground/50 absolute -right-[11px] top-1/2 -translate-y-1/2 z-10" />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Scan Settings: cross-league control over what counts as an issue ─────────
 // The dashboard spans every league a commissioner runs, so this compact panel
 // edits the real per-league scan settings and applies the change to all of
@@ -1011,9 +945,11 @@ const SCAN_SETTING_TOGGLES: { key: keyof LineupIntegritySettings; label: string;
   { key: "enableOutStarterChecks", label: "Flag OUT players" },
   { key: "enableIrStarterChecks", label: "Flag IR players" },
   { key: "enableDoubtfulStarterChecks", label: "Flag doubtful players" },
+  { key: "enableQuestionableStarterChecks", label: "Flag questionable players" },
   { key: "enableUnchangedLineupChecks", label: "Flag unchanged lineups" },
   { key: "ignoreEliminatedTeams", label: "Ignore eliminated teams" },
-  { key: "ignoreLineupChecksForBestBall", label: "Ignore best ball leagues" },
+  // Best ball leagues are always excluded from the multi-league scan, so there's
+  // no per-scan toggle for them here.
 ];
 
 function ScanSettingsButton({ leagueIds }: { leagueIds: string[] }) {
@@ -1116,18 +1052,47 @@ function ScanSettingsButton({ leagueIds }: { leagueIds: string[] }) {
   );
 }
 
+/** Small league logo for the scan table. Sleeper stores a bare avatar hash, so
+ *  compose the CDN thumb URL unless it's already a full URL. Falls back to an
+ *  initials circle when the league has no avatar (or the image 404s). */
+function LeagueAvatar({ avatar, name }: { avatar: string | null; name: string }) {
+  const [err, setErr] = useState(false);
+  const src = avatar
+    ? (avatar.startsWith("http") ? avatar : `https://sleepercdn.com/avatars/thumbs/${avatar}`)
+    : null;
+  if (src && !err) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-border/40"
+        onError={() => setErr(true)}
+      />
+    );
+  }
+  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div className="w-6 h-6 rounded-full flex-shrink-0 bg-[#0b3a7a]/20 dark:bg-blue-900/30 flex items-center justify-center ring-1 ring-border/40">
+      <span className="text-[9px] font-bold text-[#0b3a7a] dark:text-blue-300">{initials}</span>
+    </div>
+  );
+}
+
 function MultiLeagueDashboard({
-  leagueIds, nameById, onOpenLeague,
+  leagueIds, nameById, avatarById, onOpenLeague,
 }: {
   leagueIds: string[];
   nameById: Record<string, string>;
+  avatarById: Record<string, string | null>;
   onOpenLeague: (id: string, week?: number) => void;
 }) {
   const { toast } = useToast();
   // Two modes: live (current-week prevention) vs audit (completed-week review).
-  // In audit mode, auditWeek === null means "All Open Issues" across weeks.
+  // In audit mode we always surface all open issues across weeks.
   const [mode, setMode] = useState<ScanMode>("live");
-  const [auditWeek, setAuditWeek] = useState<number | null>(null);
+  const [auditWeek] = useState<number | null>(null);
+  // Which league row is expanded to show its individual issues (one at a time).
+  const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["li", "multi", leagueIds.join(","), mode, mode === "audit" ? (auditWeek ?? "all") : "live"],
@@ -1169,26 +1134,17 @@ function MultiLeagueDashboard({
   if (isLoading) return <Loading />;
 
   const rows = data?.leagues ?? [];
-  const availableWeeks = data?.availableWeeks ?? [];
-  const currentWeek = data?.currentWeek ?? (availableWeeks[availableWeeks.length - 1] ?? null);
-  // Completed weeks = anything before the current NFL week (week-level lock).
-  const completedWeeks = [...availableWeeks]
-    .filter((w) => currentWeek == null || w < currentWeek)
-    .sort((a, b) => b - a);
   const meta = MODE_META[mode];
-  const scopeWeek = data?.week ?? null;
 
   const sum = (fn: (r: MultiLeagueRow) => number) => rows.reduce((s, r) => s + fn(r), 0);
-  const leaguesScanned = rows.filter((r) => r.averageIntegrity != null).length;
-  const totalIssues = sum((r) => r.totalIssues);
-  const totalCritical = sum((r) => r.critical);
-  const affectedManagers = sum((r) => r.affectedManagers);
-  const emptySlots = sum((r) => r.emptySlots);
-  const inactiveStarters = sum((r) => r.inactiveStarters);
+  // "Inactive Starters" card bundles every won't-play starter: OUT/IR (already
+  // folded into inactiveStarters), bye-week, and empty slots.
+  const inactiveStarters = sum((r) => r.inactiveStarters + r.byeStarters + r.emptySlots);
+  const quesDoubStarters = sum((r) => r.questionableStarters + r.doubtfulStarters);
+  const needsReview = sum((r) => r.needsReview);
   const resolved = sum((r) => r.resolvedThisWeek);
-  const matchupsImpacted = sum((r) => r.matchupsImpacted);
 
-  // Mode sub-tabs (Current Week / Completed Weeks) — styled and positioned like
+  // Mode sub-tabs (Current Week / Post-Week Audit) — styled and positioned like
   // the Lineup Command sub-tabs: navy active pill with a gold underline, sitting
   // in the page header (desktop) with a full-width variant below on mobile.
   const modeTabs = (variant: "desktop" | "mobile") => (
@@ -1240,83 +1196,31 @@ function MultiLeagueDashboard({
       {/* Page header — title left, mode sub-tabs top-right (desktop). */}
       <div className="flex items-start justify-between gap-4">
         <SectionHeader
-          title="Lineups"
-          subtitle="Your commissioner workflow: scan every league, review what's flagged, take action."
+          title={meta.scanLabel}
+          subtitle={meta.tagline}
         />
         <div className="hidden md:flex flex-shrink-0 pt-1">{modeTabs("desktop")}</div>
       </div>
 
-      {/* Workflow guide — Scan → Review → Take Action */}
-      <WorkflowSteps
-        mode={mode}
-        leaguesScanned={leaguesScanned}
-        totalLeagues={leagueIds.length}
-        totalIssues={totalIssues}
-        resolved={resolved}
-      />
-
       {/* Mode sub-tabs (mobile) */}
       <div className="md:hidden !mt-3">{modeTabs("mobile")}</div>
 
-      {/* Mode context + selector */}
-      <div className="rounded-2xl border border-border/60 bg-card/40 p-4 space-y-3">
-        {/* Audit-mode week picker */}
-        {mode === "audit" && (
-          <div className="flex flex-wrap items-center gap-3">
-            <Select
-              value={auditWeek == null ? "all" : String(auditWeek)}
-              onValueChange={(v) => setAuditWeek(v === "all" ? null : Number(v))}
-            >
-              <SelectTrigger className="h-9 w-[180px]" data-testid="select-audit-week">
-                <SelectValue placeholder="Select week" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Open Issues</SelectItem>
-                {completedWeeks.map((w) => (
-                  <SelectItem key={w} value={String(w)}>
-                    Week {w}{currentWeek != null && w === currentWeek - 1 ? " (Last week)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        {/* Scan label + status line */}
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 className="text-sm font-bold" style={{ color: GOLD }}>{meta.scanLabel}</h2>
-          <span className="text-xs text-muted-foreground">{meta.tagline}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-semibold">
-            {mode === "live"
-              ? `Week ${currentWeek ?? "—"}`
-              : auditWeek == null ? "All open issues" : `Week ${scopeWeek ?? auditWeek}`}
-          </span>
-          <Badge text={meta.statusLabel} color={meta.statusColor} />
-        </div>
-      </div>
-
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <ScanKpiCard icon={ListChecks} label="Leagues Scanned" value={`${leaguesScanned}/${leagueIds.length}`} />
-        <ScanKpiCard icon={AlertTriangle} label={mode === "audit" ? "Final Issues" : "Week Issues"} value={totalIssues} accent={totalIssues ? "amber" : "slate"} />
-        <ScanKpiCard icon={AlertCircle} label="Critical Issues" value={totalCritical} accent={totalCritical ? "red" : "slate"} />
-        <ScanKpiCard icon={Users} label="Affected Managers" value={affectedManagers} accent={affectedManagers ? "orange" : "slate"} />
-        {mode === "audit" ? (
-          <ScanKpiCard icon={Scale} label="Matchups Impacted" value={matchupsImpacted} accent={matchupsImpacted ? "red" : "slate"} />
-        ) : (
-          <ScanKpiCard icon={Inbox} label="Empty Slots" value={emptySlots} accent={emptySlots ? "red" : "slate"} />
-        )}
-        <ScanKpiCard icon={UserX} label="Inactive Starters" value={inactiveStarters} accent={inactiveStarters ? "orange" : "slate"} />
-        <ScanKpiCard icon={CheckCircle2} label={mode === "audit" ? "Reviewed/Resolved" : "Resolved"} value={resolved} accent={resolved ? "blue" : "slate"} />
-        <ScanKpiCard icon={CalendarClock} label="Bye Starters" value={sum((r) => r.byeStarters)} />
+        <ScanKpiCard icon={UserX} label="Inactive Starters" value={inactiveStarters} accent="red" sub="Out · IR · Bye · Empty" />
+        <ScanKpiCard icon={AlertCircle} label="Risky Starters" value={quesDoubStarters} accent="amber" sub="Questionable · Doubtful" />
+        <ScanKpiCard icon={ListChecks} label="Needs Review" value={needsReview} accent="orange" sub="Open issues" />
+        <ScanKpiCard icon={CheckCircle2} label="Resolved" value={resolved} accent="blue" sub="This week" />
       </div>
 
       {/* League table */}
       <div>
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="text-base font-bold">All Leagues</h2>
-          <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold">{meta.scanLabel}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{meta.tagline}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <ScanSettingsButton leagueIds={leagueIds} />
             <Button
               size="sm"
@@ -1330,27 +1234,43 @@ function MultiLeagueDashboard({
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-border/60">
-          <table className="w-full text-sm">
+        {/* Swipe hint — mobile only (mirrors Lineup Command table) */}
+        <div className="flex items-center justify-end gap-1.5 md:hidden mb-1 px-1">
+          <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/25">Swipe to view</span>
+          <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark-any:text-white/20" />
+        </div>
+        <div
+          className={cn(
+            "rounded-2xl overflow-hidden",
+            // Light: clean white wrapper, slate border, premium shadow.
+            "bg-[var(--sc-card-bg)] border border-[var(--sc-border)] shadow-[var(--sc-shadow-card)]",
+            // Dark: legacy gradient.
+            "dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
+          )}
+        >
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+          <table className="w-full text-sm" style={{ minWidth: 900 }}>
             <thead>
-              <tr className="text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border/60">
-                <th className="text-left px-3 py-2">League</th>
+              {/* Header — navy in light mode, glass strip in dark. */}
+              <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
+                <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">League</th>
                 {mode === "audit" ? (
                   <>
-                    <th className="text-center px-2 py-2">Final Issues</th>
-                    <th className="text-center px-2 py-2">Managers</th>
-                    <th className="text-center px-2 py-2">Matchups Impacted</th>
+                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Final Issues</th>
+                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Managers</th>
+                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Matchups Impacted</th>
                   </>
                 ) : (
                   <>
-                    <th className="text-center px-2 py-2">Critical</th>
-                    <th className="text-center px-2 py-2">Warnings</th>
-                    <th className="text-center px-2 py-2">Managers</th>
+                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Managers</th>
                   </>
                 )}
-                <th className="text-left px-2 py-2">Status</th>
-                <th className="text-left px-2 py-2">Last Scanned</th>
-                <th className="text-right px-2 py-2">Action</th>
+                <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">OUT/BYE/IR/EMPTY</th>
+                <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">QUES/DOUB</th>
+                <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Tanking</th>
+                <th className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Status</th>
+                <th className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Last Scanned</th>
+                <th className="text-right font-bold px-2 md:px-5 py-2.5 whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -1360,49 +1280,106 @@ function MultiLeagueDashboard({
                 const noData = status === "best_ball_excluded" || status === "not_started" || status === "data_pending";
                 const cell = (v: number | undefined) => (noData ? "—" : (v ?? 0));
                 const actionable = status === "critical" || status === "needs_review";
+                const isOpen = expandedLeague === id;
+                const expandable = !noData;
                 return (
-                  <tr key={id} className="border-b border-border/40 last:border-0">
-                    <td className="px-3 py-2 font-semibold">{nameById[id] ?? id}</td>
+                  <Fragment key={id}>
+                  <tr
+                    className={cn(
+                      "border-b border-[#edf2f7] dark-any:border-white/5 last:border-0 hover:bg-[var(--sc-card-soft)] dark-any:hover:bg-white/[0.02] transition-colors",
+                      expandable && "cursor-pointer",
+                    )}
+                    onClick={expandable ? () => setExpandedLeague(isOpen ? null : id) : undefined}
+                  >
+                    <td className="px-3 md:px-5 py-2.5 font-bold text-[var(--sc-blue)] dark-any:text-white/90">
+                      <div className="flex items-center gap-2">
+                        {expandable ? (
+                          <ChevronRight className={cn("w-3.5 h-3.5 flex-shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+                        ) : (
+                          <span className="w-3.5 flex-shrink-0" />
+                        )}
+                        <LeagueAvatar avatar={avatarById[id] ?? null} name={nameById[id] ?? id} />
+                        <span className="truncate">{nameById[id] ?? id}</span>
+                      </div>
+                    </td>
                     {mode === "audit" ? (
                       <>
-                        <td className="px-2 py-2 text-center">
-                          {noData ? "—" : (r!.totalIssues ? <span className="font-bold text-amber-500">{r!.totalIssues}</span> : 0)}
+                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
+                          {noData ? "—" : (r!.totalIssues ? <span className="font-bold text-amber-600 dark-any:text-amber-500">{r!.totalIssues}</span> : 0)}
                         </td>
-                        <td className="px-2 py-2 text-center">{cell(r?.affectedManagers)}</td>
-                        <td className="px-2 py-2 text-center">
-                          {noData ? "—" : (r!.matchupsImpacted ? <span className="font-bold text-red-500">{r!.matchupsImpacted}</span> : 0)}
+                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{cell(r?.affectedManagers)}</td>
+                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
+                          {noData ? "—" : (r!.matchupsImpacted ? <span className="font-bold text-red-600 dark-any:text-red-500">{r!.matchupsImpacted}</span> : 0)}
                         </td>
                       </>
                     ) : (
                       <>
-                        <td className="px-2 py-2 text-center">
-                          {noData ? "—" : (r!.critical ? <span className="font-bold text-red-500">{r!.critical}</span> : 0)}
-                        </td>
-                        <td className="px-2 py-2 text-center">{cell(r?.warnings)}</td>
-                        <td className="px-2 py-2 text-center">{cell(r?.affectedManagers)}</td>
+                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{cell(r?.affectedManagers)}</td>
                       </>
                     )}
-                    <td className="px-2 py-2"><Badge text={leagueStatusLabel(status, mode)} color={STATUS_META[status].color} /></td>
-                    <td className="px-2 py-2 text-muted-foreground text-xs whitespace-nowrap" title={r?.lastScanned ? new Date(r.lastScanned).toLocaleString() : undefined}>
+                    <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
+                      {noData ? "—" : (() => {
+                        const v = (r!.inactiveStarters ?? 0) + (r!.byeStarters ?? 0) + (r!.emptySlots ?? 0);
+                        return v ? <span className="font-bold text-red-600 dark-any:text-red-500">{v}</span> : 0;
+                      })()}
+                    </td>
+                    <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
+                      {noData ? "—" : (() => {
+                        const v = (r!.questionableStarters ?? 0) + (r!.doubtfulStarters ?? 0);
+                        return v ? <span className="font-bold text-amber-600 dark-any:text-amber-500">{v}</span> : 0;
+                      })()}
+                    </td>
+                    <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
+                      {noData ? "—" : (r!.tankingTeams ? <span className="font-bold text-red-600 dark-any:text-red-500">{r!.tankingTeams}</span> : 0)}
+                    </td>
+                    <td className="px-2 py-2.5"><Badge text={leagueStatusLabel(status, mode)} color={STATUS_META[status].color} /></td>
+                    <td className="px-2 py-2.5 text-xs whitespace-nowrap text-[var(--sc-text-muted)] dark-any:text-white/40" title={r?.lastScanned ? new Date(r.lastScanned).toLocaleString() : undefined}>
                       {formatLastScanned(r?.lastScanned ?? null)}
                     </td>
-                    <td className="px-2 py-2 text-right">
+                    <td className="px-2 md:px-5 py-2.5 text-right">
                       {status === "best_ball_excluded" || status === "not_started" ? (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/40">—</span>
                       ) : (
                         <button
                           className="text-xs text-[#d4af37] hover:underline inline-flex items-center gap-1"
-                          onClick={() => onOpenLeague(id, r?.week ?? undefined)}
+                          onClick={(e) => { e.stopPropagation(); onOpenLeague(id, r?.week ?? undefined); }}
                         >
                           {actionable ? <><AlertTriangle className="w-3.5 h-3.5" /> Review</> : <><CheckCircle2 className="w-3.5 h-3.5" /> View</>}
                         </button>
                       )}
                     </td>
                   </tr>
+                  {isOpen && (
+                    <tr className="bg-[var(--sc-card-soft)] dark-any:bg-white/[0.02] border-b border-[#edf2f7] dark-any:border-white/5">
+                      <td colSpan={mode === "audit" ? 10 : 8} className="px-3 md:px-5 py-3">
+                        {(r?.alerts?.length ?? 0) === 0 ? (
+                          <p className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/40">No open issues this week for this league.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {r!.alerts.map((a) => (
+                              <div key={a.id} className="flex items-start gap-2 text-xs">
+                                <span className={cn("mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                  a.bucket === "critical" ? "bg-red-500" : a.bucket === "warning" ? "bg-amber-500" : "bg-sky-500")} />
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-foreground">
+                                    {a.teamName || a.managerName || `Roster ${a.rosterId}`}
+                                    <span className="ml-1.5 font-normal text-[var(--sc-text-muted)] dark-any:text-white/40">{a.title}</span>
+                                  </div>
+                                  {a.description && <div className="text-[var(--sc-text-muted)] dark-any:text-white/40">{a.description}</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
+          </div>
         </div>
         <p className="text-[11px] text-muted-foreground mt-2">
           Best ball leagues are excluded from manual lineup integrity checks because managers do not set weekly starting lineups.

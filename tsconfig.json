@@ -17,6 +17,7 @@
     "types": ["node", "vite/client"],
     "paths": {
       "@/*": ["./client/src/*"],
+      "@dispersal/*": ["./client/src/features/dispersal-draft/*"],
       "@shared/*": ["./shared/*"]
     }
   }

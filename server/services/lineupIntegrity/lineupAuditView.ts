@@ -21,6 +21,7 @@ import {
 } from "@shared/schema";
 import { getLeague, getLeagueRosters } from "../commissionerActivity/sleeperActivityApi";
 import { getStartingSlots } from "./parseSleeperLineups";
+import { getLineupIntegritySettings } from "./lineupIntegritySettings";
 
 function isEmptySlot(slot: string | null | undefined): boolean {
   return !slot || slot === "0" || slot === "null" || slot === "None";
@@ -160,7 +161,7 @@ export async function getLeagueWeekAudit(
   if (checkRows.length === 0) return emptyResult;
 
   const checkIds = checkRows.map((r) => r.id);
-  const [playerRows, alertRows, league, rosters] = await Promise.all([
+  const [playerRows, alertRows, league, rosters, settings] = await Promise.all([
     db.select().from(commissionerLineupPlayerChecks).where(inArray(commissionerLineupPlayerChecks.lineupCheckId, checkIds)),
     db.select().from(commissionerLineupAlerts).where(
       and(
@@ -171,6 +172,7 @@ export async function getLeagueWeekAudit(
     ),
     getLeague(leagueId).catch(() => null),
     getLeagueRosters(leagueId).catch(() => []),
+    getLineupIntegritySettings(leagueId),
   ]);
 
   const startingSlots = getStartingSlots((league?.roster_positions as string[]) ?? []);
@@ -292,6 +294,9 @@ export async function getLeagueWeekAudit(
     for (const p of players) {
       if (!p.isStarter) continue;
       const verdict = playerStatusLabel(p);
+      // Questionable starters are the lowest-severity signal; respect the
+      // per-league toggle so commissioners can hide them entirely.
+      if (verdict && verdict.category === "questionable" && !settings.enableQuestionableStarterChecks) continue;
       if (verdict) {
         issues.push(
           baseIssue({

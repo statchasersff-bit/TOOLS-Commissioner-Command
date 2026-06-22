@@ -38,6 +38,7 @@ export interface ShapedCheck {
   inactiveStarters: number;
   irStarters: number;
   doubtfulStarters: number;
+  questionableStarters: number;
   suspiciousBenchings: number;
   optimalityGap: number;
   optimalityGapPct: number;
@@ -67,6 +68,7 @@ function shapeCheck(r: typeof commissionerLineupChecks.$inferSelect): ShapedChec
     inactiveStarters: r.inactiveStarters ?? 0,
     irStarters: r.irStarters ?? 0,
     doubtfulStarters: r.doubtfulStarters ?? 0,
+    questionableStarters: r.questionableStarters ?? 0,
     suspiciousBenchings: r.suspiciousBenchings ?? 0,
     optimalityGap: n(r.optimalityGap),
     optimalityGapPct: n(r.optimalityGapPct),
@@ -550,6 +552,11 @@ export async function getMultiLeagueSummary(
     const emptySlots = weekChecks.reduce((s, c) => s + c.emptyStarterSlots, 0);
     const inactiveStarters = weekChecks.reduce((s, c) => s + c.inactiveStarters + c.irStarters, 0);
     const byeStarters = weekChecks.reduce((s, c) => s + c.byeStarters, 0);
+    const doubtfulStarters = weekChecks.reduce((s, c) => s + c.doubtfulStarters, 0);
+    const questionableStarters = weekChecks.reduce((s, c) => s + c.questionableStarters, 0);
+    // Teams showing a potential-tanking signal (risk score ≥ 25, matching the
+    // Anti-Tanking review threshold used in the per-league audit).
+    const tankingTeams = weekChecks.filter((c) => c.tankingRiskScore >= 25).length;
     const needsReview = weekChecks.filter((c) => c.reviewStatus === "needs_review").length;
     const scanned = leagueChecks.length > 0;
     // Most recent scan time across all of this league's checks (any week).
@@ -605,6 +612,9 @@ export async function getMultiLeagueSummary(
       emptySlots,
       inactiveStarters,
       byeStarters,
+      doubtfulStarters,
+      questionableStarters,
+      tankingTeams,
       needsReview,
       resolvedThisWeek: resolvedAlerts.length,
       bestBall: meta.bestBall,

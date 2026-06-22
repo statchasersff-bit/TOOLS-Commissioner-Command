@@ -24,9 +24,8 @@ interface FeedbackModalProps {
 function getTabLabel(tab: string, sub: string): string {
   const labels: Record<string, string> = {
     portfolio: "Command Center",
-    "league-analyzer": "League Analyzer",
-    "trade-center": "Trade Center",
-    "league-market": "Research",
+    "league-analyzer": "Activity",
+    "trade-center": "Trades",
   };
   const subLabels: Record<string, string> = {
     "portfolio-summary": "My Leagues", "lineup-command": "Lineup Command",

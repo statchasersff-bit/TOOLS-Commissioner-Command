@@ -371,6 +371,7 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     const allowedKeys = new Set([
       "enableEmptySlotChecks", "enableByeStarterChecks", "enableInactiveStarterChecks",
       "enableOutStarterChecks", "enableIrStarterChecks", "enableDoubtfulStarterChecks",
+      "enableQuestionableStarterChecks",
       "enableUnchangedLineupChecks",
       "enableSuspiciousBenchingChecks", "enableTankingRiskChecks",
       "suspiciousBenchingValueGap", "suspiciousBenchingProjectionGap",

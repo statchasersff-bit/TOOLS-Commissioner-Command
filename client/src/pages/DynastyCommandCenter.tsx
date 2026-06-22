@@ -67,13 +67,11 @@ const FinanceTab        = lazy(() => import("./tabs/FinanceTab").then(m => ({ de
 const CommandersReport  = lazy(() => import("./tabs/CommandersReport").then(m => ({ default: m.CommandersReport })));
 const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
 const TradeReviewCenter    = lazy(() => import("./tabs/TradeReviewCenter").then(m => ({ default: m.TradeReviewCenter })));
-const MarketValue       = lazy(() => import("./tabs/LeagueMarket").then(m => ({ default: m.MarketValue })));
 const UserSearch        = lazy(() => import("./tabs/UserSearch"));
 const LiveDraft         = lazy(() => import("./tabs/LiveDraft"));
 const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
-const DraftCommand      = lazy(() => import("./tabs/DraftCommand").then(m => ({ default: m.DraftCommand })));
-const DraftAvailability = lazy(() => import("./tabs/DraftAvailability").then(m => ({ default: m.DraftAvailability })));
 const PickTracker       = lazy(() => import("./tabs/PickTracker").then(m => ({ default: m.PickTracker })));
+const DispersalDraft    = lazy(() => import("@dispersal/DispersalDraft").then(m => ({ default: m.DispersalDraft })));
 const AboutPage         = lazy(() => import("@/components/AboutModal").then(m => ({ default: m.AboutPage })));
 const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
@@ -108,6 +106,12 @@ function getInitialState(pathTab?: string, pathSub?: string) {
   // the Draft Board sub-tab. Keep old URLs / saved state working.
   if (requestedTab === "live-draft") {
     requestedTab = "draft";
+    requestedSub = "draft-board";
+  }
+
+  // Legacy redirect — the "ADP Explorer" and "Player Availability" draft
+  // sub-tabs were removed. Send stale URLs / saved state to the Draft Board.
+  if (requestedTab === "draft" && (requestedSub === "adp-explorer" || requestedSub === "player-availability")) {
     requestedSub = "draft-board";
   }
 
@@ -154,14 +158,12 @@ function getInitialState(pathTab?: string, pathSub?: string) {
     requestedSub = "portfolio-summary";
   }
 
-  // Removed Research sub-tabs — Advanced Stats (position-stats), Value Finder
-  // (value-finder), and Resources (analysis) were retired. Send any stale URL /
-  // saved state to the Research landing so the user isn't dropped on a nav-less,
-  // unrenderable sub-tab.
-  if (
-    requestedTab === "league-market" &&
-    ["position-stats", "value-finder", "analysis"].includes(requestedSub)
-  ) {
+  // The Research module (league-market) was retired — its only live sub-tab,
+  // User Search, moved into the Tools (draft) module. Its other sub-tabs
+  // (Advanced Stats, Value Finder, Resources, Market Value) were already gone.
+  // Remap any stale URL / saved state targeting Research to User Search's new home.
+  if (requestedTab === "league-market") {
+    requestedTab = "draft";
     requestedSub = "user-search";
   }
 
@@ -212,15 +214,13 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     p(() => import("./tabs/Dashboard"));
     p(() => import("./tabs/Portfolio"));
     p(() => import("./tabs/TradeCenter"));
-    p(() => import("./tabs/DraftCommand"));
     const t = setTimeout(() => {
       p(() => import("./tabs/LiveDraft"));
       p(() => import("./tabs/LeagueAnalyzer"));
       p(() => import("./tabs/Transactions"));
-      p(() => import("./tabs/LeagueMarket"));
       p(() => import("./tabs/LineupCommand"));
-      p(() => import("./tabs/DraftAvailability"));
       p(() => import("./tabs/PickTracker"));
+      p(() => import("@dispersal/DispersalDraft"));
       p(() => import("@/components/AboutModal"));
       p(() => import("@/components/FeedbackPage"));
       p(() => import("@/components/ComingSoonCommand"));
@@ -600,10 +600,14 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     if (activeMainTab === "privacy") return <PrivacyPage onNavigate={handleMainTabChange} />;
     if (activeMainTab === "cookies") return <CookiesPage onNavigate={handleMainTabChange} />;
 
-    // Draft module — Draft Board (live Sleeper draft tracker) and ADP
-    // Explorer (public ADP dataset). Both run without an active league.
+    // Tools module — Draft Board (live Sleeper draft tracker), Pick Tracker,
+    // Dispersal Draft, and User Search. All run without an active league (User
+    // Search is a self-contained Sleeper lookup available to guests).
     if (activeMainTab === "draft") {
-      if (activeSubTab === "draft-board") return (
+      if (activeSubTab === "user-search") return <UserSearch />;
+      if (activeSubTab === "pick-tracker") return <PickTracker />;
+      if (activeSubTab === "dispersal-draft") return <DispersalDraft />;
+      return (
         <LiveDraft
           onConnectSleeper={
             accessLevel === "guest" || accessLevel === "readonly"
@@ -612,9 +616,6 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
           }
         />
       );
-      if (activeSubTab === "player-availability") return <DraftAvailability />;
-      if (activeSubTab === "pick-tracker") return <PickTracker />;
-      return <DraftCommand />;
     }
 
     if (activeMainTab === "portfolio") {
@@ -649,12 +650,6 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
       return <CommissionerActivity />;
     }
 
-    // User Search is a self-contained Sleeper username lookup — no league/login
-    // required, so it renders for guests above the active-league guard.
-    if (activeMainTab === "league-market" && activeSubTab === "user-search") {
-      return <UserSearch />;
-    }
-
     // Trade Calculator has a guest-accessible "Quick" mode (no login/league), so
     // it renders above the active-league guard. Logged-in users also get the full
     // league-based calculator inside it.
@@ -674,7 +669,6 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
       case "lineup-integrity:league-audit":      return <TradeSectionBoundary><LeagueLineupAudit league={league} initialWeek={liInitialWeek} /></TradeSectionBoundary>;
       case "trade-center:trade-review":          return <TradeSectionBoundary><TradeReviewCenter league={league} /></TradeSectionBoundary>;
       case "league-analyzer:commanders-report":  return <CommandersReport leagueId={selectedLeagueId!} leagueName={league.name} />;
-      case "league-market:market-value":         return <MarketValue league={league} />;
       default: return <div className="text-center text-muted-foreground py-12">Select a tab to get started</div>;
     }
   };

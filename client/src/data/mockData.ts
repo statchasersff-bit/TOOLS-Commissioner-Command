@@ -540,41 +540,33 @@ export const NAV_CONFIG: MainTabConfig[] = [
     id: "lineup-integrity",
     label: "Lineups",
     subTabs: [
-      { id: "lineup-integrity", label: "All Leagues" },
+      { id: "lineup-integrity", label: "All-League Scan" },
       { id: "league-audit", label: "Weekly Audit" },
     ],
   },
   {
     id: "league-analyzer",
-    label: "League Analyzer",
+    label: "Activity",
     subTabs: [
       { id: "league-activity", label: "League Activity" },
     ],
   },
   {
     id: "trade-center",
-    label: "Trade Center",
+    label: "Trades",
     subTabs: [
       { id: "trade-calculator", label: "Calculator" },
       { id: "trade-review", label: "Review Center" },
     ],
   },
   {
-    id: "league-market",
-    label: "Research",
-    subTabs: [
-      { id: "user-search", label: "User Search" },
-      { id: "market-value", label: "Market Value" },
-    ],
-  },
-  {
     id: "draft",
-    label: "Draft",
+    label: "Tools",
     subTabs: [
       { id: "draft-board", label: "Draft Board" },
-      { id: "adp-explorer", label: "ADP Explorer" },
-      { id: "player-availability", label: "Player Availability" },
       { id: "pick-tracker", label: "Pick Tracker" },
+      { id: "dispersal-draft", label: "Dispersal Draft" },
+      { id: "user-search", label: "User Search" },
     ],
   },
 ].filter((tab) => tab.id !== "draft" || FEATURES.SHOW_DRAFT_MODULE);

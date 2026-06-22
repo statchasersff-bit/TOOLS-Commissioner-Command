@@ -45,7 +45,7 @@ const FEATURES: FeatureDef[] = [
   {
     id: "league-analyzer",
     category: "League",
-    title: "League Analyzer",
+    title: "Activity",
     icon: Trophy,
     description: "Understand where every team stands in your league: power rankings, roster tiers, and league-wide intelligence.",
     bullets: [
@@ -60,7 +60,7 @@ const FEATURES: FeatureDef[] = [
   {
     id: "trade-center",
     category: "Trade",
-    title: "Trade Center",
+    title: "Trades",
     icon: ArrowLeftRight,
     description: "The complete trade toolkit. Analyze deals, find opportunities, sync active offers, and send proposals through Sleeper.",
     bullets: [

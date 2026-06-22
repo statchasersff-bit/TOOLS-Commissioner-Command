@@ -8,9 +8,6 @@
  *   "What exactly is wrong in this league this week, who is affected, and what
  *    should the commissioner do?"
  *
- * Centerpiece is the Matchup Integrity Board — it surfaces whether a lineup
- * problem could swing a specific matchup, not just a flat list of bad lineups.
- *
  * Read-only / action-assist ONLY: nothing here edits or submits a lineup or
  * messages a manager. Commissioner actions (resolve / ignore / note / copy
  * message / escalate) are recorded to an audit trail for dispute protection.
@@ -31,6 +28,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
 import { useLeagueAvatars } from "@/hooks/useLeagueAvatars";
 import { type RosterIdentity } from "@/lib/sleeperApi";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import {
   RefreshCw, Loader2, ChevronLeft, ChevronRight, ShieldAlert, AlertTriangle,
   Users, CircleSlash, UserX, CheckCircle2, ClipboardCopy, Flag, ExternalLink,
@@ -39,8 +37,8 @@ import {
 } from "lucide-react";
 import {
   lineupIntegrityApi,
-  type LeagueWeekAudit, type AuditIssue, type AuditMatchup, type AuditTeam,
-  type IssueSeverity, type MatchupStatus, type LeagueStatus,
+  type LeagueWeekAudit, type AuditIssue,
+  type IssueSeverity, type LeagueStatus,
   type CheckDetail, type PlayerCheckView, type AuditLogEntry, type ManagerHistoryRow,
   type StrikeRow,
 } from "@/lib/lineupIntegrityApi";
@@ -57,14 +55,6 @@ const LEAGUE_STATUS_META: Record<LeagueStatus, { label: string; cls: string }> =
   resolved: { label: "Resolved", cls: "bg-sky-500/15 text-sky-600 dark-any:text-sky-400 border-sky-500/30" },
   data_pending: { label: "Data Pending", cls: "bg-muted text-muted-foreground border-border" },
   not_started: { label: "Not Started", cls: "bg-muted text-muted-foreground border-border" },
-};
-
-const MATCHUP_STATUS_META: Record<MatchupStatus, { label: string; cls: string }> = {
-  clean: { label: "Clean", cls: "bg-emerald-500/15 text-emerald-600 dark-any:text-emerald-400 border-emerald-500/30" },
-  needs_review: { label: "Needs Review", cls: "bg-amber-500/15 text-amber-600 dark-any:text-amber-400 border-amber-500/30" },
-  critical: { label: "Critical", cls: "bg-red-500/15 text-red-600 dark-any:text-red-400 border-red-500/30" },
-  resolved: { label: "Resolved", cls: "bg-sky-500/15 text-sky-600 dark-any:text-sky-400 border-sky-500/30" },
-  data_pending: { label: "Data Pending", cls: "bg-muted text-muted-foreground border-border" },
 };
 
 const SEVERITY_META: Record<IssueSeverity, { label: string; cls: string }> = {
@@ -274,12 +264,6 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
             </div>
           ) : null}
 
-          {/* Matchup Integrity Board */}
-          <MatchupBoard matchups={audit.matchups} avatars={avatars} onReview={(team) => {
-            const first = issues.find((i) => i.rosterId === team.rosterId) ?? null;
-            if (first) setOpenIssue(first);
-          }} />
-
           {/* League Issues */}
           <div className="mt-6">
             <SectionTitle icon={ListChecks}>League Issues</SectionTitle>
@@ -322,81 +306,6 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
   );
 }
 
-// ── Matchup Integrity Board ───────────────────────────────────────────────────
-
-function MatchupBoard({ matchups, avatars, onReview }: { matchups: AuditMatchup[]; avatars: Record<number, RosterIdentity>; onReview: (team: AuditTeam) => void }) {
-  if (matchups.length === 0) return null;
-  return (
-    <div className="mt-6">
-      <SectionTitle icon={ShieldAlert}>Matchup Integrity Board</SectionTitle>
-      <p className="mb-3 text-xs text-muted-foreground">Which matchups could be affected by a lineup issue this week — fairness first.</p>
-
-      {/* Desktop table */}
-      <Card className="hidden overflow-hidden md:block">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 font-semibold">Matchup</th>
-              <th className="px-3 py-2 font-semibold">Team A</th>
-              <th className="px-3 py-2 font-semibold">Team B</th>
-              <th className="px-3 py-2 text-center font-semibold">Issues</th>
-              <th className="px-3 py-2 font-semibold">Status</th>
-              <th className="px-3 py-2 text-right font-semibold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matchups.map((m, idx) => {
-              const a = m.teams[0];
-              const b = m.teams[1];
-              const affectedTeam = (m.teams.find((t) => t.criticalCount > 0) ?? m.teams.find((t) => t.issueCount > 0)) ?? a;
-              return (
-                <tr key={m.matchupId ?? idx} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                  <td className="px-3 py-2 text-muted-foreground">{m.matchupId != null ? `Matchup ${m.matchupId}` : "—"}</td>
-                  <td className="px-3 py-2"><TeamCell team={a} avatars={avatars} /></td>
-                  <td className="px-3 py-2"><TeamCell team={b} avatars={avatars} /></td>
-                  <td className="px-3 py-2 text-center font-semibold">{m.totalIssues}{m.criticalIssues > 0 && <span className="ml-1 text-xs text-red-500">({m.criticalIssues} crit)</span>}</td>
-                  <td className="px-3 py-2"><Pill cls={MATCHUP_STATUS_META[m.status].cls}>{MATCHUP_STATUS_META[m.status].label}</Pill></td>
-                  <td className="px-3 py-2 text-right">
-                    <Button size="sm" variant={m.totalIssues > 0 ? "outline" : "ghost"} disabled={m.totalIssues === 0}
-                      onClick={() => onReview(affectedTeam)} data-testid={`button-matchup-review-${m.matchupId}`}>
-                      {m.totalIssues > 0 ? "Review" : "Clean"}
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
-
-      {/* Mobile stacked cards */}
-      <div className="grid gap-2 md:hidden">
-        {matchups.map((m, idx) => {
-          const affectedTeam = (m.teams.find((t) => t.criticalCount > 0) ?? m.teams.find((t) => t.issueCount > 0)) ?? m.teams[0];
-          return (
-            <Card key={m.matchupId ?? idx} className="p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
-                  {m.teams[0] && <OwnerAvatar rosterId={m.teams[0].rosterId} name={m.teams[0].teamName || m.teams[0].managerName} avatars={avatars} size="xs" />}
-                  <span className="truncate">{m.teams[0]?.teamName ?? "—"}</span>
-                  <span className="text-muted-foreground">vs</span>
-                  {m.teams[1] && <OwnerAvatar rosterId={m.teams[1].rosterId} name={m.teams[1].teamName || m.teams[1].managerName} avatars={avatars} size="xs" />}
-                  <span className="truncate">{m.teams[1]?.teamName ?? "—"}</span>
-                </div>
-                <Pill cls={MATCHUP_STATUS_META[m.status].cls}>{MATCHUP_STATUS_META[m.status].label}</Pill>
-              </div>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{m.totalIssues} issue{m.totalIssues === 1 ? "" : "s"}{m.criticalIssues > 0 ? ` · ${m.criticalIssues} critical` : ""}</span>
-                <Button size="sm" variant="outline" disabled={m.totalIssues === 0} onClick={() => onReview(affectedTeam)}>Review</Button>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /** The owner's Sleeper avatar circle (no name), sized to sit inline beside an
  *  existing team/manager label. Falls back to the initials circle when the
  *  league avatar map hasn't loaded or the owner has none. */
@@ -418,21 +327,6 @@ function OwnerAvatar({
   );
 }
 
-function TeamCell({ team, avatars }: { team?: AuditTeam; avatars: Record<number, RosterIdentity> }) {
-  if (!team) return <span className="text-muted-foreground">—</span>;
-  return (
-    <div className="flex items-center gap-1.5">
-      <OwnerAvatar rosterId={team.rosterId} name={team.teamName || team.managerName} avatars={avatars} />
-      <span className="truncate font-medium">{team.teamName}</span>
-      {team.criticalCount > 0 ? (
-        <span className="rounded bg-red-500/15 px-1 text-[10px] font-bold text-red-500">{team.criticalCount}</span>
-      ) : team.issueCount > 0 ? (
-        <span className="rounded bg-amber-500/15 px-1 text-[10px] font-bold text-amber-500">{team.issueCount}</span>
-      ) : null}
-    </div>
-  );
-}
-
 // ── League Issues table ───────────────────────────────────────────────────────
 
 function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatars: Record<number, RosterIdentity>; onOpen: (i: AuditIssue) => void }) {
@@ -447,9 +341,7 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <th className="px-3 py-2 font-semibold">Severity</th>
-              <th className="px-3 py-2 font-semibold">Manager / Team</th>
-              <th className="px-3 py-2 font-semibold">Matchup</th>
-              <th className="px-3 py-2 font-semibold">Slot</th>
+              <th className="px-3 py-2 font-semibold">Manager</th>
               <th className="px-3 py-2 font-semibold">Player</th>
               <th className="px-3 py-2 font-semibold">Issue</th>
               <th className="px-3 py-2 font-semibold">Status</th>
@@ -469,9 +361,11 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-2 text-muted-foreground">{i.opponentTeamName ? `vs ${i.opponentTeamName}` : "—"}</td>
-                <td className="px-3 py-2">{i.slot ?? "—"}</td>
-                <td className="px-3 py-2">{i.playerName ?? "—"}{i.position ? <span className="text-xs text-muted-foreground"> · {i.position}{i.nflTeam ? ` ${i.nflTeam}` : ""}</span> : null}</td>
+                <td className="px-3 py-2">
+                  {i.playerName ? (
+                    <PlayerAvatar id={i.playerId ?? ""} name={i.playerName} pos={i.position ?? ""} team={i.nflTeam ?? ""} size="xs" />
+                  ) : "—"}
+                </td>
                 <td className="px-3 py-2">
                   <div>{i.issueType}</div>
                   {i.isRepeatOffender && <span className="text-xs text-amber-500">repeat offender</span>}

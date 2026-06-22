@@ -13,7 +13,6 @@ import {
   getValueSourceBreakdown,
 } from "./portfolioSnapshots";
 import { computePlayoffCalculator, computeWeeklyMatchups } from "./playoffCalculator";
-import { getAdpAvailabilityMatrix } from "./adpPlayerProfile";
 import {
   fetchSleeperUser,
   fetchSleeperLeagues,
@@ -98,6 +97,9 @@ import { registerCommandersReportRoutes } from "./commandersReportRoutes";
 import { registerCommissionerActivityRoutes } from "./routes/commissionerActivityRoutes";
 import { registerCommissionerTradesRoutes } from "./commissionerTradesRoutes";
 import { registerLineupIntegrityRoutes } from "./lineupIntegrityRoutes";
+import { registerDispersalDraftRoutes } from "./dispersalDraftRoutes";
+import { initDispersalSocket } from "./dispersalDraft/socket";
+import { scheduleDispersalCleanup } from "./dispersalDraft/cleanup";
 import { registerAnalyticsRoutes } from "./analytics";
 import { registerYahooRoutes } from "./yahooRoutes";
 import { requireReadOnlySleeperContext } from "./accessMiddleware";
@@ -127,49 +129,6 @@ import {
   setFinancePassword,
   checkFinancePassword,
 } from "./auth";
-
-// ── Shared filter parser for the player-profile endpoints ───────────────────
-// Accepts the same query string as /api/adp so the modal can mirror whatever
-// the DraftCommand view is currently filtered to. Unknown / blank values fall
-// through to backend defaults — same precedence as the main /api/adp parser.
-function parsePlayerProfileFilters(q: Record<string, unknown>): AdpFilters {
-  const num = (v: unknown) => {
-    if (v === undefined || v === null || v === "" || v === "all") return undefined;
-    const n = parseInt(String(v), 10);
-    return Number.isFinite(n) ? n : undefined;
-  };
-  const str = <T extends string>(v: unknown, allowed: readonly T[]): T | "all" | undefined => {
-    if (v === undefined || v === null || v === "") return undefined;
-    const s = String(v);
-    if (s === "all") return "all";
-    return (allowed as readonly string[]).includes(s) ? (s as T) : undefined;
-  };
-  const parseSeason = (v: unknown): AdpFilters["season"] => {
-    if (v === undefined || v === null || v === "") return undefined;
-    const s = String(v).trim();
-    if (s === "all") return "all";
-    if (s.includes(",")) {
-      const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
-      return parts.length > 1 ? parts : parts[0];
-    }
-    return s;
-  };
-  return {
-    season: parseSeason(q.season),
-    draftType: str(q.draftType, ["startup", "rookie", "supplemental"] as const) ?? "startup",
-    draftFormat: str(q.draftFormat, ["snake", "auction", "linear"] as const) ?? "snake",
-    scoring: str(q.scoring, ["ppr", "half", "standard"] as const) ?? "all",
-    superflex: str(q.superflex, ["yes", "no"] as const) ?? "all",
-    tePremium: str(q.tePremium, ["yes", "no"] as const) ?? "all",
-    bestBall: str(q.bestBall, ["yes", "no"] as const) ?? "all",
-    leagueMode: str(q.leagueMode, ["dynasty", "keeper", "redraft"] as const) ?? "dynasty",
-    teams: num(q.teams) ?? "all",
-    rookieMode: (str(q.rookieMode, ["picks", "direct", "both"] as const) ?? "direct") as AdpFilters["rookieMode"],
-    passTd: (num(q.passTd) === 6 ? 6 : num(q.passTd) === 4 ? 4 : "all") as AdpFilters["passTd"],
-    startDate: typeof q.startDate === "string" ? q.startDate : undefined,
-    endDate: typeof q.endDate === "string" ? q.endDate : undefined,
-  };
-}
 
 // ── Simple in-memory TTL cache ────────────────────────────────────────────────
 interface CacheEntry<T> { data: T; expiresAt: number; }
@@ -263,6 +222,12 @@ export async function registerRoutes(
   registerLineupIntegrityRoutes(app);
   registerAnalyticsRoutes(app);
   registerYahooRoutes(app);
+
+  // Dispersal Draft — REST routes under /api/dispersal, Socket.io on /api/ws,
+  // and a daily retention cleanup of expired rooms.
+  registerDispersalDraftRoutes(app);
+  initDispersalSocket(httpServer);
+  scheduleDispersalCleanup();
 
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", ts: Date.now() });
@@ -577,25 +542,6 @@ export async function registerRoutes(
       res.status(500).json({
         error: err?.message || "Failed to compute manager intel",
       });
-    }
-  });
-
-  // Batch real availability for the Draft Availability Matrix — true per-pick
-  // frequencies for many players from real draft results, in one query.
-  app.get("/api/adp/availability-matrix", async (req, res) => {
-    try {
-      const teams = Math.max(4, Math.min(20, parseInt(String(req.query.teams ?? "12"), 10) || 12));
-      const rounds = Math.max(1, Math.min(20, parseInt(String(req.query.rounds ?? "5"), 10) || 5));
-      const playerIds = String(req.query.playerIds ?? "")
-        .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 250);
-      if (!playerIds.length) return res.json({ totalDrafts: 0, teams, rounds, players: {} });
-      const filters = parsePlayerProfileFilters(req.query);
-      const data = await getAdpAvailabilityMatrix(playerIds, filters, teams, rounds);
-      res.setHeader("Cache-Control", "public, max-age=60");
-      res.json(data);
-    } catch (err: any) {
-      console.error("[AdpPlayerProfile/availability-matrix] error:", err);
-      res.status(500).json({ error: err?.message || "Failed to load availability matrix" });
     }
   });
 

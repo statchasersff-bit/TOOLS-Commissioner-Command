@@ -53,17 +53,12 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "trade-center:bulk-trade": "readonly",
   "trade-center:bulk-trades": "readonly",
 
-  // Research (league-market). Market Value is league-scoped, so it needs a
-  // Sleeper username (readonly). User Search is a self-contained lookup.
-  "league-market:user-search": "public",        // self-contained Sleeper lookup
-  "league-market:market-value": "readonly",    // needs a league
-
-  // Draft — ADP data is public. The Draft Board (live Sleeper draft tracker) is
-  // an action tool requiring a logged-in StatChasers account (full).
-  "draft:adp-explorer": "public",
-  "draft:player-availability": "public", // ADP-derived (startup + rookie toggle), no league required
+  // Tools (draft) — public Sleeper data. The Draft Board (live Sleeper draft
+  // tracker) is an action tool requiring a logged-in StatChasers account (full).
   "draft:pick-tracker": "public", // public Sleeper data; self-contained username/league-ID search
+  "draft:dispersal-draft": "public", // self-contained: join via share code; creating a room requires login (enforced server-side)
   "draft:draft-board":  "full",
+  "draft:user-search": "public",        // self-contained Sleeper lookup
 
   // Static pages
   "about": "public",
