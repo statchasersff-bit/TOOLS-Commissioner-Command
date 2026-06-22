@@ -120,7 +120,7 @@ export function FeedbackPage() {
               <MessageSquare className="w-4 h-4" style={{ color: "#d4af37" }} />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-foreground leading-tight">Help Improve Dynasty Command</h3>
+              <h3 className="text-[15px] font-bold text-foreground leading-tight">Help Improve Commissioner Command</h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">Bug reports, feature requests, or general feedback</p>
             </div>
           </div>
@@ -133,7 +133,7 @@ export function FeedbackPage() {
               </div>
               <div>
                 <p className="text-[17px] font-bold text-foreground">Thanks. Feedback sent.</p>
-                <p className="text-[13px] text-muted-foreground mt-1">We appreciate you helping make Dynasty Command better.</p>
+                <p className="text-[13px] text-muted-foreground mt-1">We appreciate you helping make Commissioner Command better.</p>
               </div>
               <button
                 type="button"

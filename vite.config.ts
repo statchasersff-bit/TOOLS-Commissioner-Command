@@ -29,13 +29,13 @@ export default defineConfig({
     },
   },
   // Deployment sub-path. MUST match the path the SPA is served from in
-  // production (e.g. "/dynasty-command/launch/") AND match the path
+  // production (e.g. "/commissioner-command/launch/") AND match the path
   // server/static.ts mounts express.static at. If this is wrong, the asset
   // URLs emitted into index.html won't resolve and the JS request gets the
   // SPA fallback HTML (Firefox: "disallowed MIME type 'text/html'").
   //
   //   Build root deployment:    npm run build
-  //   Build sub-path deployment: VITE_BASE_PATH=/dynasty-command/launch/ npm run build
+  //   Build sub-path deployment: VITE_BASE_PATH=/commissioner-command/launch/ npm run build
   //
   // The server reads the same env var at runtime to mount static assets at
   // the matching path.

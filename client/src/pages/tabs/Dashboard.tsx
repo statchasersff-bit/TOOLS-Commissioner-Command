@@ -23,6 +23,8 @@ import {
 } from "@/components/gm-dashboard";
 import { TeamLoader } from "@/components/TeamLoader";
 import { usePlayoffOddsSummary } from "@/hooks/usePlayoffOddsSummary";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 
 interface DashboardProps {
   league: League;
@@ -737,6 +739,12 @@ function ScoringSettingsTable({ settings }: { settings: Record<string, number> }
       });
   }, [settings]);
 
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(rows, {
+    label: (r) => r.label,
+    value: (r) => r.leagueVal,
+    default: (r) => (SCORING_CONFIG[r.key]?.defaultVal ?? null),
+  });
+
   return (
     <div className="border border-border/50 rounded-xl overflow-hidden">
       <button
@@ -759,13 +767,13 @@ function ScoringSettingsTable({ settings }: { settings: Record<string, number> }
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border/40 bg-muted/10">
-                <th className="text-left px-4 py-2 font-semibold text-muted-foreground w-full">Setting</th>
-                <th className="text-right px-4 py-2 font-semibold text-muted-foreground whitespace-nowrap">Value</th>
-                <th className="text-right px-4 py-2 font-semibold text-muted-foreground whitespace-nowrap">Default</th>
+                <SortableTh sortKey="label" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-4 py-2 font-semibold text-muted-foreground w-full">Setting</SortableTh>
+                <SortableTh sortKey="value" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="text-right px-4 py-2 font-semibold text-muted-foreground whitespace-nowrap">Value</SortableTh>
+                <SortableTh sortKey="default" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="text-right px-4 py-2 font-semibold text-muted-foreground whitespace-nowrap">Default</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, i) => (
+              {sorted.map((row, i) => (
                 <tr
                   key={row.key}
                   className={cn(

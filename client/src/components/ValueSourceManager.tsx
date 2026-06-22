@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { useValueModel } from "@/contexts/ValueModelContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { scAuthFetch } from "@/lib/scAuthFetch";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 import {
   ArrowLeft,
   BarChart3,
@@ -213,7 +215,7 @@ export function ValueSourcePage({ embedded = false }: { embedded?: boolean }) {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-foreground">Value Sources</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage the value sources used across Dynasty Command.
+            Manage the value sources used across Commissioner Command.
           </p>
         </div>
 
@@ -239,6 +241,18 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
   const currentCustom = valueType === "dynasty" ? dynastyCustom : redraftCustom;
   // The base source custom values fall back to when a player isn't in the upload.
   const baseLabel = sourceId === "ktc" ? "KeepTradeCut" : "FantasyCalc";
+
+  // Sortable preview sample table. Keeps default (file) order until a header is clicked.
+  const { sorted: sortedSample, sortKey, sortDir, toggle } = useSortableTable<PreviewSampleRow>(
+    preview?.sample ?? [],
+    {
+      playerName: (r) => r.playerName,
+      position: (r) => r.position,
+      team: (r) => r.team,
+      value: (r) => r.value,
+      match: (r) => (r.matched ? r.matchMethod ?? "matched" : "unmatched"),
+    },
+  );
 
   const refreshSets = async () => {
     try {
@@ -525,15 +539,15 @@ function UploadSection({ valueType, onChanged }: { valueType: ValueType; onChang
             <table className="w-full text-[10px]">
               <thead className="text-muted-foreground/70 bg-white/[0.02] sticky top-0">
                 <tr>
-                  <th className="text-left px-2 py-1">Player</th>
-                  <th className="text-left px-2 py-1">Pos</th>
-                  <th className="text-left px-2 py-1">Team</th>
-                  <th className="text-right px-2 py-1">Value</th>
-                  <th className="text-left px-2 py-1">Match</th>
+                  <SortableTh sortKey="playerName" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-2 py-1">Player</SortableTh>
+                  <SortableTh sortKey="position" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-2 py-1">Pos</SortableTh>
+                  <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-2 py-1">Team</SortableTh>
+                  <SortableTh sortKey="value" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="text-right px-2 py-1">Value</SortableTh>
+                  <SortableTh sortKey="match" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-2 py-1">Match</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {preview.sample.map((r) => (
+                {sortedSample.map((r) => (
                   <tr key={r.rowIndex} className="border-t border-border/20">
                     <td className="px-2 py-1">{r.playerName}</td>
                     <td className="px-2 py-1">{r.position ?? "—"}</td>

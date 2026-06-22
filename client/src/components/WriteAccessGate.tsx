@@ -5,7 +5,7 @@
  * appropriate locked state when something is missing.
  *
  * Order of checks (matches server `requireWriteCapability`):
- *   1. Wrong domain  → "Available in Dynasty Command Pro" + Open Pro link
+ *   1. Wrong domain  → "Available in Commissioner Command Pro" + Open Pro link
  *   2. Not logged in → "Log in to unlock write access" + Log In button
  *   3. No subscription → "Write access requires an active subscription" + Upgrade
  *   4. Sleeper not connected → "Connect Sleeper to submit trades and waivers"
@@ -167,18 +167,18 @@ function LockAction({
 const LOCK_COPY: Record<LockReason, { Icon: typeof Lock; title: string; body: string }> = {
   wrong_domain: {
     Icon: Lock,
-    title: "This feature is available in Dynasty Command Pro.",
-    body: "Trade actions, waivers, and other write features live on the paid Dynasty Command domain. Read-only tools remain free here.",
+    title: "This feature is available in Commissioner Command Pro.",
+    body: "Trade actions, waivers, and other write features live on the paid Commissioner Command domain. Read-only tools remain free here.",
   },
   not_authenticated: {
     Icon: LogIn,
     title: "Log in to unlock write access.",
-    body: "A Dynasty Command account is required to submit trades, waivers, and other Sleeper actions.",
+    body: "A Commissioner Command account is required to submit trades, waivers, and other Sleeper actions.",
   },
   no_subscription: {
     Icon: CreditCard,
     title: "Write access requires an active subscription.",
-    body: "Upgrade to Dynasty Command Pro to enable trade submission, bulk actions, and waiver claims.",
+    body: "Upgrade to Commissioner Command Pro to enable trade submission, bulk actions, and waiver claims.",
   },
   no_sleeper_token: {
     Icon: Key,

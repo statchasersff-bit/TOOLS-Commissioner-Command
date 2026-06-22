@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
- * Dynasty Command responsive breakpoint system.
+ * Commissioner Command responsive breakpoint system.
  *
  * One source of truth for the widths the whole app adapts at. These mirror the
  * Tailwind breakpoints we use in markup (see tailwind.config.ts: `xs`=480), so

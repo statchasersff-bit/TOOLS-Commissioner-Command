@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { API_BASE } from "@/lib/apiBase";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 
 /**
  * Admin panel for the 2-hop ADP network crawl.
@@ -457,6 +459,23 @@ export function AdpCrawlPanel() {
     }
   }, [adminSecretOverride, refreshStatus]);
 
+  // Sortable recent crawl log. Default to most-recent first (by start time).
+  const recentLog = status?.recentLog ?? [];
+  const {
+    sorted: sortedRecentLog,
+    sortKey: logSortKey,
+    sortDir: logSortDir,
+    toggle: toggleLog,
+  } = useSortableTable(recentLog, {
+    when: (r) => r.startedAt ?? null,
+    job: (r) => r.jobType,
+    status: (r) => r.status,
+    found: (r) => r.draftsFound,
+    ingested: (r) => r.draftsIngested,
+    picks: (r) => r.picksIngested,
+    message: (r) => r.message ?? null,
+  }, { defaultKey: "when", defaultDir: "desc" });
+
   return (
     <div
       data-testid="adp-crawl-panel"
@@ -904,17 +923,17 @@ export function AdpCrawlPanel() {
                 <table className="w-full text-[10px]">
                   <thead className="bg-muted/40 sticky top-0">
                     <tr className="text-left">
-                      <th className="px-2 py-1">when</th>
-                      <th className="px-2 py-1">job</th>
-                      <th className="px-2 py-1">status</th>
-                      <th className="px-2 py-1 text-right">found</th>
-                      <th className="px-2 py-1 text-right">ingested</th>
-                      <th className="px-2 py-1 text-right">picks</th>
-                      <th className="px-2 py-1">message</th>
+                      <SortableTh sortKey="when" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="left" className="px-2 py-1">when</SortableTh>
+                      <SortableTh sortKey="job" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="left" className="px-2 py-1">job</SortableTh>
+                      <SortableTh sortKey="status" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="left" className="px-2 py-1">status</SortableTh>
+                      <SortableTh sortKey="found" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="right" className="px-2 py-1 text-right">found</SortableTh>
+                      <SortableTh sortKey="ingested" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="right" className="px-2 py-1 text-right">ingested</SortableTh>
+                      <SortableTh sortKey="picks" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="right" className="px-2 py-1 text-right">picks</SortableTh>
+                      <SortableTh sortKey="message" activeKey={logSortKey} dir={logSortDir} onSort={toggleLog} align="left" className="px-2 py-1">message</SortableTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {status.recentLog.map((row) => (
+                    {sortedRecentLog.map((row) => (
                       <tr key={row.id} className="border-t border-border/30">
                         <td className="px-2 py-1 whitespace-nowrap font-mono text-muted-foreground">{formatTime(row.startedAt)}</td>
                         <td className="px-2 py-1">{row.jobType}</td>
@@ -969,6 +988,24 @@ function PassiveCrawlEventsSection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [recrawlingId, setRecrawlingId] = useState<string | null>(null);
+
+  // Sortable passive-events table. Default to most-recent first.
+  const {
+    sorted: sortedEvents,
+    sortKey: evSortKey,
+    sortDir: evSortDir,
+    toggle: toggleEv,
+  } = useSortableTable(events ?? [], {
+    when: (e) => e.createdAt,
+    user: (e) => e.sleeperUsername ?? e.sleeperUserId,
+    source: (e) => e.source,
+    status: (e) => e.status,
+    leagues: (e) => e.leaguesScanned,
+    draftsFound: (e) => e.draftsFound,
+    draftsAdded: (e) => e.draftsAdded,
+    pending: (e) => e.pendingItems,
+    error: (e) => e.errorMessage ?? null,
+  }, { defaultKey: "when", defaultDir: "desc" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1048,20 +1085,20 @@ function PassiveCrawlEventsSection() {
           <table className="w-full text-[11px]">
             <thead className="text-muted-foreground">
               <tr>
-                <th className="px-2 py-1 text-left">When</th>
-                <th className="px-2 py-1 text-left">User</th>
-                <th className="px-2 py-1 text-left">Source</th>
-                <th className="px-2 py-1 text-left">Status</th>
-                <th className="px-2 py-1 text-right">Leagues</th>
-                <th className="px-2 py-1 text-right">Drafts found</th>
-                <th className="px-2 py-1 text-right">Drafts added</th>
-                <th className="px-2 py-1 text-right">Pending</th>
-                <th className="px-2 py-1 text-left">Error</th>
+                <SortableTh sortKey="when" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="left" className="px-2 py-1 text-left">When</SortableTh>
+                <SortableTh sortKey="user" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="left" className="px-2 py-1 text-left">User</SortableTh>
+                <SortableTh sortKey="source" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="left" className="px-2 py-1 text-left">Source</SortableTh>
+                <SortableTh sortKey="status" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="left" className="px-2 py-1 text-left">Status</SortableTh>
+                <SortableTh sortKey="leagues" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="right" className="px-2 py-1 text-right">Leagues</SortableTh>
+                <SortableTh sortKey="draftsFound" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="right" className="px-2 py-1 text-right">Drafts found</SortableTh>
+                <SortableTh sortKey="draftsAdded" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="right" className="px-2 py-1 text-right">Drafts added</SortableTh>
+                <SortableTh sortKey="pending" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="right" className="px-2 py-1 text-right">Pending</SortableTh>
+                <SortableTh sortKey="error" activeKey={evSortKey} dir={evSortDir} onSort={toggleEv} align="left" className="px-2 py-1 text-left">Error</SortableTh>
                 <th className="px-2 py-1"></th>
               </tr>
             </thead>
             <tbody>
-              {events.map((e) => (
+              {sortedEvents.map((e) => (
                 <tr key={e.id} className="border-t border-border/30" data-testid={`passive-event-row-${e.id}`}>
                   <td className="px-2 py-1 whitespace-nowrap font-mono text-muted-foreground">{formatTime(e.createdAt)}</td>
                   <td className="px-2 py-1 whitespace-nowrap">

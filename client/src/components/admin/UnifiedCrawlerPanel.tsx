@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { API_BASE } from "@/lib/apiBase";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 
 /**
  * Admin panel: Unified Crawler (trades + drafts).
@@ -147,6 +149,20 @@ export function UnifiedCrawlerPanel() {
     (r) => r.status === "running" && !data?.running && (ageHours(r.startedAt) ?? 0) > 1,
   );
 
+  const { sorted: sortedRuns, sortKey, sortDir, toggle } = useSortableTable<Run>(
+    data?.runs ?? [],
+    {
+      started: (r) => (r.startedAt ? new Date(r.startedAt).getTime() : null),
+      status: (r) => r.status,
+      seed: (r) => r.seedUsername,
+      leaguesScanned: (r) => r.leaguesScanned,
+      tradesInserted: (r) => r.tradesInserted,
+      draftsIngested: (r) => r.draftsIngested,
+      membersDiscovered: (r) => r.membersDiscovered,
+    },
+    { defaultKey: "started", defaultDir: "desc" },
+  );
+
   return (
     <section className="mt-8 border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 md:p-5 text-sm">
       <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
@@ -221,17 +237,17 @@ export function UnifiedCrawlerPanel() {
           <table className="w-full text-[12px] border-collapse">
             <thead>
               <tr className="bg-muted/50 text-left text-muted-foreground">
-                <th className="px-2 py-1.5 font-semibold">Started</th>
-                <th className="px-2 py-1.5 font-semibold">Status</th>
-                <th className="px-2 py-1.5 font-semibold">Seed</th>
-                <th className="px-2 py-1.5 font-semibold text-right">Leagues scanned</th>
-                <th className="px-2 py-1.5 font-semibold text-right">Trades +</th>
-                <th className="px-2 py-1.5 font-semibold text-right">Drafts +</th>
-                <th className="px-2 py-1.5 font-semibold text-right">New members</th>
+                <SortableTh sortKey="started" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold">Started</SortableTh>
+                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold">Status</SortableTh>
+                <SortableTh sortKey="seed" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold">Seed</SortableTh>
+                <SortableTh sortKey="leaguesScanned" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">Leagues scanned</SortableTh>
+                <SortableTh sortKey="tradesInserted" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">Trades +</SortableTh>
+                <SortableTh sortKey="draftsIngested" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">Drafts +</SortableTh>
+                <SortableTh sortKey="membersDiscovered" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">New members</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {data.runs.map((r) => (
+              {sortedRuns.map((r) => (
                 <tr key={r.id} className="border-t border-border/60 hover:bg-muted/30">
                   <td className="px-2 py-1.5 whitespace-nowrap">{fmtWhen(r.startedAt)}</td>
                   <td className={`px-2 py-1.5 font-medium ${STATUS_COLOR[r.status] ?? "text-foreground"}`}>{r.status}</td>

@@ -2316,7 +2316,7 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
 
   /**
    * After a successful Calculator-proposed trade, fire the controlled
-   * automatic Dynasty Command link DM. Replaces the previous trade-card
+   * automatic Commissioner Command link DM. Replaces the previous trade-card
    * builder (now disabled while general messaging is paused).
    *
    * Never blocks the trade — `firePostTradeLinkDm` returns a status enum
@@ -3353,8 +3353,8 @@ export function TradeCalculator({ league, userTeam }: TradeCalculatorProps) {
                   Withdraw
                 </Button>
                 {withdrawError && <p className="text-[10px] text-red-400">{withdrawError}</p>}
-                {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending Dynasty Command link…</div>}
-                {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Dynasty Command link shared with the manager.</div>}
+                {dmStatus === "sending" && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400/60"><Loader2 className="w-3 h-3 animate-spin" />Sending Commissioner Command link…</div>}
+                {dmStatus === "sent"    && <div className="flex items-center gap-1.5 text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Commissioner Command link shared with the manager.</div>}
                 {dmStatus === "skipped" && <div className="text-[10px] text-amber-400">Trade sent. Link message skipped to stay within safe messaging limits.</div>}
                 {dmStatus === "failed"  && <div className="text-[10px] text-amber-400">Trade sent. Link message could not be delivered.</div>}
               </div>

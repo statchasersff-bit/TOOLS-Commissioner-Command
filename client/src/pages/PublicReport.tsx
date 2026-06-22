@@ -40,12 +40,12 @@ export function PublicReport({ token }: { token: string }) {
             <img src={logoLight} alt="StatChasers" className="w-8 h-8 block dark-any:hidden" />
             <div className="leading-none text-left">
               <div className="text-sm font-bold text-foreground tracking-tight">StatChasers</div>
-              <div className="text-[10px] text-[#d4af37] font-semibold tracking-wide mt-0.5">Dynasty Command</div>
+              <div className="text-[10px] text-[#d4af37] font-semibold tracking-wide mt-0.5">Commissioner Command</div>
             </div>
           </a>
           <Button asChild size="sm" className="gap-1.5 h-8">
             <a href={appUrl} data-testid="public-report-cta">
-              Open Dynasty Command <ArrowRight className="w-3.5 h-3.5" />
+              Open Commissioner Command <ArrowRight className="w-3.5 h-3.5" />
             </a>
           </Button>
         </div>
@@ -89,7 +89,7 @@ export function PublicReport({ token }: { token: string }) {
                 Want a report like this for your own dynasty league?
               </p>
               <Button asChild className="gap-1.5">
-                <a href={appUrl}>Try Dynasty Command <ArrowRight className="w-4 h-4" /></a>
+                <a href={appUrl}>Try Commissioner Command <ArrowRight className="w-4 h-4" /></a>
               </Button>
             </div>
           </>

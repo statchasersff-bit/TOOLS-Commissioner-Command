@@ -642,12 +642,13 @@ const ACTION_CHIP =
 
 // ─── Main League Treasury Tab ────────────────────────────────────────────────────
 
-export function FinanceTab() {
+export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
   const { isConnected, user, leagues } = useSleeper();
   const [token, setToken] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [finances, setFinances] = useState<Record<string, LeagueFinanceData>>({});
-  const [expanded, setExpanded] = useState<string | null>(null);
+  // When embedded in a single league's profile, default that league open.
+  const [expanded, setExpanded] = useState<string | null>(scopeLeagueId ?? null);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
@@ -657,7 +658,10 @@ export function FinanceTab() {
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Every league this commissioner manages (Commissioner Command leagues).
-  const managedLeagues = leagues.filter(l => l.status !== "archived");
+  // Scoped to a single league when embedded in that league's profile.
+  const managedLeagues = leagues
+    .filter(l => l.status !== "archived")
+    .filter(l => !scopeLeagueId || l.leagueId === scopeLeagueId);
 
   useEffect(() => {
     if (!user?.userId) return;

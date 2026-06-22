@@ -74,11 +74,11 @@ export function AccessGate({
               <Lock className="w-6 h-6 text-[#d4af37]" />
             </div>
             <h3 className="text-base font-bold text-foreground">
-              Available on Dynasty Command (paid)
+              Available on Commissioner Command (paid)
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
               This feature performs Sleeper write actions and is only
-              available on the paid Dynasty Command domain. Read-only tools
+              available on the paid Commissioner Command domain. Read-only tools
               remain free at statchasers.com.
             </p>
           </CardContent>

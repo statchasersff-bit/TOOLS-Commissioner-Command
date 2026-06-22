@@ -16,7 +16,7 @@
  *                   per-game volume)
  *   market trends   value-snapshot deltas (7/30/90d % change), by sleeperId
  *
- * Fields with no real source (dynastyCommandValue, projectedPoints, true
+ * Fields with no real source (commissionerCommandValue, projectedPoints, true
  * target/route/air-yards shares, numeric production/usage/role trends, league
  * exposure) are intentionally left undefined; the client model degrades
  * gracefully (reweights the metrics it does have).

@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/SectionHeader";
 import { ManagerNameButton } from "@/components/ManagerNameButton";
+import { SortableTh } from "@/components/SortableTh";
+import { useSortableTable } from "@/hooks/useSortableTable";
 import { getLeagueTeamTiers, getTierColor, getTierEmoji } from "@/data/mockData";
 import type { League, Team, Tier } from "@/types";
 import { AlertTriangle, Skull, Trophy, TrendingUp, TrendingDown, Star, Zap, Target, Gem, Clock, Dice1, Eye, Shield, Flame, ChevronDown, ChevronRight } from "lucide-react";
@@ -239,6 +241,21 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   const reportCards = useMemo(() => buildReportCards(league, userTeam.id), [league, userTeam.id]);
+  const rankByTeamId = useMemo(() => {
+    const map = new Map<string, number>();
+    reportCards.forEach((rc, i) => map.set(rc.team.id, i + 1));
+    return map;
+  }, [reportCards]);
+  const worstTeamId = reportCards.length > 0 ? reportCards[reportCards.length - 1].team.id : null;
+  const { sorted: sortedRankings, sortKey, sortDir, toggle } = useSortableTable(
+    reportCards,
+    {
+      manager: (rc) => rc.team.owner,
+      grade: (rc) => rc.overall,
+      score: (rc) => rc.overall,
+    },
+    { defaultKey: "score", defaultDir: "desc" },
+  );
   const userCard = reportCards.find(rc => rc.team.id === userTeam.id);
   const isWorst = reportCards.length > 0 && reportCards[reportCards.length - 1].team.id === userTeam.id;
   const worstCard = reportCards[reportCards.length - 1];
@@ -372,21 +389,21 @@ export function LeagueRoast({ league, userTeam }: { league: League; userTeam: Te
             <thead>
               <tr className="border-b border-border/30 text-xs text-muted-foreground">
                 <th className="text-left py-2 px-2 w-10">#</th>
-                <th className="text-left py-2 px-2">Manager</th>
-                <th className="text-center py-2 px-2 w-16">Grade</th>
-                <th className="text-center py-2 px-2 w-16">Score</th>
+                <SortableTh sortKey="manager" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left py-2 px-2">Manager</SortableTh>
+                <SortableTh sortKey="grade" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center py-2 px-2 w-16">Grade</SortableTh>
+                <SortableTh sortKey="score" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center py-2 px-2 w-16">Score</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {reportCards.map((rc, i) => {
+              {sortedRankings.map((rc) => {
                 const isUser = rc.team.id === userTeam.id;
                 return (
                   <tr
                     key={rc.team.id}
-                    className={`border-b border-border/10 ${isUser ? "bg-[#0b3a7a]/8 dark:bg-blue-400/8" : ""} ${i === reportCards.length - 1 ? "bg-red-500/5" : ""}`}
+                    className={`border-b border-border/10 ${isUser ? "bg-[#0b3a7a]/8 dark:bg-blue-400/8" : ""} ${rc.team.id === worstTeamId ? "bg-red-500/5" : ""}`}
                     data-testid={`ranking-row-${rc.team.id}`}
                   >
-                    <td className="py-2.5 px-2 text-muted-foreground font-medium">{i + 1}</td>
+                    <td className="py-2.5 px-2 text-muted-foreground font-medium">{rankByTeamId.get(rc.team.id)}</td>
                     <td className="py-2.5 px-2 font-semibold">
                       <ManagerNameButton
                         userId={rc.team.ownerId}

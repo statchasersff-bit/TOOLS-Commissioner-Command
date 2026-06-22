@@ -478,7 +478,7 @@ export function ShareTeam({ league, userTeam }: Props) {
           <div className="px-5 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <img src={showDarkLogo ? logoDark : logoLight} alt="StatChasers" className="w-5 h-5 opacity-90" />
-              <span className="text-[10px] font-bold tracking-wide" style={{ color: "var(--share-gold)" }}>StatChasers Dynasty Command</span>
+              <span className="text-[10px] font-bold tracking-wide" style={{ color: "var(--share-gold)" }}>StatChasers Commissioner Command</span>
             </div>
             <span className="text-[9px]" style={{ color: "var(--share-text-4)" }}>statchasers.com</span>
           </div>

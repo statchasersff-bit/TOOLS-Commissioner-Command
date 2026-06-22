@@ -1,4 +1,4 @@
-# Dynasty Command Responsive System
+# Commissioner Command Responsive System
 
 A reusable set of primitives so every page adapts to screen size, device type, and
 the actual width of its container — not just "shrinks." Build new pages on these and

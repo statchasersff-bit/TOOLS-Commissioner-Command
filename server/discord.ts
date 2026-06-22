@@ -160,7 +160,7 @@ export function registerDiscordRoutes(app: Express): void {
         ? body.tradeLink.slice(0, 300)
         : null;
 
-    // Render the Dynasty Command-themed trade image. The image carries the
+    // Render the Commissioner Command-themed trade image. The image carries the
     // trade detail, so the text stays compact; if rendering fails we fall back
     // to a full text breakdown so the poll still has context.
     let poster: Buffer | null = null;

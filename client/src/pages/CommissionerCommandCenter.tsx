@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, startTransition, Component, type ReactNode, type ErrorInfo } from "react";
 
 // Lightweight error boundary isolating Trade Center surfaces (e.g. Trade Review)
-// so a render crash there never takes down the whole Dynasty Command Center.
+// so a render crash there never takes down the whole Commissioner Command Center.
 class TradeSectionBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(e: Error) { return { error: e }; }
@@ -61,6 +61,7 @@ import { WhatsNewModal } from "@/components/WhatsNewModal";
 // contains the shell + header. Tabs load on first navigation.
 const ManagerPage       = lazy(() => import("@/pages/ManagerPage"));
 const MatchupDetail     = lazy(() => import("@/pages/MatchupDetail"));
+const LeagueProfile     = lazy(() => import("@/pages/LeagueProfile").then(m => ({ default: m.LeagueProfile })));
 const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioConnect })));
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
 const FinanceTab        = lazy(() => import("./tabs/FinanceTab").then(m => ({ default: m.FinanceTab })));
@@ -76,6 +77,7 @@ const AboutPage         = lazy(() => import("@/components/AboutModal").then(m =>
 const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m => ({ default: m.FeedbackPage })));
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
 const CommissionerActivity        = lazy(() => import("./tabs/CommissionerActivity"));
+const CommissionerActivityScan    = lazy(() => import("./tabs/CommissionerActivityScan"));
 const CommissionerLineupIntegrity = lazy(() => import("./tabs/CommissionerLineupIntegrity"));
 const LeagueLineupAudit        = lazy(() => import("./tabs/LeagueLineupAudit"));
 const ManageAccount            = lazy(() => import("./tabs/ManageAccount").then(m => ({ default: m.ManageAccount })));
@@ -199,8 +201,8 @@ function getInitialState(pathTab?: string, pathSub?: string) {
 }
 
 
-export default function DynastyCommandCenter({ params, managerProfileId, valueSourcesPage, matchupDetailLeagueId }: { params?: { tab?: string; sub?: string }; managerProfileId?: string; valueSourcesPage?: boolean; matchupDetailLeagueId?: string }) {
-  useEffect(() => { console.log("[app] DynastyCommandCenter mounted"); }, []);
+export default function CommissionerCommandCenter({ params, managerProfileId, valueSourcesPage, matchupDetailLeagueId, leagueProfileId, leagueProfileTab }: { params?: { tab?: string; sub?: string }; managerProfileId?: string; valueSourcesPage?: boolean; matchupDetailLeagueId?: string; leagueProfileId?: string; leagueProfileTab?: string }) {
+  useEffect(() => { console.log("[app] CommissionerCommandCenter mounted"); }, []);
 
   // ── Background chunk preloading ────────────────────────────────────────────
   // Wave 1 (immediate): most-visited tabs — ready before the user clicks.
@@ -355,8 +357,13 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
   // would bounce the user off the deep-linked page. Tab changes after mount sync
   // normally. (Player/manager profiles survive because their state doesn't
   // change on navigation, so this effect simply never fires for them.)
-  const skipInitialUrlSync = useRef(!!valueSourcesPage);
+  // Embedded full-page surfaces (manager/matchup/value-source/league profile)
+  // own the URL themselves. The active main/sub tab state is irrelevant while
+  // one is open, so this effect must never rewrite their URL.
+  const isEmbeddedPage = !!(managerProfileId || valueSourcesPage || matchupDetailLeagueId || leagueProfileId);
+  const skipInitialUrlSync = useRef(!!valueSourcesPage || isEmbeddedPage);
   useEffect(() => {
+    if (isEmbeddedPage) return;
     if (skipInitialUrlSync.current) {
       skipInitialUrlSync.current = false;
       return;
@@ -369,7 +376,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
         sub: activeSubTab,
       }));
     } catch {}
-  }, [activeMainTab, activeSubTab, setLocation]);
+  }, [activeMainTab, activeSubTab, setLocation, isEmbeddedPage]);
 
   useEffect(() => {
     if (!userDropdownOpen) return;
@@ -623,7 +630,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
       switch (key) {
         case "portfolio:connect":          return <PortfolioConnect onNavigate={navigateToSubTab} />;
         case "portfolio:lineup-command":   return <LineupCommand />;
-        case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} />;
+        case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} onOpenLeagueProfile={(id) => { sleeper.setActiveLeague(id); setLocation(`/league/${id}/overview`); }} />;
         case "portfolio:finances":         return <FinanceTab />;
         default:                           return <PortfolioConnect onNavigate={navigateToSubTab} />;
       }
@@ -639,6 +646,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
         <CommissionerLineupIntegrity
           mode="multi"
           onOpenLeague={(id, week) => { sleeper.setActiveLeague(id); setLiInitialWeek(week); navigateToSubTab("lineup-integrity", "league-audit"); }}
+          onOpenProfile={(id) => { sleeper.setActiveLeague(id); setLocation(`/league/${id}/overview`); }}
         />
       );
     }
@@ -648,6 +656,12 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     // so it renders above the active-league guard like User Search.
     if (activeMainTab === "league-analyzer" && activeSubTab === "league-activity") {
       return <CommissionerActivity />;
+    }
+
+    // All-League Scan aggregates activity across every league (cross-league, no
+    // single active league required), so it also renders above the guard.
+    if (activeMainTab === "league-analyzer" && activeSubTab === "all-league-scan") {
+      return <CommissionerActivityScan />;
     }
 
     // Trade Calculator has a guest-accessible "Quick" mode (no login/league), so
@@ -683,6 +697,18 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
     if (valueSourcesPage) return <ValueSourcePage embedded />;
     // Detailed single-matchup view renders inside the shell at /matchup/:leagueId.
     if (matchupDetailLeagueId) return <MatchupDetail leagueId={matchupDetailLeagueId} embedded />;
+    // Per-league profile hub renders inside the shell at /league/:leagueId/:tab.
+    if (leagueProfileId) {
+      return (
+        <LeagueProfile
+          leagueId={leagueProfileId}
+          initialTab={leagueProfileTab}
+          league={league}
+          userTeam={userTeam}
+          onNavigate={navigateToSubTab}
+        />
+      );
+    }
     const access = resolveAccess(activeMainTab, activeSubTab);
     return (
       <AccessGate
@@ -724,7 +750,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
                 </div>
                 <div className="leading-none hidden md:block text-left">
                   <h1 className="text-sm md:text-base font-bold text-foreground leading-tight tracking-tight" data-testid="text-app-title">StatChasers</h1>
-                  <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Dynasty Command</p>
+                  <p className="text-[10px] md:text-xs text-[#d4af37] font-semibold tracking-wide leading-tight mt-0.5">Commissioner Command</p>
                 </div>
                 <ChevronDown className={`w-3 h-3 text-muted-foreground/60 group-hover:text-foreground transition-transform duration-200 hidden md:block ${logoMenuOpen ? "rotate-180" : ""}`} />
               </button>
@@ -754,7 +780,7 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
                       <img src={logoLight} alt="StatChasers" className="w-7 h-7 block dark-any:hidden" />
                       <div>
                         <p className="sc-logo-menu-text text-[13px] font-black text-white leading-tight">StatChasers</p>
-                        <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Dynasty Command</p>
+                        <p className="text-[10px] font-semibold leading-tight" style={{ color: "#d4af37" }}>Commissioner Command</p>
                       </div>
                     </div>
                   </div>
@@ -808,6 +834,17 @@ export default function DynastyCommandCenter({ params, managerProfileId, valueSo
                   selectedLeagueId={selectedLeagueId}
                   onSelect={handleLeagueSelect}
                 />
+                {selectedLeagueId && (
+                  <button
+                    onClick={() => setLocation(`/league/${selectedLeagueId}/overview`)}
+                    title="Open league profile"
+                    aria-label="Open league profile"
+                    data-testid="button-open-league-profile"
+                    className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-muted-foreground hover:text-[#d4af37] hover:bg-[#d4af37]/10 transition-colors"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                  </button>
+                )}
                 {isSelectedBestBall && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400 border-sky-300 dark:border-sky-700" data-testid="badge-bestball-active">
                     Best Ball

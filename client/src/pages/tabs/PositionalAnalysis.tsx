@@ -12,6 +12,8 @@ import { sideValue, rawTotal } from "@/lib/tradeValue";
 import type { League, Team, Player, Pick, Tier } from "@/types";
 import { formatPickLabel } from "@/types";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { SortableTh } from "@/components/SortableTh";
+import { useSortableTable } from "@/hooks/useSortableTable";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getSleeperSession } from "@/services/sleeperAuth";
 import { proposeTrade, getDmByMembers, getDmByMembersFull, markDmRead, sendTradeMessage, sendDmMessage, fetchDmMessages, firePostTradeLinkDm } from "@/services/sleeperAuthedApi";
@@ -419,6 +421,12 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
     return [...playerRows, ...pickRows];
   }, [userTeam, getPlayerValue, getRedraftValue, getPickValue]);
 
+  const { sorted, sortKey, sortDir, toggle: toggleSort } = useSortableTable(rows, {
+    label: (r) => (r.kind === "player" ? r.player.name : formatPickLabel(r.pick)),
+    dynasty: (r) => r.dynasty,
+    redraft: (r) => r.redraft,
+  });
+
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -467,12 +475,12 @@ function IdeaGenerator({ userTeam, league }: { userTeam: Team; league: League })
                   Player
                 </div>
               </th>
-              <th className="text-right font-semibold px-4 py-2.5 w-28">Dynasty</th>
-              <th className="text-right font-semibold px-4 py-2.5 w-28">Redraft</th>
+              <SortableTh sortKey="dynasty" activeKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="text-right font-semibold px-4 py-2.5 w-28">Dynasty</SortableTh>
+              <SortableTh sortKey="redraft" activeKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="text-right font-semibold px-4 py-2.5 w-28">Redraft</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {sorted.map((row) => {
               const isSel = selected.has(row.id);
               return (
                 <tr
@@ -1818,7 +1826,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
     setDmStatus("sending");
     setDmError("");
 
-    // Use the controlled automatic Dynasty Command link DM helper. Replaces
+    // Use the controlled automatic Commissioner Command link DM helper. Replaces
     // the old free-text trade-card builder while general messaging is paused.
     const session = getSleeperSession();
     const result = await firePostTradeLinkDm({
@@ -2613,7 +2621,7 @@ function WinNowSendModal({ open, onClose, idea, league, userTeam }: SendTradeMod
             <div className="rounded-md border border-white/10 bg-white/[0.02] px-4 py-6 text-center mt-4">
               <div className="text-[12px] font-semibold text-white/75 mb-1">Messaging temporarily disabled</div>
               <div className="text-[11px] text-white/45 leading-relaxed">
-                Dynasty Command's messaging UI is paused right now. Your trade was sent through Sleeper normally, replies are still visible in the Sleeper app.
+                Commissioner Command's messaging UI is paused right now. Your trade was sent through Sleeper normally, replies are still visible in the Sleeper app.
               </div>
             </div>
           </div>

@@ -54,30 +54,30 @@ interface ModalCopy {
 const COPY: Record<Exclude<WriteAccessState, "UNLOCKED">, ModalCopy> = {
   PUBLIC_LOCKED: {
     Icon: Lock,
-    title: "Dynasty Command Pro feature",
+    title: "Commissioner Command Pro feature",
     body:
-      "Send Trade, Submit Waiver, Bulk Trade, and other write actions are part of Dynasty Command Pro. " +
+      "Send Trade, Submit Waiver, Bulk Trade, and other write actions are part of Commissioner Command Pro. " +
       "Read-only analysis tools remain free at statchasers.com.",
     cta: { label: "Open Pro Version", href: getWriteAccessUrl() },
   },
   WRONG_DOMAIN: {
     Icon: Lock,
-    title: "Dynasty Command Pro feature",
+    title: "Commissioner Command Pro feature",
     body:
-      "Write actions live on the paid Dynasty Command domain. Click below to open Pro and continue.",
+      "Write actions live on the paid Commissioner Command domain. Click below to open Pro and continue.",
     cta: { label: "Open Pro Version", href: getWriteAccessUrl() },
   },
   NEEDS_LOGIN: {
     Icon: LogIn,
     title: "Log in to unlock write access",
-    body: "Sign in to your Dynasty Command account to submit trades, waivers, and other Sleeper actions.",
+    body: "Sign in to your Commissioner Command account to submit trades, waivers, and other Sleeper actions.",
     cta: { label: "Log In", action: "login" },
   },
   NEEDS_SUBSCRIPTION: {
     Icon: CreditCard,
     title: "Write access requires an active subscription",
     body:
-      "Upgrade to Dynasty Command Pro to enable trade submission, bulk actions, and waiver claims.",
+      "Upgrade to Commissioner Command Pro to enable trade submission, bulk actions, and waiver claims.",
     cta: { label: "Upgrade", action: "subscribe" },
   },
   NEEDS_SLEEPER_CONNECTION: {

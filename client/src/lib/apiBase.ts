@@ -19,7 +19,7 @@ function resolveApiBase(): string {
   // to the canonical Replit API origin so those builds work without needing a
   // rebuild every time the domain changes.
   if (typeof window !== "undefined" && !window.location.hostname.endsWith("replit.app")) {
-    return "https://dynasty-command.replit.app";
+    return "https://commissioner-command.replit.app";
   }
 
   return "";

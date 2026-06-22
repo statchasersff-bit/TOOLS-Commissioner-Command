@@ -2,7 +2,7 @@
  * App-mode policy — single source of truth for "is this host allowed to
  * perform Sleeper write actions?".
  *
- * The Dynasty Command app is deployed on multiple domains:
+ * The Commissioner Command app is deployed on multiple domains:
  *   - dynastycommandff.com / www.dynastycommandff.com  →  WRITE_ACCESS (paid tier).
  *     Subscription-gated write features (lineup submit, waiver, trade
  *     propose/accept/reject, draft pick, DMs) are exposed.
@@ -46,7 +46,7 @@ export const READ_ONLY_DOMAINS: readonly string[] = [
 
 /**
  * Hosts that ARE allowed to expose write features. Defaults to the paid
- * Dynasty Command domain; can be replaced/extended via `WRITE_ACCESS_HOSTS`
+ * Commissioner Command domain; can be replaced/extended via `WRITE_ACCESS_HOSTS`
  * (or legacy `WRITE_ACCESS_DOMAINS`) env var, comma-separated. Keep this
  * list small and explicit — every entry is a place where subscription-
  * gated mutations can be initiated.
@@ -63,7 +63,7 @@ const DEFAULT_WRITE_ACCESS_DOMAINS: readonly string[] = [
 // cannot accidentally disable the promotion.
 //
 // statchasers.com is normally a READ_ONLY tier (free, public mirror); this
-// block was added to give it the same full Dynasty Command functionality
+// block was added to give it the same full Commissioner Command functionality
 // as dynastycommandff.com for live testing. Remove this constant and the
 // corresponding merge in `getWriteAccessDomains` to revert to the original
 // read-only tier. The READ_ONLY_DOMAINS entries above intentionally stay.
@@ -75,7 +75,7 @@ const TEMPORARY_WRITE_ACCESS_DOMAINS: readonly string[] = [
 
 /** Canonical public URLs surfaced to the UI ("Upgrade to Pro", etc.).
  *  Overridable via APP_PUBLIC_URL / APP_WRITE_URL env vars. */
-const DEFAULT_PUBLIC_URL = "https://statchasers.com/dynasty-command";
+const DEFAULT_PUBLIC_URL = "https://statchasers.com/commissioner-command";
 const DEFAULT_WRITE_URL = "https://dynastycommandff.com";
 
 export function getPublicAppUrl(): string {
@@ -279,7 +279,7 @@ export function isReadOnlyDomain(host: string | null | undefined): boolean {
 export const WRITE_ACCESS_REQUIRED_ERROR = {
   code: "WRITE_ACCESS_REQUIRED" as const,
   message:
-    "This action is only available on the paid Dynasty Command domain. " +
+    "This action is only available on the paid Commissioner Command domain. " +
     "Read-only features remain free at statchasers.com.",
 };
 
@@ -287,5 +287,5 @@ export const WRITE_ACCESS_REQUIRED_ERROR = {
 export const SUBSCRIPTION_REQUIRED_ERROR = {
   code: "SUBSCRIPTION_REQUIRED" as const,
   message:
-    "An active Dynasty Command subscription is required to perform this action.",
+    "An active Commissioner Command subscription is required to perform this action.",
 };

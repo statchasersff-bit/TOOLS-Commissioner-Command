@@ -97,6 +97,7 @@ import { registerCommandersReportRoutes } from "./commandersReportRoutes";
 import { registerCommissionerActivityRoutes } from "./routes/commissionerActivityRoutes";
 import { registerCommissionerTradesRoutes } from "./commissionerTradesRoutes";
 import { registerLineupIntegrityRoutes } from "./lineupIntegrityRoutes";
+import { registerLeagueProfileRoutes } from "./leagueProfileRoutes";
 import { registerDispersalDraftRoutes } from "./dispersalDraftRoutes";
 import { initDispersalSocket } from "./dispersalDraft/socket";
 import { scheduleDispersalCleanup } from "./dispersalDraft/cleanup";
@@ -220,6 +221,7 @@ export async function registerRoutes(
   registerCommissionerActivityRoutes(app);
   registerCommissionerTradesRoutes(app);
   registerLineupIntegrityRoutes(app);
+  registerLeagueProfileRoutes(app);
   registerAnalyticsRoutes(app);
   registerYahooRoutes(app);
 
@@ -2364,7 +2366,7 @@ export async function registerRoutes(
           description: message.trim(),
           color: 0xd4af37,
           fields,
-          footer: { text: "Dynasty Command · StatChasers" },
+          footer: { text: "Commissioner Command · StatChasers" },
         };
 
         if (screenshot && screenshotName) {

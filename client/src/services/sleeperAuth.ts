@@ -40,7 +40,7 @@ function scopedKey(dcUserId: string): string {
 }
 
 /**
- * Bind the Sleeper auth store to a Dynasty Command user. Pass the DC user's
+ * Bind the Sleeper auth store to a Commissioner Command user. Pass the DC user's
  * id as soon as the DC session is known; pass null after logout. While
  * null, reads return null and writes are refused — so no Sleeper session
  * can be loaded or persisted in a context where the DC user is unknown.

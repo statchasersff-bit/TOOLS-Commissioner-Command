@@ -1,7 +1,7 @@
-# Dynasty Command Center - StatChasers
+# Commissioner Command Center - StatChasers
 
 ## Overview
-Dynasty Command Center is a premium fantasy football league analysis tool designed to provide in-depth insights for dynasty leagues. It integrates with the Sleeper API for real league data and FantasyCalc for player valuations, offering advanced analytics like power rankings, trade evaluations, and player market analysis.
+Commissioner Command Center is a premium fantasy football league analysis tool designed to provide in-depth insights for dynasty leagues. It integrates with the Sleeper API for real league data and FantasyCalc for player valuations, offering advanced analytics like power rankings, trade evaluations, and player market analysis.
 
 ## Architecture
 The application is a **fully static React SPA** (no backend required). All external API calls (Sleeper, FantasyCalc) are made directly from the browser. The app can be deployed to any static hosting platform (Cloudflare Pages, Netlify, Vercel, etc.).
@@ -17,7 +17,7 @@ The application is a **fully static React SPA** (no backend required). All exter
 - Navigation state persisted via URL query params and `localStorage`
 
 **Key Files:**
-- `client/src/pages/DynastyCommandCenter.tsx` — Main app shell with tab navigation
+- `client/src/pages/CommissionerCommandCenter.tsx` — Main app shell with tab navigation
 - `client/src/pages/tabs/` — All tab components (Dashboard, Portfolio, TradeCenter, LiveDraft, Transactions, etc.)
 - `client/src/contexts/` — React contexts (SleeperContext, ValueModelContext)
 - `client/src/lib/` — API services, utilities
@@ -67,7 +67,7 @@ Organic user-contributed trade database. When a user analyzes any league, their 
 - `searchTrades()` — player name search, format/scoring/teamSize filters, paginated
 - `getTradeStats()` — total trade count + league count
 - `GET /api/trades/search` + `GET /api/trades/stats` — frontend search endpoints
-- `POST /api/trades/ingest-league` — background ingestion endpoint called from DynastyCommandCenter after every league load
+- `POST /api/trades/ingest-league` — background ingestion endpoint called from CommissionerCommandCenter after every league load
 - `TradeDatabase` component shows live search UI with filter chips, stats banner, and paginated TradeCard results
 
 ## External APIs & Static Data
@@ -80,8 +80,8 @@ Organic user-contributed trade database. When a user analyzes any league, their 
 ## Build & Deploy
 - Dev: `npm run dev` (starts Express server + Vite for development)
 - Static build: `npx tsx script/build-static.ts` — outputs to `dist/public/`
-- Base path: `/dynasty-command/launch/` (configured in `vite.config.ts`)
-- Bluehost: Upload contents of `dist/public/` to `public_html/dynasty-command/launch/`
+- Base path: `/commissioner-command/launch/` (configured in `vite.config.ts`)
+- Bluehost: Upload contents of `dist/public/` to `public_html/commissioner-command/launch/`
 - `.htaccess` included in build for Apache SPA routing
 - `_redirects` included for Cloudflare Pages SPA routing
 - No database required for the static frontend

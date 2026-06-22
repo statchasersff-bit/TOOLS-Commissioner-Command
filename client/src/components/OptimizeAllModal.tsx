@@ -243,7 +243,7 @@ function ProgressView({
         <div className="px-5 pt-2">
           <SafePacingNotice
             variant="active"
-            message="Submitting lineups safely. Dynasty Command spaces each push to avoid Sleeper rate limits."
+            message="Submitting lineups safely. Commissioner Command spaces each push to avoid Sleeper rate limits."
           />
         </div>
       )}

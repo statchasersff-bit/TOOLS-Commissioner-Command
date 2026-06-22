@@ -14,7 +14,7 @@ import { DevModeBanner } from "@/components/DevModeBanner";
 import { FavoriteTeamProvider } from "@/contexts/FavoriteTeamContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGate } from "@/pages/auth/AuthGate";
-import DynastyCommandCenter from "@/pages/DynastyCommandCenter";
+import CommissionerCommandCenter from "@/pages/CommissionerCommandCenter";
 import { PublicReport } from "@/pages/PublicReport";
 import { Component, useEffect, type ReactNode, type ErrorInfo } from "react";
 
@@ -82,21 +82,29 @@ function Router() {
             header / mega-menu stays visible.
             DCC renders <ManagerPage embedded> when given a managerProfileId. */}
         <Route path="/managers/:userId">
-          {(params) => <DynastyCommandCenter managerProfileId={params?.userId} />}
+          {(params) => <CommissionerCommandCenter managerProfileId={params?.userId} />}
         </Route>
         {/* The value-source manager opens as a full page inside the shell,
             following the same embedded pattern as player/manager profiles. */}
         <Route path="/value-sources">
-          {() => <DynastyCommandCenter valueSourcesPage />}
+          {() => <CommissionerCommandCenter valueSourcesPage />}
         </Route>
         {/* Detailed single-matchup view, opened from Lineup Command → Matchups.
             Renders <MatchupDetail embedded> inside the shell. */}
         <Route path="/matchup/:leagueId">
-          {(params) => <DynastyCommandCenter matchupDetailLeagueId={params?.leagueId} />}
+          {(params) => <CommissionerCommandCenter matchupDetailLeagueId={params?.leagueId} />}
         </Route>
-        <Route path="/:tab/:sub" component={DynastyCommandCenter} />
-        <Route path="/:tab" component={DynastyCommandCenter} />
-        <Route path="/" component={DynastyCommandCenter} />
+        {/* Per-league profile hub. Renders <LeagueProfile> inside the shell, with
+            the active internal tab driven by the :profileTab URL segment. */}
+        <Route path="/league/:leagueId/:profileTab">
+          {(params) => <CommissionerCommandCenter leagueProfileId={params?.leagueId} leagueProfileTab={params?.profileTab} />}
+        </Route>
+        <Route path="/league/:leagueId">
+          {(params) => <CommissionerCommandCenter leagueProfileId={params?.leagueId} leagueProfileTab="overview" />}
+        </Route>
+        <Route path="/:tab/:sub" component={CommissionerCommandCenter} />
+        <Route path="/:tab" component={CommissionerCommandCenter} />
+        <Route path="/" component={CommissionerCommandCenter} />
       </Switch>
     </WouterRouter>
   );
@@ -176,7 +184,7 @@ function AuthenticatedTree({ probe }: { probe: Probe }) {
       <ValueModelProvider>
         <ManagerIntelProvider>
           <Toaster />
-          <ErrorBoundary label="Router/DynastyCommandCenter">
+          <ErrorBoundary label="Router/CommissionerCommandCenter">
             <Router />
           </ErrorBoundary>
         </ManagerIntelProvider>

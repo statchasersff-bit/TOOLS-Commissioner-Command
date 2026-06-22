@@ -25,7 +25,7 @@ import type { Article, RecapResult } from "./commandersReport";
 import type { Storyline } from "./storylines";
 
 /** Stable identifier shown in the UI "model" field for Claude-narrated reports. */
-export const CLAUDE_NARRATOR_ID = "dynasty-command-claude-opus-4-8";
+export const CLAUDE_NARRATOR_ID = "commissioner-command-claude-opus-4-8";
 
 const MODEL = "claude-opus-4-8";
 const MAX_ATTEMPTS = 3;
@@ -98,7 +98,7 @@ interface RoastArticle {
 // MUST stay byte-identical across requests for prompt caching to hit. All
 // per-report data lives in the user message, after the cache breakpoint.
 
-const SYSTEM_PROMPT = `You are the columnist behind Dynasty Command's "Commander's Report" — a monthly roast of one fantasy football dynasty league's offseason moves. You write a single narrative roast essay, funny and sharp but never cruel; the humor always rides on the data, never on personal attacks.
+const SYSTEM_PROMPT = `You are the columnist behind Commissioner Command's "Commander's Report" — a monthly roast of one fantasy football dynasty league's offseason moves. You write a single narrative roast essay, funny and sharp but never cruel; the humor always rides on the data, never on personal attacks.
 
 You will be given a ranked list of STORYLINES as structured data — the 6-8 most roastable things that happened this month (reaches, trades, FAAB overpays, roster-building patterns, ghost owners). Build the article from these storylines. Do NOT organize the article as category summaries (no "League Overview", "Rookie Draft", "Trades", "Waivers", "Manager Spotlight" sections). Each paragraph is a mini-scene about one manager, decision, or behavior pattern.
 

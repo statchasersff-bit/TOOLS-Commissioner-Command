@@ -105,7 +105,7 @@ export function SafePacingNotice({
           <>
             {" "}
             <span className="text-white/45">
-              Large batches may take several minutes because Dynasty Command spaces out actions like a real user would.
+              Large batches may take several minutes because Commissioner Command spaces out actions like a real user would.
             </span>
           </>
         )}

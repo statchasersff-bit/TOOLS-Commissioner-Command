@@ -36,7 +36,7 @@ const RETRY_DELAY   = 5 * 60 * 1000; // 5 min before retry
 const MAX_RETRIES   = 1;
 
 const SHARE_MESSAGE =
-  "I've been using Dynasty Command from StatChasers, it's a dynasty fantasy football tool for analyzing teams, finding trades, syncing offers, and managing leagues.\n\nTry it here:\nhttps://statchasers.com/dynasty-command-tool/";
+  "I've been using Commissioner Command from StatChasers, it's a dynasty fantasy football tool for analyzing teams, finding trades, syncing offers, and managing leagues.\n\nTry it here:\nhttps://statchasers.com/commissioner-command-tool/";
 
 // ── Dev logging (never logs JWTs or tokens) ───────────────────────────────
 function log(...args: unknown[]) {
@@ -632,7 +632,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                   <Share2 className="w-3.5 h-3.5 text-[#d4af37]" />
                   <span className="text-sm font-bold text-white">
                     {popupStep === "prompt"  ? "Friend, We Need Your Help"
-                     : popupStep === "select" ? "Share Dynasty Command"
+                     : popupStep === "select" ? "Share Commissioner Command"
                      : "Confirm & Start Sharing"}
                   </span>
                 </div>
@@ -802,7 +802,7 @@ export function ShareDynastyPopup({ blocked = false, forceOpen = false, onForceO
                   </div>
 
                   <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
-                    You can pause or cancel from the progress indicator at any time. Dynasty Command remains fully usable while it is being shared
+                    You can pause or cancel from the progress indicator at any time. Commissioner Command remains fully usable while it is being shared
                   </p>
 
                   {/* Required acknowledgement — user must opt in to posting as themselves */}

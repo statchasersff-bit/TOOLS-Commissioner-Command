@@ -107,7 +107,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
       <div className="flex items-start justify-between gap-4">
         <SectionHeader
           title="Settings"
-          subtitle="Customize your Dynasty Command experience."
+          subtitle="Customize your Commissioner Command experience."
         />
 
         <div className="hidden md:flex items-center gap-2 flex-shrink-0 pt-1">
@@ -184,7 +184,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
           <h3 className="text-sm font-bold uppercase tracking-wider">Theme</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          Pick how Dynasty Command looks. <span className="font-semibold text-foreground">My Team</span> tints
+          Pick how Commissioner Command looks. <span className="font-semibold text-foreground">My Team</span> tints
           the app with your favorite NFL team's colors while preserving readable contrast.
         </p>
 
@@ -217,7 +217,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
           <h3 className="text-sm font-bold uppercase tracking-wider">Personalization</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          Choose your favorite NFL team to personalize your Dynasty Command experience.
+          Choose your favorite NFL team to personalize your Commissioner Command experience.
         </p>
 
         {!isAuthenticatedUser && (
@@ -266,7 +266,7 @@ export function SettingsPage({ initialTab = "general" }: { initialTab?: Settings
           <h3 className="text-sm font-bold uppercase tracking-wider">Leagues</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          Choose which dynasty leagues appear across Dynasty Command. We pre-select your
+          Choose which dynasty leagues appear across Commissioner Command. We pre-select your
           active, drafted leagues. Check any we filtered out to add them to your list, or
           uncheck ones you'd rather hide. Changes save automatically.
         </p>

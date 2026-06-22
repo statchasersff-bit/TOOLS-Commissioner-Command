@@ -1,5 +1,5 @@
 /**
- * Admin allowlist for Dynasty Command.
+ * Admin allowlist for Commissioner Command.
  *
  * Two parallel lists:
  *   - ADMIN_EMAILS — StatChasers account emails. This is the AUTHORITATIVE

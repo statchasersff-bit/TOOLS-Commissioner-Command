@@ -1,5 +1,5 @@
 /**
- * Centralized access requirements for Dynasty Command modules.
+ * Centralized access requirements for Commissioner Command modules.
  *
  * Three levels, ordered weakest → strongest:
  *
@@ -43,6 +43,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
 
   // League Analyzer
   "league-analyzer:league-activity": "readonly",    // Transactions live here as a sub-tab
+  "league-analyzer:all-league-scan": "readonly",    // cross-league activity comparison
   "league-analyzer:commanders-report": "readonly",
 
   // Trade Center. Calculator is a league-scoped analytic — it can't render

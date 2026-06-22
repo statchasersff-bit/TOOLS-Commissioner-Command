@@ -242,7 +242,7 @@ export function preflightBatch(input: BatchPreflightInput): BatchPreflightResult
       ? window.confirm(
           `You've submitted ${counts.day} ${input.action} action${counts.day === 1 ? "" : "s"} today ` +
           `(soft cap ${counts.dayCap}).\n\n` +
-          `Continuing may increase rate-limit risk and Dynasty Command will slow things down automatically. ` +
+          `Continuing may increase rate-limit risk and Commissioner Command will slow things down automatically. ` +
           `Do you want to continue?`,
         )
       : true;
@@ -273,7 +273,7 @@ export function isGeneralMessagingEnabled(): boolean {
 }
 
 /**
- * The opt-in "share Dynasty Command to your league chats" feature. Posts to
+ * The opt-in "share Commissioner Command to your league chats" feature. Posts to
  * league chat (parent_type: "league") only — NOT free-text DMs. Gated
  * independently of general messaging so the share feature can ship without
  * re-opening every messaging surface. Default: disabled.
@@ -289,7 +289,7 @@ export function isLeagueShareEnabled(): boolean {
 }
 
 /**
- * The controlled, automatic post-trade "Dynasty Command link" DM. Default:
+ * The controlled, automatic post-trade "Commissioner Command link" DM. Default:
  * enabled. Set VITE_ENABLE_TRADE_LINK_DM=false to disable.
  */
 export function isTradeLinkDmEnabled(): boolean {

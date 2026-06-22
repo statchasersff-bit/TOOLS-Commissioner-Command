@@ -47,7 +47,7 @@ export function serveStatic(app: Express) {
     return;
   }
 
-  // The sub-path the SPA is deployed under (e.g. "/dynasty-command/launch/").
+  // The sub-path the SPA is deployed under (e.g. "/commissioner-command/launch/").
   // MUST match Vite's `base` so the asset URLs emitted in index.html resolve.
   // Set VITE_BASE_PATH (or DEPLOY_BASE_PATH) on both build and server runtime.
   const basePath = normalizeBasePath(

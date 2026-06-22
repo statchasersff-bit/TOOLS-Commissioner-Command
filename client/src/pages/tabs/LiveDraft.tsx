@@ -18,6 +18,8 @@ import { useManagerIntel } from "@/contexts/ManagerIntelContext";
 import type { DraftState, DraftUser, DraftPickNormalized, DraftAutopickerStatus } from "@/lib/sleeperApi";
 import { ROOKIE_BOARD_2026_SF, ROOKIE_BOARD_2026_1QB } from "@/data/rookieBoard2026";
 import { buildOptimalStarterIds } from "@/lib/lineupUtils";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 import type { Player as RosterPlayer } from "@/types";
 
 // ── Normalized draft model — abstracted from raw Sleeper format ───────────────
@@ -1309,6 +1311,72 @@ const MANAGER_TIMING_SORT_LABEL: Record<ManagerTimingSortKey, string> = {
   longest: "Longest",
 };
 
+// Per-manager expanded pick timeline. Extracted into its own component so the
+// sortable-table hook can run at the top level of each rendered instance
+// (hooks can't be called inside the parent's managers.map callback). Defaults
+// to pick-number ascending, matching the chronological order the picks are
+// pre-sorted into by ManagerTimingsSection.
+function ManagerPickTimeline({ userId, picks }: { userId: string; picks: ManagerTimingEntry[] }) {
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(
+    picks,
+    {
+      pickNo: (p) => p.pickNo,
+      rdpk: (p) => p.pickNo,
+      player: (p) => p.playerName,
+      pos: (p) => p.position,
+      team: (p) => p.teamAbbr,
+      timeUsed: (p) => p.timeMs,
+      cumulative: (p) => p.cumulativeMs,
+      timestamp: (p) => p.timestamp,
+    },
+    { defaultKey: "pickNo", defaultDir: "asc" },
+  );
+  return (
+    <table className="w-full text-[11px] min-w-[560px]">
+      <thead>
+        <tr className="text-left text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+          <SortableTh sortKey="pickNo" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2 py-1.5 font-bold">Pick #</SortableTh>
+          <SortableTh sortKey="rdpk" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2 py-1.5 font-bold">Rd.Pk</SortableTh>
+          <SortableTh sortKey="player" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2 py-1.5 font-bold">Player</SortableTh>
+          <SortableTh sortKey="pos" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2 py-1.5 font-bold">Pos</SortableTh>
+          <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2 py-1.5 font-bold">Team</SortableTh>
+          <SortableTh sortKey="timeUsed" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-bold text-right">Time Used</SortableTh>
+          <SortableTh sortKey="cumulative" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-bold text-right">Cumulative</SortableTh>
+          <SortableTh sortKey="timestamp" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2 py-1.5 font-bold">Timestamp</SortableTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((p) => (
+          <tr
+            key={`${userId}-${p.pickNo}`}
+            className="border-t border-border/15 hover:bg-muted/20"
+            data-testid={`manager-timing-pick-${userId}-${p.pickNo}`}
+          >
+            <td className="px-2 py-1.5 tabular-nums text-muted-foreground">{p.pickNo || "—"}</td>
+            <td className="px-2 py-1.5 tabular-nums text-foreground/80">
+              {p.pickNo > 0 ? `${p.round}.${String(p.pickInRound).padStart(2, "0")}` : "—"}
+            </td>
+            <td className="px-2 py-1.5 font-medium text-foreground truncate max-w-[160px]">
+              {p.playerName}
+            </td>
+            <td className="px-2 py-1.5 text-foreground/80">{p.position || "—"}</td>
+            <td className="px-2 py-1.5 text-foreground/80">{p.teamAbbr || "—"}</td>
+            <td className="px-2 py-1.5 tabular-nums text-right text-foreground/90">
+              {formatDurationMs(p.timeMs)}
+            </td>
+            <td className="px-2 py-1.5 tabular-nums text-right text-muted-foreground">
+              {p.timeMs == null ? "—" : formatDurationMs(p.cumulativeMs)}
+            </td>
+            <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">
+              {formatPickTimestamp(p.timestamp)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, hasToken, messagesError, onConnectSleeper }: {
   history: Array<{
     pick: DraftPickNormalized | null;
@@ -1674,48 +1742,7 @@ function ManagerTimingsSection({ history, teams, livePickUserId, liveElapsedMs, 
                       data-testid={`manager-timing-detail-${mgr.userId}`}
                     >
                       <div className="overflow-x-auto">
-                        <table className="w-full text-[11px] min-w-[560px]">
-                          <thead>
-                            <tr className="text-left text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                              <th className="px-2 py-1.5 font-bold">Pick #</th>
-                              <th className="px-2 py-1.5 font-bold">Rd.Pk</th>
-                              <th className="px-2 py-1.5 font-bold">Player</th>
-                              <th className="px-2 py-1.5 font-bold">Pos</th>
-                              <th className="px-2 py-1.5 font-bold">Team</th>
-                              <th className="px-2 py-1.5 font-bold text-right">Time Used</th>
-                              <th className="px-2 py-1.5 font-bold text-right">Cumulative</th>
-                              <th className="px-2 py-1.5 font-bold">Timestamp</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {mgr.picks.map((p) => (
-                              <tr
-                                key={`${mgr.userId}-${p.pickNo}`}
-                                className="border-t border-border/15 hover:bg-muted/20"
-                                data-testid={`manager-timing-pick-${mgr.userId}-${p.pickNo}`}
-                              >
-                                <td className="px-2 py-1.5 tabular-nums text-muted-foreground">{p.pickNo || "—"}</td>
-                                <td className="px-2 py-1.5 tabular-nums text-foreground/80">
-                                  {p.pickNo > 0 ? `${p.round}.${String(p.pickInRound).padStart(2, "0")}` : "—"}
-                                </td>
-                                <td className="px-2 py-1.5 font-medium text-foreground truncate max-w-[160px]">
-                                  {p.playerName}
-                                </td>
-                                <td className="px-2 py-1.5 text-foreground/80">{p.position || "—"}</td>
-                                <td className="px-2 py-1.5 text-foreground/80">{p.teamAbbr || "—"}</td>
-                                <td className="px-2 py-1.5 tabular-nums text-right text-foreground/90">
-                                  {formatDurationMs(p.timeMs)}
-                                </td>
-                                <td className="px-2 py-1.5 tabular-nums text-right text-muted-foreground">
-                                  {p.timeMs == null ? "—" : formatDurationMs(p.cumulativeMs)}
-                                </td>
-                                <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">
-                                  {formatPickTimestamp(p.timestamp)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <ManagerPickTimeline userId={mgr.userId} picks={mgr.picks} />
                       </div>
                     </div>
                   )}

@@ -1,12 +1,24 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { useValueModel } from "@/contexts/ValueModelContext";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 import { Bug, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Clock, Database } from "lucide-react";
 
 export function DataDiagnostics() {
   const [isOpen, setIsOpen] = useState(false);
   const [showUnmatched, setShowUnmatched] = useState(false);
   const { diagnostics, sourceId, isLoading, isSnapshot } = useValueModel();
+
+  const { sorted: sortedUnmatched, sortKey, sortDir, toggle } = useSortableTable(
+    diagnostics.unmatchedRows,
+    {
+      name: (r) => r.name,
+      pos: (r) => r.pos,
+      team: (r) => r.team,
+      value: (r) => r.value,
+    },
+  );
 
   if (import.meta.env.PROD) return null;
 
@@ -104,14 +116,14 @@ export function DataDiagnostics() {
                     <table className="w-full text-[10px]">
                       <thead>
                         <tr className="border-b border-border/30 text-left">
-                          <th className="px-2 py-1.5 font-semibold text-muted-foreground">Name</th>
-                          <th className="px-2 py-1.5 font-semibold text-muted-foreground">Pos</th>
-                          <th className="px-2 py-1.5 font-semibold text-muted-foreground">Team</th>
-                          <th className="px-2 py-1.5 font-semibold text-muted-foreground text-right">Value</th>
+                          <SortableTh sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold text-muted-foreground">Name</SortableTh>
+                          <SortableTh sortKey="pos" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold text-muted-foreground">Pos</SortableTh>
+                          <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold text-muted-foreground">Team</SortableTh>
+                          <SortableTh sortKey="value" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-muted-foreground text-right">Value</SortableTh>
                         </tr>
                       </thead>
                       <tbody>
-                        {diagnostics.unmatchedRows.map((row, i) => (
+                        {sortedUnmatched.map((row, i) => (
                           <tr key={i} className="border-b border-border/10">
                             <td className="px-2 py-1 text-foreground">{row.name}</td>
                             <td className="px-2 py-1 text-muted-foreground">{row.pos}</td>

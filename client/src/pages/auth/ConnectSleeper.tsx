@@ -146,7 +146,7 @@ export function ConnectSleeperScreen() {
               <h2 className="text-lg font-bold text-white mb-1">Link your Sleeper account</h2>
               <span className="block h-[2.5px] w-8 bg-[#d4af37] rounded-full mb-4" />
               <p className="text-[13px] text-white/50 mb-5">
-                Dynasty Command needs your Sleeper account to load your leagues and rosters.
+                Commissioner Command needs your Sleeper account to load your leagues and rosters.
               </p>
               <form onSubmit={handleSendCode} className="space-y-4">
                 <AuthInput

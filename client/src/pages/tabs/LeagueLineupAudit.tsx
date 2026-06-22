@@ -29,6 +29,8 @@ import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
 import { useLeagueAvatars } from "@/hooks/useLeagueAvatars";
 import { type RosterIdentity } from "@/lib/sleeperApi";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { SortableTh } from "@/components/SortableTh";
+import { useSortableTable } from "@/hooks/useSortableTable";
 import {
   RefreshCw, Loader2, ChevronLeft, ChevronRight, ShieldAlert, AlertTriangle,
   Users, CircleSlash, UserX, CheckCircle2, ClipboardCopy, Flag, ExternalLink,
@@ -146,6 +148,17 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
   });
   const tankingCount = (checksQuery.data?.checks ?? []).filter((c) => c.tankingRiskScore >= 25).length;
 
+  // Lineups for the current (or a future) NFL week aren't locked yet, so the
+  // audit is VIEW-ONLY for those weeks: no reviews, notes, or strikes until the
+  // week's results are final. No one should be penalized for a lineup they can
+  // still change. The current week comes from the overview/state feed.
+  const overviewQuery = useQuery({
+    queryKey: ["li", leagueId, "current-week"],
+    queryFn: () => lineupIntegrityApi.overview(leagueId),
+  });
+  const currentWeek = overviewQuery.data?.currentWeek ?? null;
+  const isLiveWeek = currentWeek != null && effectiveWeek >= currentWeek;
+
   const refreshMut = useMutation({
     mutationFn: () => lineupIntegrityApi.refresh(leagueId, [effectiveWeek], season),
     onSuccess: (r) => {
@@ -241,6 +254,17 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
             {refreshMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Refresh</Button>} />
       ) : (
         <>
+          {/* Live-week guard — lineups aren't locked yet, so reviews/notes/strikes
+              are disabled until the week is final. */}
+          {isLiveWeek && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-700 dark-any:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <span>
+                <b>Week {effectiveWeek} is still live.</b> Lineups aren’t locked yet, so this is a preview only — reviews, notes, and strikes are disabled until the week’s results are final.
+              </span>
+            </div>
+          )}
+
           {/* Summary cards */}
           {(() => {
             const badStarters = audit.summary.emptyStarterSlots + audit.summary.inactiveStarters;
@@ -281,7 +305,7 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
           </div>
 
           {/* Strike Tracker */}
-          <StrikeTrackerSection leagueId={leagueId} week={audit.week} teams={strikeTeams} avatars={avatars} />
+          <StrikeTrackerSection leagueId={leagueId} week={audit.week} teams={strikeTeams} avatars={avatars} readOnly={isLiveWeek} />
 
           {/* Manager History */}
           <ManagerHistorySection leagueId={leagueId} avatars={avatars} />
@@ -297,6 +321,7 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
               league={league}
               season={season}
               week={audit.week}
+              readOnly={isLiveWeek}
               onClose={() => setOpenIssue(null)}
             />
           )}
@@ -330,6 +355,15 @@ function OwnerAvatar({
 // ── League Issues table ───────────────────────────────────────────────────────
 
 function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatars: Record<number, RosterIdentity>; onOpen: (i: AuditIssue) => void }) {
+  const SEVERITY_RANK: Record<IssueSeverity, number> = { critical: 3, warning: 2, info: 1 };
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(issues, {
+    severity: (i) => SEVERITY_RANK[i.severity] ?? 0,
+    manager: (i) => i.managerName || i.teamName,
+    player: (i) => i.playerName,
+    issue: (i) => i.issueType,
+    status: (i) => i.issueStatus,
+  });
+
   if (issues.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">No issues match the current filter.</p>;
   }
@@ -340,16 +374,16 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 font-semibold">Severity</th>
-              <th className="px-3 py-2 font-semibold">Manager</th>
-              <th className="px-3 py-2 font-semibold">Player</th>
-              <th className="px-3 py-2 font-semibold">Issue</th>
-              <th className="px-3 py-2 font-semibold">Status</th>
+              <SortableTh sortKey="severity" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Severity</SortableTh>
+              <SortableTh sortKey="manager" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Manager</SortableTh>
+              <SortableTh sortKey="player" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Player</SortableTh>
+              <SortableTh sortKey="issue" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Issue</SortableTh>
+              <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Status</SortableTh>
               <th className="px-3 py-2 text-right font-semibold">Action</th>
             </tr>
           </thead>
           <tbody>
-            {issues.map((i) => (
+            {sorted.map((i) => (
               <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
                 <td className="px-3 py-2"><Pill cls={SEVERITY_META[i.severity].cls}>{SEVERITY_META[i.severity].label}</Pill></td>
                 <td className="px-3 py-2">
@@ -357,7 +391,9 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
                     <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
                     <div className="min-w-0">
                       <div className="font-medium truncate">{i.managerName}</div>
-                      <div className="text-xs text-muted-foreground truncate">{i.teamName}</div>
+                      {i.teamName && i.teamName !== i.managerName && (
+                        <div className="text-xs text-muted-foreground truncate">{i.teamName}</div>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -390,7 +426,7 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
             </div>
             <div className="mt-2 flex items-center gap-2 text-sm font-semibold">
               <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
-              <span className="truncate">{i.managerName} · {i.teamName}</span>
+              <span className="truncate">{i.teamName && i.teamName !== i.managerName ? `${i.managerName} · ${i.teamName}` : i.managerName}</span>
             </div>
             <div className="text-xs text-muted-foreground">{i.opponentTeamName ? `vs ${i.opponentTeamName}` : ""}</div>
             <div className="mt-1.5 text-sm">
@@ -456,8 +492,8 @@ function statusTone(label: string): string {
 }
 
 function TeamLineupAuditDrawer({
-  issue, league, season, week, onClose,
-}: { issue: AuditIssue; league: League; season: string; week: number; onClose: () => void }) {
+  issue, league, season, week, readOnly, onClose,
+}: { issue: AuditIssue; league: League; season: string; week: number; readOnly?: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const leagueId = league.id;
   const avatars = useLeagueAvatars(leagueId);
@@ -576,12 +612,22 @@ function TeamLineupAuditDrawer({
       </SheetHeader>
 
       <div className="space-y-5 p-4">
-        {/* Commissioner actions */}
+        {/* Commissioner actions — write-actions (resolve / ignore / escalate /
+            copy message) are hidden while the week is live, since the lineup
+            isn't locked and shouldn't be acted on yet. */}
         <div className="flex flex-wrap gap-1.5">
-          <Button size="sm" variant="outline" onClick={markResolved} data-testid="action-resolve"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Mark Resolved</Button>
-          <Button size="sm" variant="outline" onClick={ignoreWeek}><Ban className="mr-1.5 h-3.5 w-3.5" />Ignore This Week</Button>
-          <Button size="sm" variant="outline" onClick={copyMessage}><ClipboardCopy className="mr-1.5 h-3.5 w-3.5" />Copy Manager Message</Button>
-          <Button size="sm" variant="outline" onClick={escalate}><ArrowUpRight className="mr-1.5 h-3.5 w-3.5" />Escalate</Button>
+          {readOnly ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark-any:text-amber-300">
+              <AlertTriangle className="h-3.5 w-3.5" /> View only — lineups aren’t locked yet this week.
+            </span>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" onClick={markResolved} data-testid="action-resolve"><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />Mark Resolved</Button>
+              <Button size="sm" variant="outline" onClick={ignoreWeek}><Ban className="mr-1.5 h-3.5 w-3.5" />Ignore This Week</Button>
+              <Button size="sm" variant="outline" onClick={copyMessage}><ClipboardCopy className="mr-1.5 h-3.5 w-3.5" />Copy Manager Message</Button>
+              <Button size="sm" variant="outline" onClick={escalate}><ArrowUpRight className="mr-1.5 h-3.5 w-3.5" />Escalate</Button>
+            </>
+          )}
           <a href={`https://sleeper.com/leagues/${leagueId}`} target="_blank" rel="noreferrer">
             <Button size="sm" variant="ghost"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />View on Sleeper</Button>
           </a>
@@ -642,30 +688,7 @@ function TeamLineupAuditDrawer({
         <div>
           <SectionTitle icon={Users}>Eligible Bench Replacements</SectionTitle>
           {benchOptions.length > 0 ? (
-            <Card className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-2.5 py-1.5 font-semibold">Player</th>
-                    <th className="px-2.5 py-1.5 font-semibold">Pos</th>
-                    <th className="px-2.5 py-1.5 font-semibold">NFL</th>
-                    <th className="px-2.5 py-1.5 font-semibold">Status</th>
-                    <th className="px-2.5 py-1.5 text-right font-semibold">Proj</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {benchOptions.map((p) => (
-                    <tr key={p.playerId} className="border-b border-border/60 last:border-0">
-                      <td className="px-2.5 py-1.5">{p.playerName ?? p.playerId}</td>
-                      <td className="px-2.5 py-1.5 text-muted-foreground">{p.position ?? "—"}</td>
-                      <td className="px-2.5 py-1.5 text-muted-foreground">{p.team ?? "—"}</td>
-                      <td className={cn("px-2.5 py-1.5", statusTone(playerStatusLabel(p)))}>{playerStatusLabel(p)}</td>
-                      <td className="px-2.5 py-1.5 text-right tabular-nums">{p.projection.toFixed(1)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
+            <BenchReplacementsTable options={benchOptions} />
           ) : (
             <p className="text-sm text-muted-foreground">No eligible active bench replacements found.</p>
           )}
@@ -708,14 +731,16 @@ function TeamLineupAuditDrawer({
           )}
         </div>
 
-        {/* Add commissioner note */}
-        <div>
-          <SectionTitle icon={StickyNote}>Commissioner Note</SectionTitle>
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Document context for the record…" className="min-h-[70px]" data-testid="input-commish-note" />
-          <div className="mt-2 flex justify-end">
-            <Button size="sm" variant="outline" onClick={addNote}><StickyNote className="mr-1.5 h-3.5 w-3.5" />Add Note</Button>
+        {/* Add commissioner note — disabled while the week is live. */}
+        {!readOnly && (
+          <div>
+            <SectionTitle icon={StickyNote}>Commissioner Note</SectionTitle>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Document context for the record…" className="min-h-[70px]" data-testid="input-commish-note" />
+            <div className="mt-2 flex justify-end">
+              <Button size="sm" variant="outline" onClick={addNote}><StickyNote className="mr-1.5 h-3.5 w-3.5" />Add Note</Button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Audit log */}
         <div>
@@ -724,6 +749,42 @@ function TeamLineupAuditDrawer({
         </div>
       </div>
     </div>
+  );
+}
+
+function BenchReplacementsTable({ options }: { options: PlayerCheckView[] }) {
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(options, {
+    player: (p) => p.playerName ?? p.playerId,
+    pos: (p) => p.position,
+    nfl: (p) => p.team,
+    status: (p) => playerStatusLabel(p),
+    proj: (p) => p.projection,
+  }, { defaultKey: "proj", defaultDir: "desc" });
+  return (
+    <Card className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <SortableTh sortKey="player" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2.5 py-1.5 font-semibold">Player</SortableTh>
+            <SortableTh sortKey="pos" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2.5 py-1.5 font-semibold">Pos</SortableTh>
+            <SortableTh sortKey="nfl" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2.5 py-1.5 font-semibold">NFL</SortableTh>
+            <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-2.5 py-1.5 font-semibold">Status</SortableTh>
+            <SortableTh sortKey="proj" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2.5 py-1.5 text-right font-semibold">Proj</SortableTh>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((p) => (
+            <tr key={p.playerId} className="border-b border-border/60 last:border-0">
+              <td className="px-2.5 py-1.5">{p.playerName ?? p.playerId}</td>
+              <td className="px-2.5 py-1.5 text-muted-foreground">{p.position ?? "—"}</td>
+              <td className="px-2.5 py-1.5 text-muted-foreground">{p.team ?? "—"}</td>
+              <td className={cn("px-2.5 py-1.5", statusTone(playerStatusLabel(p)))}>{playerStatusLabel(p)}</td>
+              <td className="px-2.5 py-1.5 text-right tabular-nums">{p.projection.toFixed(1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 
@@ -837,7 +898,7 @@ function IssueStrikeForm({ leagueId, week, teams, onDone }: {
   );
 }
 
-function StrikeTrackerSection({ leagueId, week, teams, avatars }: { leagueId: string; week: number; teams: StrikeTeam[]; avatars: Record<number, RosterIdentity> }) {
+function StrikeTrackerSection({ leagueId, week, teams, avatars, readOnly }: { leagueId: string; week: number; teams: StrikeTeam[]; avatars: Record<number, RosterIdentity>; readOnly?: boolean }) {
   const { toast } = useToast();
   const [showIssue, setShowIssue] = useState(false);
   const { data, isLoading } = useQuery({
@@ -850,17 +911,28 @@ function StrikeTrackerSection({ leagueId, week, teams, avatars }: { leagueId: st
   });
   const strikes: StrikeRow[] = data?.strikes ?? [];
 
+  const STRIKE_SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+  const { sorted: sortedStrikes, sortKey, sortDir, toggle } = useSortableTable(strikes, {
+    team: (s) => s.teamName || s.managerName || `Roster ${s.rosterId}`,
+    type: (s) => s.strikeType,
+    severity: (s) => STRIKE_SEVERITY_RANK[s.severity] ?? 0,
+    week: (s) => s.week,
+    reason: (s) => s.reason,
+    status: (s) => s.status,
+  });
+
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between gap-2">
         <SectionTitle icon={Gavel}>Strike Tracker</SectionTitle>
-        {teams.length > 0 && (
+        {/* No new strikes while the week is live — lineups aren't locked yet. */}
+        {!readOnly && teams.length > 0 && (
           <Button size="sm" variant="outline" onClick={() => setShowIssue((v) => !v)} data-testid="button-issue-strike">
             <Gavel className="mr-1.5 h-3.5 w-3.5" /> Issue Strike
           </Button>
         )}
       </div>
-      {showIssue && teams.length > 0 && (
+      {!readOnly && showIssue && teams.length > 0 && (
         <IssueStrikeForm
           leagueId={leagueId}
           week={week}
@@ -877,17 +949,17 @@ function StrikeTrackerSection({ leagueId, week, teams, avatars }: { leagueId: st
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-semibold">Team</th>
-                <th className="px-3 py-2 font-semibold">Type</th>
-                <th className="px-3 py-2 font-semibold">Severity</th>
-                <th className="px-3 py-2 font-semibold">Week</th>
-                <th className="px-3 py-2 font-semibold">Reason</th>
-                <th className="px-3 py-2 font-semibold">Status</th>
+                <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Team</SortableTh>
+                <SortableTh sortKey="type" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Type</SortableTh>
+                <SortableTh sortKey="severity" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Severity</SortableTh>
+                <SortableTh sortKey="week" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Week</SortableTh>
+                <SortableTh sortKey="reason" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Reason</SortableTh>
+                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Status</SortableTh>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {strikes.map((s) => (
+              {sortedStrikes.map((s) => (
                 <tr key={s.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
@@ -935,6 +1007,18 @@ function ManagerHistorySection({ leagueId, avatars }: { leagueId: string; avatar
   });
   const managers: ManagerHistoryRow[] = data?.managers ?? [];
 
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(managers, {
+    manager: (m) => m.teamName || m.managerName,
+    checks: (m) => m.totalChecks,
+    integrity: (m) => m.averageIntegrityScore,
+    empty: (m) => m.emptyStarterCount,
+    bye: (m) => m.byeStarterCount,
+    inactive: (m) => m.inactiveStarterCount,
+    susp: (m) => m.suspiciousBenchingCount,
+    strikes: (m) => m.strikes,
+    worst: (m) => m.worstWeek?.integrityScore ?? null,
+  });
+
   return (
     <div className="mt-6">
       <SectionTitle icon={History}>Manager History</SectionTitle>
@@ -947,19 +1031,19 @@ function ManagerHistorySection({ leagueId, avatars }: { leagueId: string; avatar
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-semibold">Manager</th>
-                <th className="px-3 py-2 text-center font-semibold">Checks</th>
-                <th className="px-3 py-2 text-center font-semibold">Avg Integrity</th>
-                <th className="px-3 py-2 text-center font-semibold">Empty</th>
-                <th className="px-3 py-2 text-center font-semibold">Bye</th>
-                <th className="px-3 py-2 text-center font-semibold">Inactive</th>
-                <th className="px-3 py-2 text-center font-semibold">Susp.</th>
-                <th className="px-3 py-2 text-center font-semibold">Strikes</th>
-                <th className="px-3 py-2 text-center font-semibold">Worst Wk</th>
+                <SortableTh sortKey="manager" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Manager</SortableTh>
+                <SortableTh sortKey="checks" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Checks</SortableTh>
+                <SortableTh sortKey="integrity" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Avg Integrity</SortableTh>
+                <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Empty</SortableTh>
+                <SortableTh sortKey="bye" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Bye</SortableTh>
+                <SortableTh sortKey="inactive" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Inactive</SortableTh>
+                <SortableTh sortKey="susp" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Susp.</SortableTh>
+                <SortableTh sortKey="strikes" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Strikes</SortableTh>
+                <SortableTh sortKey="worst" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-3 py-2 text-center font-semibold">Worst Wk</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {managers.map((m) => (
+              {sorted.map((m) => (
                 <tr key={m.rosterId} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 // Standard modal/dialog class strings.
-// All Dynasty Command modals must follow these specs for consistency.
+// All Commissioner Command modals must follow these specs for consistency.
 
 export const modal = {
   // Overlay backdrop

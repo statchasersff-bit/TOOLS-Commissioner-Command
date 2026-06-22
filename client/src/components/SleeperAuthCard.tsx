@@ -255,7 +255,7 @@ export function SleeperAuthCard() {
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">Connect Sleeper</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                Connect your account to sync leagues and unlock Dynasty Command actions.
+                Connect your account to sync leagues and unlock Commissioner Command actions.
               </p>
             </div>
           </div>

@@ -23,11 +23,13 @@ import {
   ShieldAlert, RefreshCw, ArrowLeft, Copy, AlertTriangle, ListChecks,
   FileText, Settings as SettingsIcon, Scale, CheckCircle2,
   AlertCircle, Info, MessageSquare, EyeOff, ExternalLink, ChevronLeft, ChevronRight,
-  UserX, CalendarClock, ArrowRight,
+  UserX, ArrowRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { SectionHeader } from "@/components/SectionHeader";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
 import { useLeagueAvatars } from "@/hooks/useLeagueAvatars";
 import { type RosterIdentity } from "@/lib/sleeperApi";
@@ -136,6 +138,7 @@ export default function CommissionerLineupIntegrity({
   onBack,
   mode = "single",
   onOpenLeague,
+  onOpenProfile,
   initialWeek,
 }: {
   onBack?: () => void;
@@ -143,6 +146,8 @@ export default function CommissionerLineupIntegrity({
   mode?: "single" | "multi";
   /** Called from the multi view's "View" button to deep-link into a single league + week. */
   onOpenLeague?: (leagueId: string, week?: number) => void;
+  /** Called when a league name is clicked — opens that league's profile. */
+  onOpenProfile?: (leagueId: string) => void;
   /** Week to open the single-league view on (set when deep-linked from All Leagues). */
   initialWeek?: number;
 }) {
@@ -212,6 +217,7 @@ export default function CommissionerLineupIntegrity({
           nameById={Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.name]))}
           avatarById={Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.avatar ?? null]))}
           onOpenLeague={(id, wk) => onOpenLeague?.(id, wk)}
+          onOpenProfile={onOpenProfile}
         />
       ) : (
         <>
@@ -429,6 +435,18 @@ function ChecksTab({ leagueId, week }: { leagueId: string; week: number | null }
     return rows;
   }, [data, filter, f]);
 
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(checks, {
+    team: (c) => teamLabel(c),
+    integrity: (c) => c.lineupIntegrityScore,
+    tanking: (c) => c.tankingRiskScore,
+    empty: (c) => c.emptyStarterSlots,
+    bye: (c) => c.byeStarters,
+    inactive: (c) => c.inactiveStarters + c.irStarters,
+    suspicious: (c) => c.suspiciousBenchings,
+    gap: (c) => c.optimalityGap,
+    status: (c) => c.reviewStatus,
+  });
+
   if (isLoading) return <Loading />;
   if (!data?.checks.length) return <EmptyHint text="No lineup checks yet — run a check from the header." />;
 
@@ -451,19 +469,19 @@ function ChecksTab({ leagueId, week }: { leagueId: string; week: number | null }
           <thead>
             <tr className="text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border/60">
               <th className="w-6" />
-              <th className="text-left px-3 py-2">Team</th>
-              <th className="text-center px-2 py-2">Integrity</th>
-              <th className="text-center px-2 py-2">Tanking</th>
-              <th className="text-center px-2 py-2">Empty</th>
-              <th className="text-center px-2 py-2">Bye</th>
-              <th className="text-center px-2 py-2">Inact.</th>
-              <th className="text-center px-2 py-2">Susp.</th>
-              <th className="text-center px-2 py-2">Gap</th>
-              <th className="text-left px-2 py-2">Status</th>
+              <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-3 py-2">Team</SortableTh>
+              <SortableTh sortKey="integrity" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Integrity</SortableTh>
+              <SortableTh sortKey="tanking" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Tanking</SortableTh>
+              <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Empty</SortableTh>
+              <SortableTh sortKey="bye" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Bye</SortableTh>
+              <SortableTh sortKey="inactive" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Inact.</SortableTh>
+              <SortableTh sortKey="suspicious" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Susp.</SortableTh>
+              <SortableTh sortKey="gap" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center px-2 py-2">Gap</SortableTh>
+              <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-2 py-2">Status</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {checks.map((c) => {
+            {sorted.map((c) => {
               const isOpen = expanded === c.id;
               return (
                 <Fragment key={c.id}>
@@ -535,14 +553,30 @@ function LineupDetail({ checkId, emptySlots }: { checkId: number; emptySlots: nu
     queryKey: ["li", "detail", checkId],
     queryFn: () => api.checkDetail(checkId),
   });
-  if (isLoading) return <div className="py-4 text-center text-xs text-muted-foreground">Loading lineup…</div>;
-  if (!data) return <div className="py-4 text-center text-xs text-muted-foreground">No detail available.</div>;
-
-  const starters = data.starters;
-  const benchOptions = [...data.bench]
+  const starters = data?.starters ?? [];
+  const benchOptions = [...(data?.bench ?? [])]
     .filter((p) => !p.isInactive && !p.isIr && !p.isOnBye)
     .sort((a, b) => b.projection - a.projection)
     .slice(0, 8);
+
+  const startersSort = useSortableTable(starters, {
+    slot: (p) => p.lineupSlot ?? null,
+    player: (p) => p.playerName ?? null,
+    team: (p) => p.team ?? null,
+    status: (p) => playerStatusBadge(p).text,
+    issue: (p) => { const i = starterIssue(p); return i === "—" ? null : i; },
+  });
+
+  const benchSort = useSortableTable(benchOptions, {
+    player: (p) => p.playerName ?? null,
+    pos: (p) => p.position ?? null,
+    status: (p) => playerStatusBadge(p).text,
+    projected: (p) => (p.projection > 0 ? p.projection : null),
+  }, { defaultKey: "projected", defaultDir: "desc" });
+
+  if (isLoading) return <div className="py-4 text-center text-xs text-muted-foreground">Loading lineup…</div>;
+  if (!data) return <div className="py-4 text-center text-xs text-muted-foreground">No detail available.</div>;
+
   const copyMessages = Object.entries(data.copyMessages ?? {});
 
   return (
@@ -559,16 +593,16 @@ function LineupDetail({ checkId, emptySlots }: { checkId: number; emptySlots: nu
           <table className="w-full text-xs">
             <thead>
               <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/60">
-                <th className="text-left px-2 py-1.5">Slot</th>
-                <th className="text-left px-2 py-1.5">Player</th>
-                <th className="text-center px-2 py-1.5">Team</th>
-                <th className="text-center px-2 py-1.5">Status</th>
+                <SortableTh sortKey="slot" activeKey={startersSort.sortKey} dir={startersSort.sortDir} onSort={startersSort.toggle} align="left" className="text-left px-2 py-1.5">Slot</SortableTh>
+                <SortableTh sortKey="player" activeKey={startersSort.sortKey} dir={startersSort.sortDir} onSort={startersSort.toggle} align="left" className="text-left px-2 py-1.5">Player</SortableTh>
+                <SortableTh sortKey="team" activeKey={startersSort.sortKey} dir={startersSort.sortDir} onSort={startersSort.toggle} align="center" className="text-center px-2 py-1.5">Team</SortableTh>
+                <SortableTh sortKey="status" activeKey={startersSort.sortKey} dir={startersSort.sortDir} onSort={startersSort.toggle} align="center" className="text-center px-2 py-1.5">Status</SortableTh>
                 <th className="text-center px-2 py-1.5">Game Time</th>
-                <th className="text-left px-2 py-1.5">Issue</th>
+                <SortableTh sortKey="issue" activeKey={startersSort.sortKey} dir={startersSort.sortDir} onSort={startersSort.toggle} align="left" className="text-left px-2 py-1.5">Issue</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {starters.map((p) => {
+              {startersSort.sorted.map((p) => {
                 const st = playerStatusBadge(p);
                 const issue = starterIssue(p);
                 return (
@@ -596,15 +630,15 @@ function LineupDetail({ checkId, emptySlots }: { checkId: number; emptySlots: nu
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/60">
-                  <th className="text-left px-2 py-1.5">Bench Player</th>
-                  <th className="text-center px-2 py-1.5">Pos</th>
-                  <th className="text-center px-2 py-1.5">Status</th>
-                  <th className="text-center px-2 py-1.5">Projected</th>
+                  <SortableTh sortKey="player" activeKey={benchSort.sortKey} dir={benchSort.sortDir} onSort={benchSort.toggle} align="left" className="text-left px-2 py-1.5">Bench Player</SortableTh>
+                  <SortableTh sortKey="pos" activeKey={benchSort.sortKey} dir={benchSort.sortDir} onSort={benchSort.toggle} align="center" className="text-center px-2 py-1.5">Pos</SortableTh>
+                  <SortableTh sortKey="status" activeKey={benchSort.sortKey} dir={benchSort.sortDir} onSort={benchSort.toggle} align="center" className="text-center px-2 py-1.5">Status</SortableTh>
+                  <SortableTh sortKey="projected" activeKey={benchSort.sortKey} dir={benchSort.sortDir} onSort={benchSort.toggle} align="center" className="text-center px-2 py-1.5">Projected</SortableTh>
                   <th className="text-center px-2 py-1.5">Game Time</th>
                 </tr>
               </thead>
               <tbody>
-                {benchOptions.map((p) => {
+                {benchSort.sorted.map((p) => {
                   const st = playerStatusBadge(p);
                   return (
                     <tr key={p.playerId} className="border-b border-border/40 last:border-0">
@@ -1078,40 +1112,185 @@ function LeagueAvatar({ avatar, name }: { avatar: string | null; name: string })
   );
 }
 
+// ── Expanded league review panel ─────────────────────────────────────────────
+// Human-readable label + short reason per alert type, so the panel reads like a
+// commissioner review instead of a raw alert log.
+const ALERT_TYPE_LABEL: Record<string, string> = {
+  empty_starter: "Empty Starter Slot",
+  bye_starter: "Bye-Week Starter",
+  inactive_starter: "Inactive Starter",
+  ir_starter: "IR Starter",
+  doubtful_starter: "Doubtful Starter",
+  questionable_starter: "Questionable Starter",
+  unchanged_lineup: "Unchanged Lineup",
+  suspicious_benching: "Suspicious Benching",
+  large_optimality_gap: "Lineup Optimality Gap",
+  repeat_lineup_issue: "Repeat Lineup Issue",
+  potential_tanking: "Potential Tanking Signal",
+  playoff_integrity: "Playoff Integrity",
+};
+
+const ALERT_SHORT_REASON: Record<string, string> = {
+  empty_starter: "Empty starting slot left in lineup",
+  bye_starter: "Starter on a bye week",
+  inactive_starter: "Inactive player in the lineup",
+  ir_starter: "IR-listed player started",
+  doubtful_starter: "Doubtful player started",
+  questionable_starter: "Questionable player started",
+  unchanged_lineup: "Lineup unchanged from last week",
+  suspicious_benching: "Stronger bench option available",
+  large_optimality_gap: "Lineup well below optimal projection",
+  repeat_lineup_issue: "Repeated lineup issues this season",
+  potential_tanking: "Multiple lineup integrity signals",
+  playoff_integrity: "Playoff matchup integrity concern",
+};
+
+const BUCKET_RANK: Record<string, number> = { critical: 3, warning: 2, info: 1 };
+
+// Confidence label per severity bucket — softened in live (prevention) mode so
+// the tool reads as a warning, not an accusation.
+function confidenceMeta(bucket: string, mode: ScanMode): { label: string; cls: string } {
+  if (bucket === "critical")
+    return { label: mode === "audit" ? "Confirmed Issue" : "Needs Attention", cls: "bg-red-500/15 text-red-600 dark-any:text-red-400 border-red-500/30" };
+  if (bucket === "warning")
+    return { label: "Needs Review", cls: "bg-amber-500/15 text-amber-600 dark-any:text-amber-400 border-amber-500/30" };
+  return { label: "Soft Signal", cls: "bg-sky-500/15 text-sky-600 dark-any:text-sky-400 border-sky-500/30" };
+}
+
+
+function LeagueReviewPanel({ row, mode, onOpenLeague }: {
+  row: MultiLeagueRow; mode: ScanMode; onOpenLeague: (week?: number) => void;
+}) {
+  const { toast } = useToast();
+  const [openManager, setOpenManager] = useState<number | null>(null);
+
+  const reviewMut = useMutation({
+    mutationFn: ({ alertId, status }: { alertId: number; status: string }) => api.updateAlert(alertId, { status }),
+    onSuccess: (_r, v) => {
+      queryClient.invalidateQueries({ queryKey: ["li", "multi"] });
+      toast({ title: v.status === "resolved" ? "Marked reviewed" : "Signal ignored" });
+    },
+    onError: (e: any) => toast({ title: "Couldn't update signal", description: e?.message, variant: "destructive" }),
+  });
+
+  const alerts = row.alerts ?? [];
+
+  // Group signals by manager, strongest concern first.
+  const groups = useMemo(() => {
+    const m = new Map<number, MultiLeagueAlert[]>();
+    for (const a of alerts) {
+      const arr = m.get(a.rosterId) ?? [];
+      arr.push(a);
+      m.set(a.rosterId, arr);
+    }
+    return Array.from(m.entries())
+      .map(([rosterId, list]) => {
+        const sorted = [...list].sort((x, y) => (BUCKET_RANK[y.bucket] ?? 0) - (BUCKET_RANK[x.bucket] ?? 0));
+        return { rosterId, list: sorted, top: sorted[0] };
+      })
+      .sort((a, b) => (BUCKET_RANK[b.top.bucket] ?? 0) - (BUCKET_RANK[a.top.bucket] ?? 0) || b.list.length - a.list.length);
+  }, [alerts]);
+
+  const nameOf = (a: MultiLeagueAlert) => a.teamName || a.managerName || `Roster ${a.rosterId}`;
+
+  return (
+    <div className="space-y-2">
+      {groups.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No open issues this week for this league.</p>
+      ) : (
+        <div className="space-y-2">
+          {groups.map(({ rosterId, list, top }) => {
+            const open = openManager === rosterId;
+            const conf = confidenceMeta(top.bucket, mode);
+            return (
+              <Card key={rosterId} className="overflow-hidden">
+                <button
+                  onClick={() => setOpenManager(open ? null : rosterId)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 transition-colors"
+                >
+                  <ChevronRight className={cn("w-3.5 h-3.5 flex-shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+                  <span className="font-semibold text-sm text-foreground truncate flex-1">{nameOf(top)}</span>
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">{list.length} signal{list.length === 1 ? "" : "s"}</span>
+                  <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", conf.cls)}>
+                    {ALERT_TYPE_LABEL[top.alertType] ?? top.alertType}
+                  </span>
+                </button>
+                {open && (
+                  <div className="border-t border-border/60 divide-y divide-border/40">
+                    {list.map((a) => {
+                      const c = confidenceMeta(a.bucket, mode);
+                      return (
+                        <div key={a.id} className="px-3 py-2.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[13px] font-semibold text-foreground">{ALERT_TYPE_LABEL[a.alertType] ?? a.alertType}</span>
+                            <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", c.cls)}>{c.label}</span>
+                            {a.status === "resolved" && <span className="text-[10px] text-emerald-600 dark-any:text-emerald-400 font-semibold">Reviewed</span>}
+                            {a.status === "dismissed" && <span className="text-[10px] text-muted-foreground font-semibold">Ignored</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{ALERT_SHORT_REASON[a.alertType] ?? a.description}</p>
+                          {a.suggestedAction && (
+                            <p className="text-[11px] text-muted-foreground/80 mt-1"><span className="font-semibold">Recommended:</span> {a.suggestedAction}</p>
+                          )}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onOpenLeague(row.week ?? undefined)}>
+                              {mode === "audit" ? <>Review <ArrowRight className="w-3 h-3 ml-1" /></> : <>View Lineup <ArrowRight className="w-3 h-3 ml-1" /></>}
+                            </Button>
+                            {/* Reviews / flags are disabled during the live scan — lineups
+                                aren't locked yet, so no one should be marked or struck for a
+                                not-yet-final lineup. These only appear in the post-week audit. */}
+                            {mode === "audit" && a.status !== "resolved" && (
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={reviewMut.isPending}
+                                onClick={() => reviewMut.mutate({ alertId: a.id, status: "resolved" })}>
+                                <CheckCircle2 className="w-3 h-3 mr-1" /> Mark Reviewed
+                              </Button>
+                            )}
+                            {mode === "audit" && a.status !== "dismissed" && (
+                              <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" disabled={reviewMut.isPending}
+                                onClick={() => reviewMut.mutate({ alertId: a.id, status: "dismissed" })}>
+                                <EyeOff className="w-3 h-3 mr-1" /> Ignore
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MultiLeagueDashboard({
-  leagueIds, nameById, avatarById, onOpenLeague,
+  leagueIds, nameById, avatarById, onOpenLeague, onOpenProfile,
 }: {
   leagueIds: string[];
   nameById: Record<string, string>;
   avatarById: Record<string, string | null>;
   onOpenLeague: (id: string, week?: number) => void;
+  onOpenProfile?: (id: string) => void;
 }) {
   const { toast } = useToast();
-  // Two modes: live (current-week prevention) vs audit (completed-week review).
-  // In audit mode we always surface all open issues across weeks.
-  const [mode, setMode] = useState<ScanMode>("live");
-  const [auditWeek] = useState<number | null>(null);
+  // The All-League Scan is a single live (current-week) view. Lineups aren't
+  // locked yet, so it's intentionally read-only — reviews/notes/strikes live in
+  // the per-league Weekly Audit once a week's results are final.
   // Which league row is expanded to show its individual issues (one at a time).
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["li", "multi", leagueIds.join(","), mode, mode === "audit" ? (auditWeek ?? "all") : "live"],
-    queryFn: () => api.multiLeague(
-      leagueIds,
-      mode === "live"
-        ? { live: true }
-        : auditWeek == null
-          ? { allOpen: true }
-          : { week: auditWeek },
-    ),
+    queryKey: ["li", "multi", leagueIds.join(","), "live"],
+    queryFn: () => api.multiLeague(leagueIds, { live: true }),
   });
 
   // Re-scan every league in parallel, then refresh the dashboard. Per-league
   // failures don't abort the batch (allSettled) — we summarize what succeeded.
   const scanMut = useMutation({
     mutationFn: async () => {
-      const weeks = mode === "audit" && auditWeek != null ? [auditWeek] : undefined;
-      const results = await Promise.allSettled(leagueIds.map((id) => api.refresh(id, weeks)));
+      const results = await Promise.allSettled(leagueIds.map((id) => api.refresh(id)));
       let ok = 0, lineups = 0, alerts = 0;
       for (const res of results) {
         if (res.status !== "fulfilled") continue;
@@ -1131,10 +1310,30 @@ function MultiLeagueDashboard({
     onError: (e: any) => toast({ title: "Scan failed", description: e?.message, variant: "destructive" }),
   });
 
-  if (isLoading) return <Loading />;
-
   const rows = data?.leagues ?? [];
-  const meta = MODE_META[mode];
+
+  // Sort the league rows by any data column. The body iterates league IDs and
+  // resolves each row, so the accessors look the row up by ID; no-data leagues
+  // sink to the bottom (null) for the numeric columns.
+  const rowById = (id: string) => rows.find((x) => x.leagueId === id);
+  const isNoData = (s: MultiLeagueStatus) =>
+    s === "best_ball_excluded" || s === "not_started" || s === "data_pending";
+  const num = (id: string, fn: (r: MultiLeagueRow) => number): number | null => {
+    const r = rowById(id);
+    if (!r || isNoData(r.status)) return null;
+    return fn(r);
+  };
+  const { sorted: sortedLeagueIds, sortKey, sortDir, toggle } = useSortableTable(leagueIds, {
+    league: (id) => nameById[id] ?? id,
+    managers: (id) => num(id, (r) => r.affectedManagers),
+    inactive: (id) => num(id, (r) => r.inactiveStarters + r.byeStarters + r.emptySlots),
+    risky: (id) => num(id, (r) => r.questionableStarters + r.doubtfulStarters),
+    signals: (id) => num(id, (r) => r.tankingTeams),
+    status: (id) => leagueStatusLabel(rowById(id)?.status ?? "data_pending", "live"),
+    lastScanned: (id) => rowById(id)?.lastScanned ?? null,
+  });
+
+  if (isLoading) return <Loading />;
 
   const sum = (fn: (r: MultiLeagueRow) => number) => rows.reduce((s, r) => s + fn(r), 0);
   // "Inactive Starters" card bundles every won't-play starter: OUT/IR (already
@@ -1144,66 +1343,13 @@ function MultiLeagueDashboard({
   const needsReview = sum((r) => r.needsReview);
   const resolved = sum((r) => r.resolvedThisWeek);
 
-  // Mode sub-tabs (Current Week / Post-Week Audit) — styled and positioned like
-  // the Lineup Command sub-tabs: navy active pill with a gold underline, sitting
-  // in the page header (desktop) with a full-width variant below on mobile.
-  const modeTabs = (variant: "desktop" | "mobile") => (
-    <div
-      className={cn(
-        "grid rounded-2xl p-1 gap-1 h-12",
-        variant === "desktop" ? "flex-shrink-0 w-[340px]" : "w-full",
-        // Light: white inner with slate border.
-        "bg-[var(--sc-card-bg)] border border-[var(--sc-border)]",
-        // Dark: legacy translucent strip.
-        "dark-any:bg-white/[0.04] dark-any:border-white/[0.07]",
-      )}
-      style={{ gridTemplateColumns: "1fr 1fr" }}
-      data-testid={variant === "desktop" ? "li-mode-toggle" : "li-mode-toggle-mobile"}
-    >
-      {(["live", "audit"] as const).map((m) => {
-        const isActive = mode === m;
-        const Icon = m === "live" ? CalendarClock : CheckCircle2;
-        return (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            data-testid={variant === "desktop" ? `li-mode-${m}` : `li-mode-${m}-mobile`}
-            className={cn(
-              "relative flex items-center justify-center gap-2 font-semibold transition-all duration-200 rounded-xl text-[13px] tracking-[0.01em]",
-              isActive
-                // Active: navy bg, white text, gold underline (added below).
-                ? "bg-[var(--sc-blue)] text-white shadow-[0_4px_12px_rgba(11,35,68,0.18)] dark-any:bg-[linear-gradient(135deg,rgba(11,58,122,0.85)_0%,rgba(11,58,122,0.65)_100%)] dark-any:shadow-[0_2px_12px_rgba(11,58,122,0.40),inset_0_1px_0_rgba(255,255,255,0.06)] dark-any:border dark-any:border-[#d4af37]/30"
-                // Inactive: muted navy text, transparent bg, gentle hover.
-                : "text-[var(--sc-text-muted)] hover:bg-[var(--sc-blue-soft)] hover:text-[var(--sc-blue)] dark-any:text-white/45 dark-any:hover:bg-transparent dark-any:hover:text-white/70",
-            )}
-          >
-            <Icon className="w-[15px] h-[15px] flex-shrink-0" />
-            {MODE_META[m].toggleLabel}
-            {isActive && (
-              <span
-                className="sc-subtab-underline absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded-full w-7 h-0.5"
-                style={{ background: "#d6a21e", opacity: 0.95 }}
-              />
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-
   return (
     <div className="space-y-5">
-      {/* Page header — title left, mode sub-tabs top-right (desktop). */}
-      <div className="flex items-start justify-between gap-4">
-        <SectionHeader
-          title={meta.scanLabel}
-          subtitle={meta.tagline}
-        />
-        <div className="hidden md:flex flex-shrink-0 pt-1">{modeTabs("desktop")}</div>
-      </div>
-
-      {/* Mode sub-tabs (mobile) */}
-      <div className="md:hidden !mt-3">{modeTabs("mobile")}</div>
+      {/* Page header */}
+      <SectionHeader
+        title={MODE_META.live.scanLabel}
+        subtitle={MODE_META.live.tagline}
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1215,11 +1361,7 @@ function MultiLeagueDashboard({
 
       {/* League table */}
       <div>
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="min-w-0">
-            <h2 className="text-base font-bold">{meta.scanLabel}</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{meta.tagline}</p>
-          </div>
+        <div className="flex items-center justify-end gap-2 mb-2">
           <div className="flex items-center gap-2 flex-shrink-0">
             <ScanSettingsButton leagueIds={leagueIds} />
             <Button
@@ -1253,28 +1395,18 @@ function MultiLeagueDashboard({
             <thead>
               {/* Header — navy in light mode, glass strip in dark. */}
               <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
-                <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">League</th>
-                {mode === "audit" ? (
-                  <>
-                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Final Issues</th>
-                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Managers</th>
-                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Matchups Impacted</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Managers</th>
-                  </>
-                )}
-                <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">OUT/BYE/IR/EMPTY</th>
-                <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">QUES/DOUB</th>
-                <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Tanking</th>
-                <th className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Status</th>
-                <th className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Last Scanned</th>
+                <SortableTh sortKey="league" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">League</SortableTh>
+                <SortableTh sortKey="managers" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Managers</SortableTh>
+                <SortableTh sortKey="inactive" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">OUT/BYE/IR/EMPTY</SortableTh>
+                <SortableTh sortKey="risky" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">QUES/DOUB</SortableTh>
+                <SortableTh sortKey="signals" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Review Signals</SortableTh>
+                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Status</SortableTh>
+                <SortableTh sortKey="lastScanned" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-2 py-2.5 whitespace-nowrap">Last Scanned</SortableTh>
                 <th className="text-right font-bold px-2 md:px-5 py-2.5 whitespace-nowrap">Action</th>
               </tr>
             </thead>
             <tbody>
-              {leagueIds.map((id) => {
+              {sortedLeagueIds.map((id) => {
                 const r = rows.find((x) => x.leagueId === id);
                 const status = r?.status ?? "data_pending";
                 const noData = status === "best_ball_excluded" || status === "not_started" || status === "data_pending";
@@ -1299,24 +1431,21 @@ function MultiLeagueDashboard({
                           <span className="w-3.5 flex-shrink-0" />
                         )}
                         <LeagueAvatar avatar={avatarById[id] ?? null} name={nameById[id] ?? id} />
-                        <span className="truncate">{nameById[id] ?? id}</span>
+                        {onOpenProfile ? (
+                          <button
+                            className="truncate text-left hover:underline hover:text-[var(--sc-gold-deep)] dark-any:hover:text-[#d4af37]"
+                            onClick={(e) => { e.stopPropagation(); onOpenProfile(id); }}
+                            title="Open league profile"
+                            data-testid={`open-profile-${id}`}
+                          >
+                            {nameById[id] ?? id}
+                          </button>
+                        ) : (
+                          <span className="truncate">{nameById[id] ?? id}</span>
+                        )}
                       </div>
                     </td>
-                    {mode === "audit" ? (
-                      <>
-                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
-                          {noData ? "—" : (r!.totalIssues ? <span className="font-bold text-amber-600 dark-any:text-amber-500">{r!.totalIssues}</span> : 0)}
-                        </td>
-                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{cell(r?.affectedManagers)}</td>
-                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
-                          {noData ? "—" : (r!.matchupsImpacted ? <span className="font-bold text-red-600 dark-any:text-red-500">{r!.matchupsImpacted}</span> : 0)}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{cell(r?.affectedManagers)}</td>
-                      </>
-                    )}
+                    <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{cell(r?.affectedManagers)}</td>
                     <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
                       {noData ? "—" : (() => {
                         const v = (r!.inactiveStarters ?? 0) + (r!.byeStarters ?? 0) + (r!.emptySlots ?? 0);
@@ -1332,7 +1461,7 @@ function MultiLeagueDashboard({
                     <td className="px-2 py-2.5 text-center tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">
                       {noData ? "—" : (r!.tankingTeams ? <span className="font-bold text-red-600 dark-any:text-red-500">{r!.tankingTeams}</span> : 0)}
                     </td>
-                    <td className="px-2 py-2.5"><Badge text={leagueStatusLabel(status, mode)} color={STATUS_META[status].color} /></td>
+                    <td className="px-2 py-2.5"><Badge text={leagueStatusLabel(status, "live")} color={STATUS_META[status].color} /></td>
                     <td className="px-2 py-2.5 text-xs whitespace-nowrap text-[var(--sc-text-muted)] dark-any:text-white/40" title={r?.lastScanned ? new Date(r.lastScanned).toLocaleString() : undefined}>
                       {formatLastScanned(r?.lastScanned ?? null)}
                     </td>
@@ -1351,26 +1480,12 @@ function MultiLeagueDashboard({
                   </tr>
                   {isOpen && (
                     <tr className="bg-[var(--sc-card-soft)] dark-any:bg-white/[0.02] border-b border-[#edf2f7] dark-any:border-white/5">
-                      <td colSpan={mode === "audit" ? 10 : 8} className="px-3 md:px-5 py-3">
-                        {(r?.alerts?.length ?? 0) === 0 ? (
-                          <p className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/40">No open issues this week for this league.</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {r!.alerts.map((a) => (
-                              <div key={a.id} className="flex items-start gap-2 text-xs">
-                                <span className={cn("mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0",
-                                  a.bucket === "critical" ? "bg-red-500" : a.bucket === "warning" ? "bg-amber-500" : "bg-sky-500")} />
-                                <div className="min-w-0">
-                                  <div className="font-semibold text-foreground">
-                                    {a.teamName || a.managerName || `Roster ${a.rosterId}`}
-                                    <span className="ml-1.5 font-normal text-[var(--sc-text-muted)] dark-any:text-white/40">{a.title}</span>
-                                  </div>
-                                  {a.description && <div className="text-[var(--sc-text-muted)] dark-any:text-white/40">{a.description}</div>}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                      <td colSpan={8} className="px-3 md:px-5 py-3">
+                        <LeagueReviewPanel
+                          row={r!}
+                          mode="live"
+                          onOpenLeague={(wk) => onOpenLeague(id, wk)}
+                        />
                       </td>
                     </tr>
                   )}

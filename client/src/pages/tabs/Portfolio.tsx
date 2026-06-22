@@ -698,7 +698,7 @@ function alertsLabel(openAlerts: number | null | undefined): { text: string; cls
   return { text: String(openAlerts), cls: "text-red-500 dark:text-red-400 font-semibold" };
 }
 
-export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string, subTab: string) => void } = {}) {
+export function PortfolioSummary({ onNavigate, onOpenLeagueProfile }: { onNavigate?: (mainTab: string, subTab: string) => void; onOpenLeagueProfile?: (leagueId: string) => void } = {}) {
   const { isConnected, user, leagues, setActiveLeague } = useSleeper();
 
   const [summaryData, setSummaryData] = useState<any>(null);
@@ -720,12 +720,13 @@ export function PortfolioSummary({ onNavigate }: { onNavigate?: (mainTab: string
   // labeled League Command Center table and the "needs attention" rollup.
   const [leagueRowsById, setLeagueRowsById] = useState<Record<string, MultiLeagueRow>>({});
 
-  // Open a league from the League Breakdown table — set it active, then jump to
-  // League Activity (Transactions now lives there as a sub-tab).
+  // Open a league from the League Breakdown table — set it active, then open its
+  // League Profile (falls back to League Activity if no profile handler given).
   const handleViewLeague = useCallback((leagueId: string) => {
     setActiveLeague(leagueId);
-    onNavigate?.("league-analyzer", "league-activity");
-  }, [setActiveLeague, onNavigate]);
+    if (onOpenLeagueProfile) onOpenLeagueProfile(leagueId);
+    else onNavigate?.("league-analyzer", "league-activity");
+  }, [setActiveLeague, onNavigate, onOpenLeagueProfile]);
   // Live startup drafts the user is in. Fresh startup leagues don't make it
   // into useSleeper().leagues (their roster has no players yet, so
   // fetchSleeperLeagues filters them out) — but the user still wants them

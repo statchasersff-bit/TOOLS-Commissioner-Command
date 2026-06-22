@@ -16,6 +16,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { SortableTh } from "@/components/SortableTh";
+import { useSortableTable } from "@/hooks/useSortableTable";
 import { ProjectionSourceRows } from "./ProjectionSourceRows";
 import { StartSitRecommendationBadge } from "./StartSitRecommendationBadge";
 import type { MockPlayerWeekly } from "@/data/mockStartSitProjections";
@@ -227,6 +229,15 @@ function OutlookTab({
 }
 
 function ProjectionsTab({ player, highProjection }: { player: MockPlayerWeekly; highProjection: number | null }) {
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(
+    player.projections,
+    {
+      source: (p) => p.source,
+      projection: (p) => p.projectedPoints,
+      rank: (p) => p.rank,
+      lastUpdated: (p) => p.lastUpdated,
+    },
+  );
   return (
     <div className="space-y-3">
       <div className="text-[11px] text-white/45">
@@ -236,14 +247,14 @@ function ProjectionsTab({ player, highProjection }: { player: MockPlayerWeekly; 
         <table className="w-full text-[11px]">
           <thead className="bg-white/[0.04] text-white/55">
             <tr>
-              <th className="px-2 py-1.5 text-left">Source</th>
-              <th className="px-2 py-1.5 text-right">Projection</th>
-              <th className="px-2 py-1.5 text-right">Rank</th>
-              <th className="px-2 py-1.5 text-right">Last updated</th>
+              <SortableTh sortKey="source" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 text-left">Source</SortableTh>
+              <SortableTh sortKey="projection" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 text-right">Projection</SortableTh>
+              <SortableTh sortKey="rank" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 text-right">Rank</SortableTh>
+              <SortableTh sortKey="lastUpdated" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 text-right">Last updated</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {player.projections.map((p) => {
+            {sorted.map((p) => {
               const isBest =
                 highProjection != null &&
                 p.projectedPoints != null &&

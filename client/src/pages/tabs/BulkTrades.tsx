@@ -40,6 +40,8 @@ import { SafePacingNotice } from "@/components/SafePacingNotice";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { getPositionColor } from "@/data/mockData";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 import type { Player, Pick, Team, League } from "@/types";
 
 
@@ -996,6 +998,18 @@ interface ReviewTableProps {
 }
 
 function ReviewTable(p: ReviewTableProps) {
+  // Sortable on the columns that hold comparable, stable values: League name,
+  // Target Manager (resolved partner owner name), and the derived Status. The
+  // "I Send" / "I Receive" columns render editable asset lists, and the
+  // checkbox + Add/Edit columns are action-only, so those stay non-sortable.
+  // RowView emits each league's master row plus its (conditional) editor row as
+  // a fragment, so reordering `sorted` keeps each pair together.
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(p.rows, {
+    league: (r) => r.leagueName,
+    manager: (r) => p.effectivePartner(r, p.selections[r.leagueId])?.ownerName ?? null,
+    status: (r) => STATUS_LABEL[p.deriveStatus(r, p.selections[r.leagueId])],
+  });
+
   if (p.rows.length === 0) {
     const searchTerm = p.givePlayer?.name ?? p.getPlayer?.name ?? "the players you searched";
     return (
@@ -1059,16 +1073,16 @@ function ReviewTable(p: ReviewTableProps) {
             <thead>
               <tr className="border-b bg-muted/30 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <th className="text-left px-3 py-2 w-10"></th>
-                <th className="text-left px-3 py-2">League</th>
+                <SortableTh sortKey="league" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-3 py-2">League</SortableTh>
                 <th className="text-left px-3 py-2">I Send</th>
                 <th className="text-left px-3 py-2">I Receive</th>
-                <th className="text-left px-3 py-2">Target Manager</th>
-                <th className="text-left px-3 py-2">Status</th>
+                <SortableTh sortKey="manager" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-3 py-2">Target Manager</SortableTh>
+                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left px-3 py-2">Status</SortableTh>
                 <th className="text-right px-3 py-2 w-20">Add/Edit</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
-              {p.rows.map((row) => {
+              {sorted.map((row) => {
                 const sel = p.selections[row.leagueId];
                 const status = p.deriveStatus(row, sel);
                 const eligible = p.isRowEligible(row, sel);

@@ -8,7 +8,7 @@
  * The request body always includes { operationName, query, variables }.
  *
  * JWT is read via getSleeperToken() from services/sleeperAuth.ts, which
- * scopes storage per Dynasty Command user — see that module for the
+ * scopes storage per Commissioner Command user — see that module for the
  * account-isolation contract.
  * JWT is NEVER logged, exposed in UI, or sent to our backend.
  */
@@ -49,7 +49,7 @@ interface GQLRequest {
     leagueId?: string;
     /** Required when calling create_message. "trade-link" is the controlled
      *  automatic post-trade DM (only allowed when VITE_ENABLE_TRADE_LINK_DM
-     *  is on); "league-share" is the opt-in "share Dynasty Command to your
+     *  is on); "league-share" is the opt-in "share Commissioner Command to your
      *  league chats" feature (only allowed when VITE_ENABLE_LEAGUE_SHARE is
      *  on); "general" covers every other create_message and is only allowed
      *  when VITE_ENABLE_GENERAL_SLEEPER_MESSAGES is on. */
@@ -1551,7 +1551,7 @@ export async function draftPlayer(
   );
 }
 
-// ─── Automatic post-trade Dynasty Command link DM ────────────────────────────
+// ─── Automatic post-trade Commissioner Command link DM ────────────────────────────
 //
 // Single source of truth for the controlled, automatic message we send to a
 // trade partner right after a propose_trade succeeds. This is the ONLY
@@ -1560,7 +1560,7 @@ export async function draftPlayer(
 
 /** Fixed copy — never user-customizable. */
 const TRADE_LINK_DM_TEXT =
-  "Trade sent through Dynasty Command by StatChasers: https://statchasers.com/dynasty-command/";
+  "Trade sent through Commissioner Command by StatChasers: https://statchasers.com/commissioner-command/";
 
 export type TradeLinkDmStatus = "sent" | "skipped" | "failed";
 
@@ -1588,7 +1588,7 @@ function randRange(loMs: number, hiMs: number): number {
 }
 
 /**
- * Fire the automatic post-trade Dynasty Command link DM.
+ * Fire the automatic post-trade Commissioner Command link DM.
  *
  *   1. Waits a randomized 20–60 s so it looks human-paced relative to the
  *      preceding propose_trade.
@@ -1657,7 +1657,7 @@ export async function firePostTradeLinkDm(
 
 /** Status → user-facing copy for trade flows. */
 export function describeTradeLinkResult(r: FirePostTradeLinkDmResult): string {
-  if (r.status === "sent") return "Trade sent. Dynasty Command link shared with the manager.";
+  if (r.status === "sent") return "Trade sent. Commissioner Command link shared with the manager.";
   if (r.status === "failed") return "Trade sent. Link message could not be delivered.";
   // Skipped — show the canonical safe-limits copy regardless of which
   // specific skip reason fired. Internal details are in console logs.

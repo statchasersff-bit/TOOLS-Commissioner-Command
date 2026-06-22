@@ -1,4 +1,4 @@
-// ── Dynasty Command release notes ────────────────────────────────────────────
+// ── Commissioner Command release notes ────────────────────────────────────────────
 //
 // The "What's New" modal in DCC reads from this file. It compares the user's
 // last-acknowledged version (localStorage `dc_seen_update_version`) against
@@ -16,7 +16,7 @@
 // Version key shape: "YYYY-MM-DD-<slug>-vX.Y". Any change to the string
 // triggers the modal for every user on their next dashboard load.
 
-export const CURRENT_UPDATE_VERSION = "2026-05-29-dynasty-command-v1.8b";
+export const CURRENT_UPDATE_VERSION = "2026-05-29-commissioner-command-v1.8b";
 
 export interface UpdateSection {
   heading: string;
@@ -59,14 +59,14 @@ export const CURRENT_UPDATE_NOTES: UpdateNotes = {
 // previous CURRENT_UPDATE_NOTES here when bumping CURRENT_UPDATE_VERSION.
 export const CHANGELOG_HISTORY: UpdateNotes[] = [
   {
-    version: "2026-05-29-dynasty-command-v1.8",
+    version: "2026-05-29-commissioner-command-v1.8",
     title: "Commander's Briefing: Automation Features Opening Again Soon 📊",
     date: "May 29, 2026",
     sections: [
       {
         heading: "Note",
         items: [
-          "Waiver Command, Lineup Command, and Trade Features access will be re-enabled with a target date of June 15 for all to use. Set lineups, send/accept trades, and make waiver claims directly from Dynasty Command.",
+          "Waiver Command, Lineup Command, and Trade Features access will be re-enabled with a target date of June 15 for all to use. Set lineups, send/accept trades, and make waiver claims directly from Commissioner Command.",
         ],
       },
       {
@@ -97,7 +97,7 @@ export const CHANGELOG_HISTORY: UpdateNotes[] = [
     ],
   },
   {
-    version: "2026-05-26-dynasty-command-v1.7",
+    version: "2026-05-26-commissioner-command-v1.7",
     title: "Commander's Briefing: Player Intel Upgrade 📊",
     subtitle: "The player analysis suite just got a serious overhaul. Here's what's new.",
     date: "May 26, 2026",
@@ -120,7 +120,7 @@ export const CHANGELOG_HISTORY: UpdateNotes[] = [
     ],
   },
   {
-    version: "2026-05-19-dynasty-command-v1.6",
+    version: "2026-05-19-commissioner-command-v1.6",
     title: "Welcome Back, Commander! 🫡",
     subtitle: "Fresh upgrades are live. Here's what changed since your last huddle.",
     date: "May 19, 2026",
@@ -142,8 +142,8 @@ export const CHANGELOG_HISTORY: UpdateNotes[] = [
     ],
   },
   {
-    version: "2026-05-18-dynasty-command-v1.5",
-    title: "What's New in Dynasty Command",
+    version: "2026-05-18-commissioner-command-v1.5",
+    title: "What's New in Commissioner Command",
     subtitle: "Recent updates are now live.",
     date: "May 18, 2026",
     sections: [
@@ -163,15 +163,15 @@ export const CHANGELOG_HISTORY: UpdateNotes[] = [
     ],
   },
   {
-    version: "2026-05-17-dynasty-command-v1.4",
-    title: "What's New in Dynasty Command",
+    version: "2026-05-17-commissioner-command-v1.4",
+    title: "What's New in Commissioner Command",
     subtitle: "Recent updates are now live.",
     date: "May 17, 2026",
     sections: [
       {
         heading: "New Features",
         items: [
-          "Implemented plans for a global shared activeLeagueId system across Dynasty Command.",
+          "Implemented plans for a global shared activeLeagueId system across Commissioner Command.",
           "Synced header league selector with league-specific module pages.",
         ],
       },

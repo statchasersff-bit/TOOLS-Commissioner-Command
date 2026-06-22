@@ -263,7 +263,7 @@ export type ScConnectedAccount = typeof scConnectedAccounts.$inferSelect;
 // Multi-platform fantasy integration. Sleeper continues to use the legacy
 // `sc_connected_accounts` + Sleeper-specific code paths; new platforms (Yahoo
 // first) connect through `platform_connections` and feed the normalized
-// `fantasy_*` tables below. Read-only Dynasty Command modules consume the
+// `fantasy_*` tables below. Read-only Commissioner Command modules consume the
 // normalized model so they are agnostic to which platform supplied the data.
 //
 // SECURITY: OAuth tokens live here AES-256-GCM-encrypted (see
@@ -1545,3 +1545,86 @@ export type DispersalPick = typeof dispersalPicks.$inferSelect;
 export type InsertDispersalPick = typeof dispersalPicks.$inferInsert;
 export type DispersalChatMessage = typeof dispersalChatMessages.$inferSelect;
 export type InsertDispersalChatMessage = typeof dispersalChatMessages.$inferInsert;
+
+// ─── League Profile: Rulebook / Bylaws ─────────────────────────────────────────
+// One bylaw document per league. Sections + their notes/pins live in `sections`
+// (jsonb) and each save snapshots the full sections array into `versionHistory`
+// so the commissioner has an audit trail without a separate row per revision.
+// Search and section ordering are handled client-side over `sections`.
+export const leagueBylaws = pgTable("league_bylaws", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull().unique(),
+  commissionerUserId: text("commissioner_user_id"),
+  currentVersion: integer("current_version").notNull().default(1),
+  // [{ sectionId, key, title, body, pinned, order, notes: [{id,text,author,createdAt}] }]
+  sections: jsonb("sections").notNull().default(sql`'[]'::jsonb`),
+  // [{ version, sections, savedBy, savedAt, note }]
+  versionHistory: jsonb("version_history").notNull().default(sql`'[]'::jsonb`),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLeagueBylawsSchema = createInsertSchema(leagueBylaws).omit({ id: true, updatedAt: true });
+export type InsertLeagueBylaws = z.infer<typeof insertLeagueBylawsSchema>;
+export type LeagueBylaws = typeof leagueBylaws.$inferSelect;
+
+// ─── League Profile: unified Commissioner Log ──────────────────────────────────
+// Broader than commissionerLineupStrikes (which stays the system-of-record for
+// lineup strikes). The Log view MERGES these manual entries with strike rows on
+// the client. Categories/severities/statuses are free text validated at the API.
+export const commissionerLog = pgTable("commissioner_log", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull().default("2026"),
+
+  rosterId: integer("roster_id"),
+  ownerId: text("owner_id"),
+  managerName: text("manager_name"),
+  teamName: text("team_name"),
+
+  // lineup_strike | payment_issue | inactivity_flag | trade_concern |
+  // tanking_concern | behavior_issue | rule_violation | warning | manual_note
+  category: text("category").notNull(),
+  // info | warning | strike | serious | removal_risk
+  severity: text("severity").notNull().default("info"),
+  // open | watching | resolved | escalated
+  status: text("status").notNull().default("open"),
+
+  linkedRuleSectionId: text("linked_rule_section_id"),
+  note: text("note"),
+  resolution: text("resolution"),
+  evidenceUrl: text("evidence_url"),
+  // Free-form reference to a related activity event / trade id.
+  activityRef: text("activity_ref"),
+
+  commissionerUserId: text("commissioner_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  leagueIdx: index("commissioner_log_league_idx").on(t.leagueId, t.season),
+  rosterIdx: index("commissioner_log_roster_idx").on(t.leagueId, t.rosterId),
+}));
+
+export const insertCommissionerLogSchema = createInsertSchema(commissionerLog).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCommissionerLog = z.infer<typeof insertCommissionerLogSchema>;
+export type CommissionerLog = typeof commissionerLog.$inferSelect;
+
+// ─── League Profile: Draft pick notes / protections ────────────────────────────
+// Lightweight per-pick annotations keyed by the pick's identity (original owner
+// + season + round). Pick OWNERSHIP/movement comes from Sleeper + the existing
+// commissionerTradeAssets table; this only stores commissioner notes.
+export const leaguePickNotes = pgTable("league_pick_notes", {
+  id: serial("id").primaryKey(),
+  leagueId: text("league_id").notNull(),
+  pickSeason: text("pick_season").notNull(),
+  round: integer("round").notNull(),
+  originalRosterId: integer("original_roster_id").notNull(),
+  note: text("note"),
+  protection: text("protection"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  pickUnique: unique("league_pick_notes_pick_unique").on(t.leagueId, t.pickSeason, t.round, t.originalRosterId),
+}));
+
+export const insertLeaguePickNoteSchema = createInsertSchema(leaguePickNotes).omit({ id: true, updatedAt: true });
+export type InsertLeaguePickNote = z.infer<typeof insertLeaguePickNoteSchema>;
+export type LeaguePickNote = typeof leaguePickNotes.$inferSelect;

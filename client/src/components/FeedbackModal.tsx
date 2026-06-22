@@ -162,7 +162,7 @@ export function FeedbackModal({ open, onClose, currentTab = "", currentSubTab = 
               <MessageSquare className="w-4 h-4" style={{ color: "#d4af37" }} />
             </div>
             <div>
-              <h2 className="text-[15px] font-bold text-white leading-tight">Help Improve Dynasty Command</h2>
+              <h2 className="text-[15px] font-bold text-white leading-tight">Help Improve Commissioner Command</h2>
               <p className="text-[11px] text-white/35 mt-0.5">Your feedback goes directly to the team</p>
             </div>
           </div>
@@ -185,7 +185,7 @@ export function FeedbackModal({ open, onClose, currentTab = "", currentSubTab = 
               </div>
               <div>
                 <p className="text-[17px] font-bold text-white">Thanks. Feedback sent.</p>
-                <p className="text-[13px] text-white/40 mt-1">We appreciate you helping make Dynasty Command better.</p>
+                <p className="text-[13px] text-white/40 mt-1">We appreciate you helping make Commissioner Command better.</p>
               </div>
               <button
                 type="button"

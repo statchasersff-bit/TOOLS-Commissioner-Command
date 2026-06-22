@@ -206,7 +206,7 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
     callback = `${reach.manager} better hope ${playerName(reach.value)} turns into ${pick(rng, [
       "the kind of player who makes everyone apologize in writing",
       "a dynasty cheat code",
-    ])}, because taking him a full ${reach.detail} is the type of decision that follows a manager around like a haunted draft queue. If it hits, this becomes vision. If it doesn't, it becomes the exact receipt Dynasty Command laminates and brings back out when the group chat needs a victim.`;
+    ])}, because taking him a full ${reach.detail} is the type of decision that follows a manager around like a haunted draft queue. If it hits, this becomes vision. If it doesn't, it becomes the exact receipt Commissioner Command laminates and brings back out when the group chat needs a victim.`;
   } else if (mb) {
     villain = mb.victim;
     usedMb = true;
@@ -215,15 +215,15 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
       body: `We are gathered here today to discuss ${mb.victim}, who decided that owning ${mb.stud} was simply too stressful and shipped him out for ${joinAnd(mb.package)}, a package whose best argument is that none of them are old enough to disappoint anyone yet. ${pick(rng, MB_METAPHORS)} ${mb.victim} traded production for imagination, which is great if this league starts handing out points for theoretical upside.`,
       claimIds: ["award-best_trade"],
     });
-    callback = `${mb.victim} better hope one of those mystery boxes actually contains a starter, because shipping out ${mb.stud} for a group project is the exact receipt Dynasty Command laminates and brings back out when the group chat needs a victim.`;
+    callback = `${mb.victim} better hope one of those mystery boxes actually contains a starter, because shipping out ${mb.stud} for a group project is the exact receipt Commissioner Command laminates and brings back out when the group chat needs a victim.`;
   } else if (tradeRoastable) {
     villain = loserSide!.manager;
     usedTrade = true;
     paras.push({
-      body: `We are gathered here today to discuss ${loserSide!.manager}, who ${tradeGiveTake()}. Dynasty Command stamped it a ${topRow.grade} for ${winnerSide!.manager} and a ${top!.detail} the other way, the kind of deal that sounds fine until the math walks in wearing gloves and starts dusting for fingerprints.`,
+      body: `We are gathered here today to discuss ${loserSide!.manager}, who ${tradeGiveTake()}. Commissioner Command stamped it a ${topRow.grade} for ${winnerSide!.manager} and a ${top!.detail} the other way, the kind of deal that sounds fine until the math walks in wearing gloves and starts dusting for fingerprints.`,
       claimIds: ["award-best_trade"],
     });
-    callback = `${loserSide!.manager} better hope those picks never amount to anything, because handing ${winnerSide!.manager} a ${top!.detail} is the type of receipt Dynasty Command laminates for the group chat.`;
+    callback = `${loserSide!.manager} better hope those picks never amount to anything, because handing ${winnerSide!.manager} a ${top!.detail} is the type of receipt Commissioner Command laminates for the group chat.`;
   } else if (faab) {
     villain = faab.manager;
     usedFaab = true;
@@ -294,7 +294,7 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
   } else if (tradeRoastable && !usedTrade) {
     usedTrade = true;
     paras.push({
-      body: `The trade market wasn't innocent either. ${loserSide!.manager} ${tradeGiveTake()}, letting ${winnerSide!.manager} walk away with a ${top!.detail}. Dynasty Command called it a ${topRow.grade} for ${winnerSide!.manager}, the kind of deal that sounds boring until the math walks in wearing gloves and starts dusting for fingerprints.`,
+      body: `The trade market wasn't innocent either. ${loserSide!.manager} ${tradeGiveTake()}, letting ${winnerSide!.manager} walk away with a ${top!.detail}. Commissioner Command called it a ${topRow.grade} for ${winnerSide!.manager}, the kind of deal that sounds boring until the math walks in wearing gloves and starts dusting for fingerprints.`,
       claimIds: ["award-best_trade"],
     });
   }
@@ -313,8 +313,8 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
   const lookingAhead =
     callback ??
     pick(rng, [
-      `Next month someone overpays, someone gets robbed in broad daylight, and someone swears they're "one move away." Dynasty Command will be here, taking names.`,
-      `The board is set for an encore in ${recap.meta.leagueName}. The receipts never lie, the group chat never sleeps, and Dynasty Command never misses. See you next month.`,
+      `Next month someone overpays, someone gets robbed in broad daylight, and someone swears they're "one move away." Commissioner Command will be here, taking names.`,
+      `The board is set for an encore in ${recap.meta.leagueName}. The receipts never lie, the group chat never sleeps, and Commissioner Command never misses. See you next month.`,
     ]);
 
   const sections = [
@@ -326,4 +326,4 @@ export function narrateReportTemplate(recap: RecapResult, seed: string): Article
 }
 
 /** Stable identifier for the "model" field shown in the UI. */
-export const TEMPLATE_NARRATOR_ID = "dynasty-command-recap-engine";
+export const TEMPLATE_NARRATOR_ID = "commissioner-command-recap-engine";

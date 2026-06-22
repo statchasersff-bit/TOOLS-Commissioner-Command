@@ -53,8 +53,9 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       title: "League Analysis",
       items: [
         { subId: "league-activity",    label: "League Activity",    description: "Engagement, transactions & at-risk managers",      icon: Activity },
+        { subId: "all-league-scan",    label: "All-League Scan",    description: "Compare activity scores across every league you're in", icon: LayoutGrid },
         // TEMPORARILY HIDDEN: Commander's Report nav entry. Component, route
-        // (DynastyCommandCenter "league-analyzer:commanders-report"), API, and
+        // (CommissionerCommandCenter "league-analyzer:commanders-report"), API, and
         // public-share page are all still in place — re-enable by uncommenting.
         // { subId: "commanders-report",  label: "Commander's Report", description: "Monthly recap — trades graded, picks judged, waivers roasted", icon: ScrollText },
       ],
@@ -544,7 +545,7 @@ export function MobileMenuButton({ tabs, activeTab, setActiveTab }: MobileMenuBu
                 <img src={logoLight} alt="StatChasers" className="w-9 h-9 block dark-any:hidden" />
                 <div>
                   <p className="text-[15px] font-bold text-white leading-tight tracking-tight">StatChasers</p>
-                  <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Dynasty Command</p>
+                  <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Commissioner Command</p>
                 </div>
               </div>
               <button

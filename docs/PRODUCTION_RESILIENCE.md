@@ -1,4 +1,4 @@
-# Production Resilience — why Dynasty Command went down nightly, and what fixes it
+# Production Resilience — why Commissioner Command went down nightly, and what fixes it
 
 ## TL;DR
 
@@ -117,7 +117,7 @@ Used by features (set the ones you rely on):
 
 Quick check after deploy:
 ```
-curl -s https://dynasty-command.replit.app/health
+curl -s https://commissioner-command.replit.app/health
 # expect HTTP 200 + JSON above. A 5xx/timeout means the process isn't up.
 ```
 
@@ -131,7 +131,7 @@ exact steps for either provider:
 ### UptimeRobot (free tier is enough)
 1. Sign in at https://uptimerobot.com → **+ Add New Monitor**.
 2. Monitor Type: **HTTP(s)**.
-3. URL: `https://dynasty-command.replit.app/health`
+3. URL: `https://commissioner-command.replit.app/health`
 4. Monitoring Interval: **5 minutes**.
 5. (Optional, stricter) Under advanced/keyword settings choose **Keyword**,
    keyword `"status":"ok"`, alert when keyword **does not exist**.
@@ -139,7 +139,7 @@ exact steps for either provider:
 
 ### Better Stack (Uptime)
 1. Sign in at https://betterstack.com → **Uptime → Monitors → Create monitor**.
-2. URL: `https://dynasty-command.replit.app/health`
+2. URL: `https://commissioner-command.replit.app/health`
 3. Check frequency: **5 minutes** (3 min on paid if you want faster).
 4. Expected status code **200**; optionally assert response contains
    `"status":"ok"`.

@@ -7,7 +7,7 @@ import {
 } from "@shared/schema";
 
 /**
- * Read-side of the normalized platform-adapter model. Dynasty Command's
+ * Read-side of the normalized platform-adapter model. Commissioner Command's
  * read-only modules consume these platform-agnostic shapes so they work
  * identically for Yahoo (and, in future, any platform writing into the
  * fantasy_* tables) without knowing the source.

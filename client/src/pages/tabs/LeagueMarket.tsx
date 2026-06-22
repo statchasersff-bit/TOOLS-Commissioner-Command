@@ -13,6 +13,7 @@ import type { League } from "@/types";
 import { cn } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ResponsiveFilterBar } from "@/components/ResponsiveFilterBar";
+import { SortableTh } from "@/components/SortableTh";
 import { Search, Star } from "lucide-react";
 
 interface MarketProps {
@@ -232,9 +233,6 @@ export function MarketValue({ league }: MarketProps) {
     }
   };
 
-  const sortIndicator = (key: SortKey) =>
-    sortKey === key ? (sortDir === "desc" ? " ▼" : " ▲") : "";
-
   return (
     <div className="space-y-6">
       {/* Subtitle describes the underlying FantasyCalc value set
@@ -287,41 +285,61 @@ export function MarketValue({ league }: MarketProps) {
         <table className="w-full" data-testid="table-market-values">
           <thead>
             <tr className="border-b bg-muted/40">
-              <th
+              <SortableTh
+                sortKey="name"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={(k) => toggleSort(k as SortKey)}
+                align="left"
                 className="dc-sticky-col text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none bg-muted/40"
-                onClick={() => toggleSort("name")}
                 data-testid="th-name"
               >
-                Player{sortIndicator("name")}
-              </th>
-              <th
+                Player
+              </SortableTh>
+              <SortableTh
+                sortKey="pos"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={(k) => toggleSort(k as SortKey)}
+                align="left"
                 className="text-left px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-12 md:w-20"
-                onClick={() => toggleSort("pos")}
                 data-testid="th-pos"
               >
-                Pos{sortIndicator("pos")}
-              </th>
-              <th
+                Pos
+              </SortableTh>
+              <SortableTh
+                sortKey="redraftValue"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={(k) => toggleSort(k as SortKey)}
+                align="right"
                 className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-[60px] md:w-32"
-                onClick={() => toggleSort("redraftValue")}
                 data-testid="th-redraft"
               >
-                Redraft{sortIndicator("redraftValue")}
-              </th>
-              <th
+                Redraft
+              </SortableTh>
+              <SortableTh
+                sortKey="dynastyValue"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={(k) => toggleSort(k as SortKey)}
+                align="right"
                 className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-[60px] md:w-32"
-                onClick={() => toggleSort("dynastyValue")}
                 data-testid="th-dynasty"
               >
-                Dynasty{sortIndicator("dynastyValue")}
-              </th>
-              <th
+                Dynasty
+              </SortableTh>
+              <SortableTh
+                sortKey="age"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={(k) => toggleSort(k as SortKey)}
+                align="right"
                 className="text-right px-2 md:px-4 py-2.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:text-[#d4af37] select-none w-10 md:w-16"
-                onClick={() => toggleSort("age")}
                 data-testid="th-age"
               >
-                Age{sortIndicator("age")}
-              </th>
+                Age
+              </SortableTh>
             </tr>
           </thead>
           <tbody>

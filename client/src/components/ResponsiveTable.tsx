@@ -5,7 +5,7 @@ import { useContainerWidth, useScrollEdges } from "@/hooks/useResponsive";
 import { abbreviateLabel } from "@/lib/columnAbbreviations";
 
 /**
- * Reusable, width-aware table for Dynasty Command.
+ * Reusable, width-aware table for Commissioner Command.
  *
  * One column config drives three responsive behaviors so a table that's perfect
  * on desktop degrades gracefully instead of overflowing or crushing on phones:

@@ -16,6 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SectionHeader } from "@/components/SectionHeader";
 import { SleeperUserAvatar } from "@/components/SleeperUserAvatar";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 import { fetchLeagueAvatarMap } from "@/lib/sleeperApi";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -136,7 +138,7 @@ function daysAgo(ts: number | null | undefined): string {
 
 // ── Root component ───────────────────────────────────────────────────────────
 
-export default function CommissionerActivity({ onBack }: { onBack?: () => void }) {
+export default function CommissionerActivity({ onBack, leagueId: leagueIdProp }: { onBack?: () => void; leagueId?: string }) {
   const sleeper = useSleeper();
   const { toast } = useToast();
   const leagues = sleeper.leagues;
@@ -145,10 +147,11 @@ export default function CommissionerActivity({ onBack }: { onBack?: () => void }
   // Settings is treated as a child of the Overview area, so the toggle keeps
   // "Overview" highlighted while the settings panel is open.
   const activeSeg: "overview" | "transactions" = sub === "transactions" ? "transactions" : "overview";
-  // League is fixed to the active league (or the first commissioner league).
+  // League is fixed to the league passed in (League Profile embeds this scoped
+  // to one league), else the active league (or the first commissioner league).
   // The in-tab picker was removed; the tab auto-scans this league on open.
   const [leagueId] = useState<string>(
-    sleeper.activeLeagueId ?? leagues[0]?.leagueId ?? "",
+    leagueIdProp ?? sleeper.activeLeagueId ?? leagues[0]?.leagueId ?? "",
   );
 
   const refreshMut = useMutation({
@@ -351,13 +354,31 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
   });
   const avatarMap = avatarsQ.data ?? {};
 
+  const managers = q.data?.managers ?? [];
+
+  // Managers sorted by inactivity risk (highest first) by default; headers below
+  // re-sort on click via the shared sortable-table hook.
+  // NOTE: must be called before any early returns to satisfy the Rules of Hooks.
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(
+    managers,
+    {
+      team: (m) => m.teamName,
+      score: (m) => m.activityScore,
+      risk: (m) => m.inactivityRiskScore,
+      trans: (m) => m.transactionsCount,
+      trades: (m) => m.tradesCount,
+      waiv: (m) => m.waiverCount,
+      fa: (m) => m.freeAgentCount,
+      lineup: (m) => (m.lineupChanged ? 1 : 0),
+      empty: (m) => m.emptyStarterSlots,
+      lastMove: (m) => m.lastTransactionTs,
+    },
+    { defaultKey: "risk", defaultDir: "desc" },
+  );
+
   if (q.isLoading) return <LoadingRows />;
   if (q.isError) return <ErrorState message={(q.error as Error).message} />;
-  const managers = q.data?.managers ?? [];
   if (!managers.length) return <EmptyState icon={RefreshCw} title="No manager data yet" hint="Manager data loads automatically when you open this league." />;
-
-  // Managers sorted by inactivity risk (highest first).
-  const sorted = [...managers].sort((a, b) => b.inactivityRiskScore - a.inactivityRiskScore);
 
   return (
     <div>
@@ -391,16 +412,16 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
           <thead>
             {/* Header — navy in light mode, glass strip in dark. */}
             <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
-              <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager / Team</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risk</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trades</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Waiv</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">FA</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Lineup</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</th>
-              <th className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Last Move</th>
+              <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager / Team</SortableTh>
+              <SortableTh sortKey="score" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</SortableTh>
+              <SortableTh sortKey="risk" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risk</SortableTh>
+              <SortableTh sortKey="trans" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</SortableTh>
+              <SortableTh sortKey="trades" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trades</SortableTh>
+              <SortableTh sortKey="waiv" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Waiv</SortableTh>
+              <SortableTh sortKey="fa" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">FA</SortableTh>
+              <SortableTh sortKey="lineup" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Lineup</SortableTh>
+              <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</SortableTh>
+              <SortableTh sortKey="lastMove" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Last Move</SortableTh>
               <th className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Flags</th>
             </tr>
           </thead>

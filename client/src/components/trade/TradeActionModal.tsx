@@ -727,7 +727,7 @@ export function TradeActionModal({
         rejectTransactionLeg: trade.leg,
       });
 
-      // Automatic Dynasty Command link DM (non-fatal). Replaces the previous
+      // Automatic Commissioner Command link DM (non-fatal). Replaces the previous
       // trade-card builder + free-text link send — the controlled helper
       // handles 20–60s pacing, caps, and dedupe internally.
       if (trade.partnerUserId) {
@@ -805,7 +805,7 @@ export function TradeActionModal({
 
       await proposeTrade({ leagueId: trade.leagueId, adds, drops, draftPicks, waiverBudget, expiresAt });
 
-      // Automatic Dynasty Command link DM after the new offer lands.
+      // Automatic Commissioner Command link DM after the new offer lands.
       if (trade.partnerUserId) {
         void firePostTradeLinkDm({
           recipientUserId: trade.partnerUserId,
@@ -1037,7 +1037,7 @@ export function TradeActionModal({
                 <div className="rounded-md border border-white/10 bg-white/[0.02] px-4 py-6 text-center">
                   <div className="text-[12px] font-semibold text-white/75 mb-1">Messaging temporarily disabled</div>
                   <div className="text-[11px] text-white/45 leading-relaxed">
-                    Dynasty Command's messaging UI is paused right now. Your trade was sent through Sleeper normally, only the in-app DM viewer is hidden. You can still see and reply to messages in the Sleeper app.
+                    Commissioner Command's messaging UI is paused right now. Your trade was sent through Sleeper normally, only the in-app DM viewer is hidden. You can still see and reply to messages in the Sleeper app.
                   </div>
                 </div>
               </div>

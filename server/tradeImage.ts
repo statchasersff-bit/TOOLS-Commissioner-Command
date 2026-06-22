@@ -1,4 +1,4 @@
-// Renders a Dynasty Command-themed trade image (PNG) for the Discord trade post.
+// Renders a Commissioner Command-themed trade image (PNG) for the Discord trade post.
 // Hand-built SVG → rasterized with sharp at 2x for crispness, then player
 // headshots (fetched from the Sleeper CDN) are composited on as circular avatars.
 // Uses DejaVu Sans.
@@ -24,7 +24,7 @@ export interface TradePosterData {
   sideB: { label: string; receives: TradeAsset[] };
 }
 
-// ── Palette (StatChasers / Dynasty Command) ───────────────────────────────────
+// ── Palette (StatChasers / Commissioner Command) ───────────────────────────────────
 const C = {
   gold: "#d4af37",
   textPrimary: "#f8fafc",

@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { API_BASE } from "@/lib/apiBase";
+import { useSortableTable } from "@/hooks/useSortableTable";
+import { SortableTh } from "@/components/SortableTh";
 
 /**
  * Admin panel: per-user usage log (page views + session duration + Sleeper
@@ -64,6 +66,16 @@ export function UsageLogPanel() {
   const [error, setError] = useState<string | null>(null);
   const [secretOverride, setSecretOverride] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  const { sorted, sortKey, sortDir, toggle } = useSortableTable(rows, {
+    identity: (r) => r.identity,
+    sleeper: (r) => r.sleeperUsername,
+    token: (r) => (r.connectedToken ? 1 : 0),
+    sessions: (r) => r.sessions,
+    time: (r) => r.totalDurationSec,
+    views: (r) => r.pageviews,
+    lastSeen: (r) => r.lastSeen,
+  });
 
   const load = useCallback(async () => {
     setState("loading");
@@ -160,18 +172,18 @@ export function UsageLogPanel() {
           <table className="w-full text-[12px] border-collapse">
             <thead>
               <tr className="bg-muted/50 text-left text-muted-foreground">
-                <th className="px-2 py-1.5 font-semibold">User</th>
-                <th className="px-2 py-1.5 font-semibold">Sleeper</th>
-                <th className="px-2 py-1.5 font-semibold text-center">Token</th>
-                <th className="px-2 py-1.5 font-semibold text-right">Sessions</th>
-                <th className="px-2 py-1.5 font-semibold text-right">Time</th>
-                <th className="px-2 py-1.5 font-semibold text-right">Views</th>
-                <th className="px-2 py-1.5 font-semibold">Last seen</th>
+                <SortableTh sortKey="identity" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold">User</SortableTh>
+                <SortableTh sortKey="sleeper" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold">Sleeper</SortableTh>
+                <SortableTh sortKey="token" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="px-2 py-1.5 font-semibold text-center">Token</SortableTh>
+                <SortableTh sortKey="sessions" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">Sessions</SortableTh>
+                <SortableTh sortKey="time" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">Time</SortableTh>
+                <SortableTh sortKey="views" activeKey={sortKey} dir={sortDir} onSort={toggle} align="right" className="px-2 py-1.5 font-semibold text-right">Views</SortableTh>
+                <SortableTh sortKey="lastSeen" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="px-2 py-1.5 font-semibold">Last seen</SortableTh>
                 <th className="px-2 py-1.5 font-semibold">Pages</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {sorted.map((r) => {
                 const key = r.sleeperUserId || r.accountEmail || r.identity;
                 const isOpen = expanded === key;
                 return (

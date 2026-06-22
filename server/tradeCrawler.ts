@@ -27,7 +27,7 @@ function sleep(ms: number) {
 
 // ── Per-user ingest de-duplication ──────────────────────────────────────────
 // The client fires /api/trades/ingest-user fire-and-forget on EVERY app load
-// (see DynastyCommandCenter), and the crawl itself runs 90s+ of rate-limited
+// (see CommissionerCommandCenter), and the crawl itself runs 90s+ of rate-limited
 // Sleeper calls. Without a guard, every page view (and every user) stacks
 // another concurrent 90s crawl, which is what exhausted the DB pool and 500'd
 // auth (the "stuck on spinner / Login failed" outage). These two guards make a

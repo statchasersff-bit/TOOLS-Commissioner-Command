@@ -113,7 +113,7 @@ export function MobileMenuButton({ tabs, activeTab, setActiveTab }: MobileMenuBu
                 <img src={logoLight} alt="StatChasers" className="w-9 h-9 block dark-any:hidden" />
                 <div>
                   <p className="text-[15px] font-bold text-white leading-tight tracking-tight">StatChasers</p>
-                  <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Dynasty Command</p>
+                  <p className="text-[10px] text-[#d4af37] font-semibold tracking-widest uppercase">Commissioner Command</p>
                 </div>
               </div>
               <button

@@ -1,6 +1,6 @@
 /**
  * Central abbreviation dictionary so stat/column labels shorten consistently
- * everywhere in Dynasty Command. Two tiers:
+ * everywhere in Commissioner Command. Two tiers:
  *   - `columnAbbreviations`        — used at tablet / small-laptop widths
  *   - `mobileColumnAbbreviations`  — ultra-short, used at small-mobile widths
  *

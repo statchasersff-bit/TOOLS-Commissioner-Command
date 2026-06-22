@@ -54,7 +54,7 @@ function AuthLayout({ children, onBack }: { children: React.ReactNode; onBack?: 
             <img src={logoDark} alt="StatChasers" className="h-20 mx-auto mb-1.5 object-contain" />
             <div className="flex items-center gap-3 w-full">
               <span className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(212,175,55,0.35))" }} />
-              <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Dynasty Command</span>
+              <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Commissioner Command</span>
               <span className="flex-1 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(212,175,55,0.35))" }} />
             </div>
           </div>
@@ -330,7 +330,7 @@ export function LandingScreen({ onNavigate }: ScreenProps) {
             <img src={logoDark} alt="StatChasers" className="h-20 object-contain mb-2" />
             <div className="flex items-center gap-3 w-full">
               <span className="flex-1 h-px" style={{ background: "linear-gradient(to right, transparent, rgba(212,175,55,0.35))" }} />
-              <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Dynasty Command</span>
+              <span className="text-[#d4af37] text-[11px] font-bold tracking-[0.18em] uppercase whitespace-nowrap">Commissioner Command</span>
               <span className="flex-1 h-px" style={{ background: "linear-gradient(to left, transparent, rgba(212,175,55,0.35))" }} />
             </div>
           </div>
@@ -339,7 +339,7 @@ export function LandingScreen({ onNavigate }: ScreenProps) {
           <div className="mb-6 text-center">
             <h2 className="text-[22px] font-bold text-white mb-1.5">Welcome back</h2>
             <p className="text-[13px] text-white/50 leading-relaxed">
-              Sign in to your StatChasers account to access Dynasty Command.
+              Sign in to your StatChasers account to access Commissioner Command.
             </p>
           </div>
 
@@ -376,7 +376,7 @@ export function LandingScreen({ onNavigate }: ScreenProps) {
 
           {/* Footer */}
           <p className="text-center text-[11px] text-white/20 mt-6">
-            Dynasty Command · StatChasers
+            Commissioner Command · StatChasers
           </p>
         </div>
       </div>

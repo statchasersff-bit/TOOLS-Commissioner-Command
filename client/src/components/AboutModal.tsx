@@ -32,7 +32,7 @@ const FEATURES: FeatureDef[] = [
     category: "Portfolio",
     title: "Lineup Command",
     icon: Crosshair,
-    description: "Review lineup issues across every league, optimize your starters, and submit lineup changes without leaving Dynasty Command.",
+    description: "Review lineup issues across every league, optimize your starters, and submit lineup changes without leaving Commissioner Command.",
     bullets: [
       "Cross-league lineup war room in a single table",
       "Bench vs. starter value comparisons",
@@ -166,10 +166,10 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
             {/* Text + button */}
             <div className="flex-1 min-w-0">
               <h3 className="text-[14px] font-bold text-foreground leading-tight mb-1">
-                Help Keep Dynasty Command Free
+                Help Keep Commissioner Command Free
               </h3>
               <p className="text-[12px] text-muted-foreground leading-snug mb-3">
-                If Dynasty Command has helped you, share it with your dynasty leagues. It helps StatChasers grow and keeps the tool free for more managers.
+                If Commissioner Command has helped you, share it with your dynasty leagues. It helps StatChasers grow and keeps the tool free for more managers.
               </p>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <button
@@ -197,10 +197,10 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
       <div className="mb-5">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-[3px] h-5 rounded-full flex-shrink-0" style={{ background: "#d4af37" }} />
-          <h2 className="text-lg font-bold text-foreground">About Dynasty Command</h2>
+          <h2 className="text-lg font-bold text-foreground">About Commissioner Command</h2>
         </div>
         <p className="text-sm text-muted-foreground ml-[11px]">
-          Learn how each feature works and how Dynasty Command helps manage your dynasty leagues.
+          Learn how each feature works and how Commissioner Command helps manage your dynasty leagues.
         </p>
       </div>
 
@@ -269,7 +269,7 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
             <ul className="space-y-2">
               {[
                 "Your Sleeper credentials go directly to Sleeper, never through StatChasers servers.",
-                "Dynasty Command uses Sleeper auth tokens only when you choose to perform an action.",
+                "Commissioner Command uses Sleeper auth tokens only when you choose to perform an action.",
                 "Tokens stay in your browser unless you explicitly log out or clear your session.",
                 "StatChasers never logs JWTs, private DMs, or personally identifiable Sleeper data.",
                 "Trade Database stores only anonymized player and pick asset data. No team names, owner names, or league names.",
@@ -285,7 +285,7 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
         {/* Footer */}
         <div className="pt-2 pb-4 flex flex-col items-center gap-3">
           <p className="text-center text-[12px] text-muted-foreground/50">
-            Dynasty Command is built by <span className="font-semibold" style={{ color: "#d4af37" }}>StatChasers</span> for serious dynasty fantasy football managers.
+            Commissioner Command is built by <span className="font-semibold" style={{ color: "#d4af37" }}>StatChasers</span> for serious dynasty fantasy football managers.
           </p>
           <div className="flex items-center gap-1 flex-wrap justify-center">
             {[

@@ -549,6 +549,7 @@ export const NAV_CONFIG: MainTabConfig[] = [
     label: "Activity",
     subTabs: [
       { id: "league-activity", label: "League Activity" },
+      { id: "all-league-scan", label: "All-League Scan" },
     ],
   },
   {

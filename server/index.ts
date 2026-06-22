@@ -76,8 +76,8 @@ const BUILTIN_ORIGINS = [
   "https://www.dynastycommandff.com",
   "https://statchasers.com",
   "https://www.statchasers.com",
-  "https://dynasty-command.pages.dev",
-  "https://dynasty-command.replit.app",
+  "https://commissioner-command.pages.dev",
+  "https://commissioner-command.replit.app",
 ];
 const CORS_ORIGINS = [
   ...BUILTIN_ORIGINS,

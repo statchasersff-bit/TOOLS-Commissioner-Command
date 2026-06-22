@@ -6,7 +6,7 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
-      // Dynasty Command responsive system. Tailwind defaults already cover
+      // Commissioner Command responsive system. Tailwind defaults already cover
       // md=768 (tablet), lg=1024 (laptop), xl=1280 (desktop), 2xl=1536 (wide).
       // We add the two small-mobile stops the design needs. Keep these in sync
       // with BREAKPOINTS in hooks/useResponsive.ts.

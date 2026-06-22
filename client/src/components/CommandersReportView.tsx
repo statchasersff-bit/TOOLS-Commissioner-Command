@@ -62,7 +62,7 @@ export function CommandersReportView({
       ) : (
         <Card className="p-6">
           <p className="text-sm text-muted-foreground text-center">
-            The data is ready. Hit “Generate report” to have Dynasty Command write it up.
+            The data is ready. Hit “Generate report” to have Commissioner Command write it up.
           </p>
         </Card>
       )}

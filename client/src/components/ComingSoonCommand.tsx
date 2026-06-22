@@ -70,7 +70,7 @@ function CommandComingSoon({ name, icon: Icon, releaseDate, lead, blurb, paragra
             data-testid="button-coming-soon-back"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-muted-foreground hover:text-foreground border border-border/60 hover:bg-muted/40 transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Dynasty Command
+            <ArrowLeft className="w-4 h-4" /> Back to Commissioner Command
           </button>
         </div>
       </div>
