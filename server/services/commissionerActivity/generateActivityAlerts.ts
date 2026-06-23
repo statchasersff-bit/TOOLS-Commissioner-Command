@@ -27,6 +27,12 @@ export function generateActivityAlerts(input: GenerateAlertsInput): ActivityAler
   const alerts: ActivityAlertRow[] = [];
 
   for (const m of managers) {
+    // Orphan rosters (no owner) are surfaced as possible orphans in the manager
+    // table, but they aren't a manager being negligent — skip the per-manager
+    // activity alerts so empty seats don't spam "No Transactions" / "Empty
+    // Starter" / "Inactive Manager Risk".
+    if (!m.ownerId) continue;
+
     const base = {
       leagueId,
       season,

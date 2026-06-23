@@ -137,6 +137,9 @@ export function generateWeeklyActivityReport(
   }
 
   const needsAttention = [...managers]
+    // Orphan rosters (no owner) aren't a manager being negligent — they're
+    // surfaced separately as possible orphans, not listed as needing attention.
+    .filter((m) => m.ownerId)
     .filter((m) => (m.inactivityRiskScore ?? 0) >= 25 || (m.emptyStarterSlots ?? 0) > 0)
     .sort((a, b) => (b.inactivityRiskScore ?? 0) - (a.inactivityRiskScore ?? 0))
     .slice(0, 8);

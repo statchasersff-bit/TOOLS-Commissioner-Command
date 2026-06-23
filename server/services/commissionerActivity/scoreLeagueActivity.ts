@@ -2,8 +2,10 @@
  * League-wide activity score — "how alive does this league feel this week?"
  *
  * Starts from the average manager activity score, then nudges up for healthy
- * transaction / trade / lineup-change volume and down for inactive managers and
- * empty lineups. Clamped to [0,100] and mapped to a label (thriving → at_risk).
+ * transaction / trade volume and down for inactive managers. Lineup signals are
+ * intentionally excluded — Activity scores purely on transaction behavior;
+ * lineup health lives in the separate Lineups module. Clamped to [0,100] and
+ * mapped to a label (thriving → at_risk).
  */
 import type {
   ManagerActivityRow,
@@ -25,7 +27,11 @@ export interface ScoreLeagueInput {
 
 export function scoreLeagueActivity(input: ScoreLeagueInput): LeagueSnapshotRow {
   const { managerRows, transactionEvents, lineupEvents, settings } = input;
-  const managerCount = managerRows.length || 1;
+  // Orphan rosters (no owner) are surfaced in the manager table but excluded from
+  // league aggregates — an empty, ownerless team isn't a manager whose (in)activity
+  // should move the league score, inflate the inactive count, or dilute the average.
+  const scoredRows = managerRows.filter((m) => m.ownerId);
+  const managerCount = scoredRows.length || 1;
 
   // A trade involves multiple rosters and so emits one event PER roster; league
   // totals must count distinct transactions, not events, or trades double-count.
@@ -36,25 +42,22 @@ export function scoreLeagueActivity(input: ScoreLeagueInput): LeagueSnapshotRow 
   const totalFreeAgentMoves = distinctTxnsByType("free_agent");
   const totalTransactions = totalTrades + totalWaivers + totalFreeAgentMoves;
   const totalLineupChanges = lineupEvents.filter((e) => e.eventType === "lineup_change").length;
-  const totalEmptyStarterSlots = managerRows.reduce((sum, m) => sum + m.emptyStarterSlots, 0);
+  const totalEmptyStarterSlots = scoredRows.reduce((sum, m) => sum + m.emptyStarterSlots, 0);
 
-  const inactiveManagerCount = managerRows.filter(
+  const inactiveManagerCount = scoredRows.filter(
     (m) => m.inactivityRiskScore >= 50 || m.activityScore < 20,
   ).length;
   const activeManagerCount = managerCount - inactiveManagerCount;
 
   const avgManagerScore =
-    managerRows.reduce((sum, m) => sum + m.activityScore, 0) / managerCount;
+    scoredRows.reduce((sum, m) => sum + m.activityScore, 0) / managerCount;
 
   let leagueScore = avgManagerScore;
   if (totalTransactions >= managerCount / 2) leagueScore += 10;
   if (totalTrades >= 1) leagueScore += 5;
-  if (totalLineupChanges >= managerCount / 2) leagueScore += 10;
 
   if (inactiveManagerCount >= 1) leagueScore -= 10;
   if (inactiveManagerCount >= 2) leagueScore -= 20;
-  if (totalEmptyStarterSlots >= 1) leagueScore -= 15;
-  if (totalEmptyStarterSlots >= 3) leagueScore -= 30;
 
   const leagueActivityScore = clampScore(leagueScore);
 
@@ -109,11 +112,11 @@ export interface ScoreSeasonInput {
  *
  * Same shape as the weekly score, but fed the whole season's cumulative totals
  * and each manager's season-average activity. The per-week health thresholds are
- * tuned for a single week's volume, so we normalize the cumulative transaction /
- * lineup / empty-slot counts back to a per-week basis before applying them; that
- * keeps the bonuses/penalties meaningful at season scale instead of always
- * tripping (every league trades "≥1" and runs ">manager/2 transactions" once you
- * sum 14+ weeks). Stored under the sentinel week 0.
+ * tuned for a single week's volume, so we normalize the cumulative transaction
+ * count back to a per-week basis before applying them; that keeps the bonuses/
+ * penalties meaningful at season scale instead of always tripping (every league
+ * runs ">manager/2 transactions" once you sum 14+ weeks). Lineup signals are
+ * excluded from scoring. Stored under the sentinel week 0.
  */
 export function scoreSeasonActivity(input: ScoreSeasonInput): LeagueSnapshotRow {
   const { managerAggregates, totals, settings } = input;
@@ -131,18 +134,13 @@ export function scoreSeasonActivity(input: ScoreSeasonInput): LeagueSnapshotRow 
   // Normalize cumulative season volume to a typical-week basis so the per-week
   // thresholds below stay calibrated.
   const txnsPerWeek = totals.totalTransactions / weeks;
-  const lineupChangesPerWeek = totals.totalLineupChanges / weeks;
-  const emptyStarterSlotsPerWeek = totals.totalEmptyStarterSlots / weeks;
 
   let leagueScore = avgManagerScore;
   if (txnsPerWeek >= managerCount / 2) leagueScore += 10;
   if (totals.totalTrades >= 1) leagueScore += 5;
-  if (lineupChangesPerWeek >= managerCount / 2) leagueScore += 10;
 
   if (inactiveManagerCount >= 1) leagueScore -= 10;
   if (inactiveManagerCount >= 2) leagueScore -= 20;
-  if (emptyStarterSlotsPerWeek >= 1) leagueScore -= 15;
-  if (emptyStarterSlotsPerWeek >= 3) leagueScore -= 30;
 
   const leagueActivityScore = clampScore(leagueScore);
 

@@ -8,7 +8,7 @@
  * status, notes, and resolvedAt untouched, so an acknowledged/resolved alert
  * stays that way across re-scans.
  */
-import { and, eq, desc, gt, gte, lte, inArray, max, sql } from "drizzle-orm";
+import { and, eq, desc, gt, gte, lte, inArray, isNotNull, max, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
   commissionerActivitySnapshots,
@@ -388,6 +388,9 @@ export async function getSeasonManagerAggregates(
         eq(commissionerManagerActivity.leagueId, leagueId),
         eq(commissionerManagerActivity.season, season),
         gt(commissionerManagerActivity.week, 0),
+        // Exclude orphan rosters (no owner) so the season-wide league score isn't
+        // dragged down by empty, ownerless teams — mirrors scoreLeagueActivity.
+        isNotNull(commissionerManagerActivity.ownerId),
       ),
     )
     .groupBy(commissionerManagerActivity.rosterId);
