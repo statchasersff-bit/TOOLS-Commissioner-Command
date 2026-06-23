@@ -66,6 +66,22 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     return String(state?.season ?? new Date().getFullYear());
   }
 
+  // Resolve the in-scope week for a read endpoint. Priority: an explicit ?week,
+  // then the league's latest scanned week, then the current NFL week. Falling
+  // back to the current NFL week (never 0) matters for a league that hasn't been
+  // scanned yet: week 0 renders a permanently-stuck "No data yet — Week 0" state
+  // whose Refresh would scan week 0 and find nothing, while the current NFL week
+  // gives the UI a real, scannable target.
+  async function resolveWeek(leagueId: string, season: string, explicit?: unknown): Promise<number> {
+    const requested = parseIntOrNull(explicit);
+    if (requested != null) return requested;
+    const latest = await getLatestWeek(leagueId, season);
+    if (latest != null) return latest;
+    const state = await getNflState().catch(() => null);
+    const current = Number(state?.display_week ?? state?.week ?? 0);
+    return current >= 1 ? current : 1;
+  }
+
   function handleErr(res: any, err: any, fallback: string) {
     const status = /sleeper|fetch/i.test(err?.message || "") ? 502 : 500;
     res.status(status).json({ error: err?.message || fallback });
@@ -98,7 +114,7 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId required" });
     try {
       const season = await resolveSeason(req.query.season);
-      const week = parseIntOrNull(req.query.week) ?? (await getLatestWeek(leagueId, season)) ?? 0;
+      const week = await resolveWeek(leagueId, season, req.query.week);
       const overview = await getOverview(leagueId, season, week);
       res.json({ leagueId, season, ...overview });
     } catch (err: any) {
@@ -112,7 +128,7 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId required" });
     try {
       const season = await resolveSeason(req.query.season);
-      const week = parseIntOrNull(req.query.week) ?? (await getLatestWeek(leagueId, season)) ?? 0;
+      const week = await resolveWeek(leagueId, season, req.query.week);
       const checks = await listChecks(leagueId, season, week, {
         riskLabel: req.query.riskLabel ? String(req.query.riskLabel) : undefined,
         reviewStatus: req.query.reviewStatus ? String(req.query.reviewStatus) : undefined,
@@ -159,7 +175,7 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId required" });
     try {
       const season = await resolveSeason(req.query.season);
-      const week = parseIntOrNull(req.query.week) ?? (await getLatestWeek(leagueId, season)) ?? 0;
+      const week = await resolveWeek(leagueId, season, req.query.week);
       const audit = await getLeagueWeekAudit(leagueId, season, week);
       res.json(audit);
     } catch (err: any) {
@@ -325,7 +341,7 @@ export function registerLineupIntegrityRoutes(app: Express): void {
     if (!leagueId) return res.status(400).json({ error: "leagueId required" });
     try {
       const season = await resolveSeason(req.query.season);
-      const week = parseIntOrNull(req.query.week) ?? (await getLatestWeek(leagueId, season)) ?? 0;
+      const week = await resolveWeek(leagueId, season, req.query.week);
       const league = await getLeague(leagueId).catch(() => null);
       const leagueName = (league?.name as string) ?? "League";
       const copyText = await getWeeklyReport(leagueId, season, week, leagueName);
