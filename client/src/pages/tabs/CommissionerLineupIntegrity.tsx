@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import {
   ShieldAlert, RefreshCw, ArrowLeft, Copy, AlertTriangle, ListChecks,
   FileText, Settings as SettingsIcon, Scale, CheckCircle2,
-  AlertCircle, Info, MessageSquare, EyeOff, ExternalLink, ChevronLeft, ChevronRight,
+  AlertCircle, Info, MessageSquare, ExternalLink, ChevronLeft, ChevronRight,
   UserX, ArrowRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -40,6 +40,7 @@ import {
   type LineupIntegritySettings,
   type MultiLeagueRow,
   type MultiLeagueAlert,
+  type AlertSwap,
   type MultiLeagueStatus,
   type PlayerCheckView,
 } from "@/lib/lineupIntegrityApi";
@@ -1113,21 +1114,20 @@ function LeagueAvatar({ avatar, name }: { avatar: string | null; name: string })
 }
 
 // ── Expanded league review panel ─────────────────────────────────────────────
-// Human-readable label + short reason per alert type, so the panel reads like a
-// commissioner review instead of a raw alert log.
-const ALERT_TYPE_LABEL: Record<string, string> = {
-  empty_starter: "Empty Starter Slot",
-  bye_starter: "Bye-Week Starter",
-  inactive_starter: "Inactive Starter",
-  ir_starter: "IR Starter",
-  doubtful_starter: "Doubtful Starter",
-  questionable_starter: "Questionable Starter",
-  unchanged_lineup: "Unchanged Lineup",
-  suspicious_benching: "Suspicious Benching",
-  large_optimality_gap: "Lineup Optimality Gap",
-  repeat_lineup_issue: "Repeat Lineup Issue",
-  potential_tanking: "Potential Tanking Signal",
-  playoff_integrity: "Playoff Integrity",
+// Tiny, secondary type pill labels for the compact signal rows.
+const ALERT_PILL_LABEL: Record<string, string> = {
+  empty_starter: "Empty",
+  bye_starter: "Bye",
+  inactive_starter: "Inactive",
+  ir_starter: "IR",
+  doubtful_starter: "Doubtful",
+  questionable_starter: "Questionable",
+  unchanged_lineup: "Unchanged",
+  suspicious_benching: "Suspicious",
+  large_optimality_gap: "Gap",
+  repeat_lineup_issue: "Repeat",
+  potential_tanking: "Tanking",
+  playoff_integrity: "Playoff",
 };
 
 const ALERT_SHORT_REASON: Record<string, string> = {
@@ -1147,35 +1147,58 @@ const ALERT_SHORT_REASON: Record<string, string> = {
 
 const BUCKET_RANK: Record<string, number> = { critical: 3, warning: 2, info: 1 };
 
-// Confidence label per severity bucket — softened in live (prevention) mode so
-// the tool reads as a warning, not an accusation.
-function confidenceMeta(bucket: string, mode: ScanMode): { label: string; cls: string } {
-  if (bucket === "critical")
-    return { label: mode === "audit" ? "Confirmed Issue" : "Needs Attention", cls: "bg-red-500/15 text-red-600 dark-any:text-red-400 border-red-500/30" };
-  if (bucket === "warning")
-    return { label: "Needs Review", cls: "bg-amber-500/15 text-amber-600 dark-any:text-amber-400 border-amber-500/30" };
-  return { label: "Soft Signal", cls: "bg-sky-500/15 text-sky-600 dark-any:text-sky-400 border-sky-500/30" };
+// A compact, decision-focused signal row. Benching + optimality alerts that
+// describe the SAME start/sit swap collapse into one "swap" row (carrying both
+// type pills) so the same decision isn't repeated three different ways.
+type SignalRow =
+  | { kind: "swap"; key: string; swap: AlertSwap; types: string[]; bucket: string }
+  | { kind: "plain"; key: string; alertType: string; reason: string; bucket: string };
+
+function buildSignalRows(list: MultiLeagueAlert[]): SignalRow[] {
+  const swapByKey = new Map<string, Extract<SignalRow, { kind: "swap" }>>();
+  const plain: SignalRow[] = [];
+  for (const a of list) {
+    const pill = ALERT_PILL_LABEL[a.alertType] ?? a.alertType;
+    if (a.swap) {
+      const key = `${a.swap.slot ?? ""}|${a.swap.startedName}|${a.swap.benchName}`;
+      const existing = swapByKey.get(key);
+      if (existing) {
+        if (!existing.types.includes(pill)) existing.types.push(pill);
+        if ((BUCKET_RANK[a.bucket] ?? 0) > (BUCKET_RANK[existing.bucket] ?? 0)) existing.bucket = a.bucket;
+      } else {
+        swapByKey.set(key, { kind: "swap", key, swap: a.swap, types: [pill], bucket: a.bucket });
+      }
+    } else {
+      plain.push({
+        kind: "plain",
+        key: `p${a.id}`,
+        alertType: a.alertType,
+        reason: ALERT_SHORT_REASON[a.alertType] ?? a.description,
+        bucket: a.bucket,
+      });
+    }
+  }
+  return [...Array.from(swapByKey.values()), ...plain].sort(
+    (x, y) => (BUCKET_RANK[y.bucket] ?? 0) - (BUCKET_RANK[x.bucket] ?? 0),
+  );
 }
 
+function TypePill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-muted text-muted-foreground">
+      {label}
+    </span>
+  );
+}
 
 function LeagueReviewPanel({ row, mode, onOpenLeague }: {
   row: MultiLeagueRow; mode: ScanMode; onOpenLeague: (week?: number) => void;
 }) {
-  const { toast } = useToast();
-  const [openManager, setOpenManager] = useState<number | null>(null);
-
-  const reviewMut = useMutation({
-    mutationFn: ({ alertId, status }: { alertId: number; status: string }) => api.updateAlert(alertId, { status }),
-    onSuccess: (_r, v) => {
-      queryClient.invalidateQueries({ queryKey: ["li", "multi"] });
-      toast({ title: v.status === "resolved" ? "Marked reviewed" : "Signal ignored" });
-    },
-    onError: (e: any) => toast({ title: "Couldn't update signal", description: e?.message, variant: "destructive" }),
-  });
-
   const alerts = row.alerts ?? [];
+  const avatars = useLeagueAvatars(row.leagueId);
 
-  // Group signals by manager, strongest concern first.
+  // Group signals by manager (strongest concern first), collapsing each
+  // manager's alerts into compact rows.
   const groups = useMemo(() => {
     const m = new Map<number, MultiLeagueAlert[]>();
     for (const a of alerts) {
@@ -1186,7 +1209,7 @@ function LeagueReviewPanel({ row, mode, onOpenLeague }: {
     return Array.from(m.entries())
       .map(([rosterId, list]) => {
         const sorted = [...list].sort((x, y) => (BUCKET_RANK[y.bucket] ?? 0) - (BUCKET_RANK[x.bucket] ?? 0));
-        return { rosterId, list: sorted, top: sorted[0] };
+        return { rosterId, list: sorted, top: sorted[0], rows: buildSignalRows(sorted) };
       })
       .sort((a, b) => (BUCKET_RANK[b.top.bucket] ?? 0) - (BUCKET_RANK[a.top.bucket] ?? 0) || b.list.length - a.list.length);
   }, [alerts]);
@@ -1199,63 +1222,59 @@ function LeagueReviewPanel({ row, mode, onOpenLeague }: {
         <p className="text-xs text-muted-foreground">No open issues this week for this league.</p>
       ) : (
         <div className="space-y-2">
-          {groups.map(({ rosterId, list, top }) => {
-            const open = openManager === rosterId;
-            const conf = confidenceMeta(top.bucket, mode);
+          {groups.map(({ rosterId, top, rows }) => {
             return (
               <Card key={rosterId} className="overflow-hidden">
-                <button
-                  onClick={() => setOpenManager(open ? null : rosterId)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 transition-colors"
-                >
-                  <ChevronRight className={cn("w-3.5 h-3.5 flex-shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-                  <span className="font-semibold text-sm text-foreground truncate flex-1">{nameOf(top)}</span>
-                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">{list.length} signal{list.length === 1 ? "" : "s"}</span>
-                  <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap", conf.cls)}>
-                    {ALERT_TYPE_LABEL[top.alertType] ?? top.alertType}
-                  </span>
-                </button>
-                {open && (
-                  <div className="border-t border-border/60 divide-y divide-border/40">
-                    {list.map((a) => {
-                      const c = confidenceMeta(a.bucket, mode);
-                      return (
-                        <div key={a.id} className="px-3 py-2.5">
+                {/* Manager header: Sleeper avatar + name. Signals render inline below. */}
+                <div className="w-full flex items-center gap-2 px-3 py-2">
+                  <SleeperUserAvatar
+                    username={nameOf(top)}
+                    avatar={avatars[top.rosterId]?.avatar ?? null}
+                    size="sm"
+                    className="flex-1 min-w-0"
+                  />
+                </div>
+                <div className="border-t border-border/60">
+                  {/* Compact signal rows — decision info only, no titles /
+                      recommendations / per-signal buttons. */}
+                  <div className="divide-y divide-border/40">
+                    {rows.map((r) => (
+                      <div key={r.key} className="px-3 py-2">
+                        {r.kind === "swap" ? (
+                          <>
+                            <div className="flex items-center gap-1.5 flex-wrap leading-none">
+                              {r.swap.slot && (
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{r.swap.slot}</span>
+                              )}
+                              {r.types.map((t) => <TypePill key={t} label={t} />)}
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap text-[13px]">
+                              <span className="font-medium text-foreground">{r.swap.startedName}</span>
+                              <span className="tabular-nums text-muted-foreground">{r.swap.startedProj}</span>
+                              <ArrowRight className="w-3 h-3 flex-shrink-0 text-muted-foreground/70" />
+                              <span className="font-medium text-foreground">{r.swap.benchName}</span>
+                              <span className="tabular-nums text-muted-foreground">{r.swap.benchProj}</span>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span className="font-bold tabular-nums text-amber-600 dark-any:text-amber-400">+{r.swap.gap}</span>
+                              {r.swap.more > 0 && <span className="text-[10px] text-muted-foreground">+{r.swap.more} more</span>}
+                            </div>
+                          </>
+                        ) : (
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[13px] font-semibold text-foreground">{ALERT_TYPE_LABEL[a.alertType] ?? a.alertType}</span>
-                            <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", c.cls)}>{c.label}</span>
-                            {a.status === "resolved" && <span className="text-[10px] text-emerald-600 dark-any:text-emerald-400 font-semibold">Reviewed</span>}
-                            {a.status === "dismissed" && <span className="text-[10px] text-muted-foreground font-semibold">Ignored</span>}
+                            <TypePill label={ALERT_PILL_LABEL[r.alertType] ?? r.alertType} />
+                            <span className="text-[13px] text-muted-foreground">{r.reason}</span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">{ALERT_SHORT_REASON[a.alertType] ?? a.description}</p>
-                          {a.suggestedAction && (
-                            <p className="text-[11px] text-muted-foreground/80 mt-1"><span className="font-semibold">Recommended:</span> {a.suggestedAction}</p>
-                          )}
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onOpenLeague(row.week ?? undefined)}>
-                              {mode === "audit" ? <>Review <ArrowRight className="w-3 h-3 ml-1" /></> : <>View Lineup <ArrowRight className="w-3 h-3 ml-1" /></>}
-                            </Button>
-                            {/* Reviews / flags are disabled during the live scan — lineups
-                                aren't locked yet, so no one should be marked or struck for a
-                                not-yet-final lineup. These only appear in the post-week audit. */}
-                            {mode === "audit" && a.status !== "resolved" && (
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={reviewMut.isPending}
-                                onClick={() => reviewMut.mutate({ alertId: a.id, status: "resolved" })}>
-                                <CheckCircle2 className="w-3 h-3 mr-1" /> Mark Reviewed
-                              </Button>
-                            )}
-                            {mode === "audit" && a.status !== "dismissed" && (
-                              <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" disabled={reviewMut.isPending}
-                                onClick={() => reviewMut.mutate({ alertId: a.id, status: "dismissed" })}>
-                                <EyeOff className="w-3 h-3 mr-1" /> Ignore
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
+                  {/* One action per manager. */}
+                  <div className="flex justify-end border-t border-border/40 px-3 py-2">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onOpenLeague(row.week ?? undefined)}>
+                      {mode === "audit" ? <>Review <ArrowRight className="w-3 h-3 ml-1" /></> : <>View League <ArrowRight className="w-3 h-3 ml-1" /></>}
+                    </Button>
+                  </div>
+                </div>
               </Card>
             );
           })}

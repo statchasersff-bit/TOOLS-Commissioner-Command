@@ -256,8 +256,6 @@ export const LEAGUE_LABEL_DISPLAY: Record<LeagueActivityLabel, string> = {
 
 export const FLAG_DISPLAY: Record<string, string> = {
   no_recent_transactions: "No Recent Moves",
-  lineup_unchanged: "Lineup Unchanged",
-  empty_starter: "Empty Starter",
   low_activity_score: "Low Activity",
   high_inactivity_risk: "Follow-Up Recommended",
   possible_orphan_risk: "Orphan Risk",
@@ -272,6 +270,15 @@ export function activityLabelColor(label: ActivityLabel): string {
     case "inactive": return "text-red-400 border-red-500/40 bg-red-500/10";
     default: return "text-muted-foreground border-border bg-muted/30";
   }
+}
+
+// Tier a 0–100 activity score into green / yellow / red so score values read at a
+// glance. Thresholds: green ≥70, yellow 40–69, red <40. Kept in one place so the
+// All-League Scan and single-league Activity tabs stay consistent.
+export function scoreTextColor(score: number): string {
+  if (score >= 70) return "text-emerald-600 dark-any:text-emerald-400";
+  if (score >= 40) return "text-amber-500 dark-any:text-amber-400";
+  return "text-red-600 dark-any:text-red-400";
 }
 
 export function leagueLabelColor(label: LeagueActivityLabel): string {

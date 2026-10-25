@@ -31,7 +31,7 @@ import Transactions from "@/pages/tabs/Transactions";
 import {
   refreshActivity, fetchOverview, fetchManagers, fetchSettings, updateSettings,
   ACTIVITY_LABEL_DISPLAY, LEAGUE_LABEL_DISPLAY,
-  activityLabelColor, leagueLabelColor, riskLabel,
+  leagueLabelColor, scoreTextColor,
   type ActivitySettings,
 } from "@/lib/commissionerActivityApi";
 
@@ -49,14 +49,6 @@ const SEGMENTS: { id: Extract<SubTab, "overview" | "transactions">; label: strin
 ];
 
 // ── Small shared UI ──────────────────────────────────────────────────────────
-
-function Chip({ className = "", children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${className}`}>
-      {children}
-    </span>
-  );
-}
 
 function KpiCard({ icon, label, value, sub, accent = "slate" }: {
   icon?: typeof Activity; label: string; value: React.ReactNode; sub?: string;
@@ -325,7 +317,13 @@ function OverviewTab({ leagueId }: { leagueId: string }) {
     <div className="space-y-5">
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <KpiCard icon={Activity} label="League Activity Score" value={`${snap.leagueActivityScore}/100`} accent="gold" sub={`${LEAGUE_LABEL_DISPLAY[label]} · ${snap.season} Season`} />
+        <KpiCard
+          icon={Activity}
+          label="League Activity Score"
+          value={<><span className={scoreTextColor(snap.leagueActivityScore)}>{snap.leagueActivityScore}</span><span className="text-muted-foreground">/100</span></>}
+          accent={snap.leagueActivityScore >= 70 ? "emerald" : snap.leagueActivityScore >= 40 ? "yellow" : "red"}
+          sub={`${LEAGUE_LABEL_DISPLAY[label]} · ${snap.season} Season`}
+        />
         <KpiCard
           icon={Users}
           label="Active Managers"
@@ -375,8 +373,6 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
       trades: (m) => m.tradesCount,
       waiv: (m) => m.waiverCount,
       fa: (m) => m.freeAgentCount,
-      lineup: (m) => (m.lineupChanged ? 1 : 0),
-      empty: (m) => m.emptyStarterSlots,
       lastMove: (m) => m.lastTransactionTs,
     },
     { defaultKey: "risk", defaultDir: "desc" },
@@ -403,15 +399,6 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
           "dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)]",
         )}
       >
-        {/* Title bar — gold tick + manager count */}
-        <div className="flex items-center justify-between px-4 md:px-5 py-3.5 border-b border-[var(--sc-border)] dark-any:border-white/6">
-          <div className="flex items-center gap-2">
-            <div className="w-[3px] h-4 rounded-full bg-[#d4af37]" />
-            <h3 className="text-sm font-bold text-[var(--sc-text)] dark-any:text-white/90">Manager Activity</h3>
-          </div>
-          <span className="text-xs text-[var(--sc-text-muted)] dark-any:text-white/35">{sorted.length} manager{sorted.length !== 1 ? "s" : ""}</span>
-        </div>
-
         {/* Scroll container */}
         <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
         <table className="w-full text-sm" style={{ minWidth: 720 }}>
@@ -420,19 +407,15 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
             <tr className="bg-[var(--sc-blue)] dark-any:bg-white/[0.02] border-b border-[var(--sc-blue-2)] dark-any:border-white/6 text-[9px] uppercase tracking-widest text-white/70 dark-any:text-white/30">
               <SortableTh sortKey="team" activeKey={sortKey} dir={sortDir} onSort={toggle} align="left" className="text-left font-bold px-3 md:px-5 py-2.5 whitespace-nowrap">Manager</SortableTh>
               <SortableTh sortKey="score" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</SortableTh>
-              <SortableTh sortKey="risk" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Risk</SortableTh>
               <SortableTh sortKey="trans" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</SortableTh>
               <SortableTh sortKey="trades" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trades</SortableTh>
               <SortableTh sortKey="waiv" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Waiv</SortableTh>
               <SortableTh sortKey="fa" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">FA</SortableTh>
-              <SortableTh sortKey="lineup" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Lineup</SortableTh>
-              <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</SortableTh>
               <SortableTh sortKey="lastMove" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Last Move</SortableTh>
             </tr>
           </thead>
           <tbody>
             {sorted.map((m) => {
-              const rl = riskLabel(m.inactivityRiskScore);
               return (
                 <tr
                   key={m.rosterId}
@@ -455,14 +438,11 @@ function ManagerActivityTab({ leagueId }: { leagueId: string }) {
                       </div>
                     </div>
                   </td>
-                  <td className="text-center px-2"><Chip className={activityLabelColor(m.activityLabel)}>{m.activityScore}</Chip></td>
-                  <td className="text-center px-2"><Chip className={rl.color}>{rl.text}</Chip></td>
+                  <td className={`text-center px-2 font-bold tabular-nums ${scoreTextColor(m.activityScore)}`}>{m.activityScore}</td>
                   <td className="text-center px-2 font-semibold tabular-nums text-[var(--sc-text)] dark-any:text-white/70">{m.transactionsCount}</td>
                   <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{m.tradesCount}</td>
                   <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{m.waiverCount}</td>
                   <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{m.freeAgentCount}</td>
-                  <td className="text-center px-2">{m.lineupChanged ? <span className="font-semibold text-emerald-600 dark-any:text-emerald-400">Yes</span> : <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">No</span>}</td>
-                  <td className="text-center px-2">{m.emptyStarterSlots > 0 ? <span className="font-bold tabular-nums text-orange-600 dark-any:text-orange-400">{m.emptyStarterSlots}</span> : <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">0</span>}</td>
                   <td className="text-center px-2 text-xs tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{daysAgo(m.lastTransactionTs)}</td>
                 </tr>
               );
@@ -505,18 +485,12 @@ function SettingsTab({ leagueId }: { leagueId: string }) {
 
   const numFields: { key: keyof ActivitySettings; label: string }[] = [
     { key: "inactiveTransactionWeeks", label: "Inactive after N weeks without a transaction" },
-    { key: "inactiveLineupWeeks", label: "Inactive after N weeks without a lineup change" },
-    { key: "unchangedLineupWeeks", label: "Flag unchanged lineup after N weeks" },
     { key: "lowActivityScoreThreshold", label: "Low league activity score threshold" },
     { key: "inactiveManagerScoreThreshold", label: "Inactive manager score threshold" },
   ];
   const boolFields: { key: keyof ActivitySettings; label: string }[] = [
-    { key: "flagEmptyStarters", label: "Flag empty starter slots" },
     { key: "flagNoTransactions", label: "Flag no recent transactions" },
-    { key: "flagUnchangedLineups", label: "Flag unchanged lineups" },
     { key: "flagLowLeagueActivity", label: "Flag low league activity" },
-    { key: "ignoreLineupChecksInOffseason", label: "Ignore lineup checks in offseason" },
-    { key: "ignoreLineupChecksForBestBall", label: "Ignore lineup checks for best ball" },
     { key: "includeTradesInActivityScore", label: "Include trades in activity score" },
     { key: "includeWaiversInActivityScore", label: "Include waivers in activity score" },
     { key: "includeFreeAgentMovesInActivityScore", label: "Include free agent moves in activity score" },

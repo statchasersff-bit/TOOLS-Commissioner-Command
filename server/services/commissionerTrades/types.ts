@@ -62,6 +62,8 @@ export interface SleeperTransaction {
 export interface SleeperRosterLite {
   roster_id: number;
   owner_id?: string | null;
+  /** Additional managers who share this roster (Sleeper co-owners). */
+  co_owners?: string[] | null;
 }
 
 /** Sleeper league-user record (subset). */

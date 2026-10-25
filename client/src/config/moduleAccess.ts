@@ -27,13 +27,10 @@
 export type AccessRequirement = "public" | "readonly" | "full";
 
 export const MODULE_ACCESS: Record<string, AccessRequirement> = {
-  // Command Center (Portfolio tab). The module opens with a Sleeper username;
-  // Lineup Command is an action tool that requires a logged-in
-  // StatChasers account (full).
+  // Command Center (Portfolio tab). The module opens with a Sleeper username.
   "portfolio:connect": "public", // legacy connect screen — no gate
   "portfolio:portfolio-summary": "readonly",
   "portfolio:finances": "readonly",
-  "portfolio:lineup-command": "full",
 
   // Lineup Integrity — standalone module (cross-league dashboard). A
   // Commissioner Command surface that self-resolves the commissioner's leagues
@@ -44,12 +41,10 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   // League Analyzer
   "league-analyzer:league-activity": "readonly",    // Transactions live here as a sub-tab
   "league-analyzer:all-league-scan": "readonly",    // cross-league activity comparison
+  "league-analyzer:managers": "readonly",           // cross-league manager directory
   "league-analyzer:commanders-report": "readonly",
 
-  // Trade Center. Calculator is a league-scoped analytic — it can't render
-  // without a loaded league, so it needs at least a connected Sleeper username
-  // (readonly).
-  "trade-center:trade-calculator": "readonly",      // Calculator
+  // Trade Center.
   "trade-center:trade-review": "readonly",          // Review Center — needs a league
   "trade-center:bulk-trade": "readonly",
   "trade-center:bulk-trades": "readonly",
@@ -60,6 +55,7 @@ export const MODULE_ACCESS: Record<string, AccessRequirement> = {
   "draft:dispersal-draft": "public", // self-contained: join via share code; creating a room requires login (enforced server-side)
   "draft:draft-board":  "full",
   "draft:user-search": "public",        // self-contained Sleeper lookup
+  "draft:collusion-risk": "readonly",   // commissioner tool — scans two users' shared leagues
 
   // Static pages
   "about": "public",

@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { eq, and, gt, isNull, desc } from "drizzle-orm";
+import { eq, and, gt, isNull, desc, inArray } from "drizzle-orm";
 import { authDb } from "./db";
 import { scUsers, emailVerificationCodes, scConnectedAccounts, type UserPreferences } from "@shared/schema";
 
@@ -395,6 +395,43 @@ export async function connectSleeper(
       .insert(scConnectedAccounts)
       .values({ userId, provider: "sleeper", sleeperUsername, sleeperUserId, encryptedToken });
   }
+}
+
+/**
+ * Resolve which of the given Sleeper user ids are linked to a StatChasers
+ * account. Powers the system-controlled "verified" badge in the Manager
+ * Directory — a manager is verified ONLY when their Sleeper user id appears
+ * here, which can only happen by the account holder linking it while logged in.
+ * Returns a map keyed by Sleeper user id.
+ */
+export async function getVerifiedSleeperLinks(
+  sleeperUserIds: string[],
+): Promise<Map<string, { statChasersUserId: string; sleeperUsername: string | null }>> {
+  const map = new Map<string, { statChasersUserId: string; sleeperUsername: string | null }>();
+  const ids = Array.from(new Set(sleeperUserIds.filter(Boolean)));
+  if (ids.length === 0) return map;
+  const rows = await getDb()
+    .select({
+      userId: scConnectedAccounts.userId,
+      sleeperUserId: scConnectedAccounts.sleeperUserId,
+      sleeperUsername: scConnectedAccounts.sleeperUsername,
+    })
+    .from(scConnectedAccounts)
+    .where(
+      and(
+        eq(scConnectedAccounts.provider, "sleeper"),
+        inArray(scConnectedAccounts.sleeperUserId, ids),
+      ),
+    );
+  for (const r of rows) {
+    if (r.sleeperUserId && !map.has(r.sleeperUserId)) {
+      map.set(r.sleeperUserId, {
+        statChasersUserId: r.userId,
+        sleeperUsername: r.sleeperUsername ?? null,
+      });
+    }
+  }
+  return map;
 }
 
 export async function disconnectSleeper(userId: string): Promise<void> {

@@ -21,7 +21,7 @@ import {
   countTransactionTypesForRoster,
   countLineupEventsForRoster,
   getManagerDisplayName,
-  getTeamName,
+  getRosterTeamName,
   getWeeksToScan,
 } from "./helpers";
 import { parseTransactionEvents, countAddsDropsForRoster, type PlayersById } from "./parseTransactions";
@@ -182,7 +182,7 @@ export async function ingestLeagueActivityForLeague(input: IngestInput): Promise
         rosterId,
         ownerId: roster.owner_id ? String(roster.owner_id) : null,
         managerName: getManagerDisplayName(user, roster),
-        teamName: getTeamName(user, roster),
+        teamName: getRosterTeamName(user, roster),
         transactionsCount: txnCounts.transactionsCount,
         tradesCount: txnCounts.tradesCount,
         waiverCount: txnCounts.waiverCount,

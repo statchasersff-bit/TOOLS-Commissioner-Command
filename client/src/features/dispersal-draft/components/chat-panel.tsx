@@ -49,9 +49,9 @@ function MessageRow({ msg, isCommissioner, participantId, commissionerToken, onD
 
   if (msg.type === "announcement") {
     return (
-      <div className="mx-2 my-1.5 px-2.5 py-2 rounded-sm border border-primary/40 bg-primary/8">
+      <div className="mx-2 my-1.5 px-2.5 py-2 rounded-lg border border-primary/40 bg-primary/8">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-[9px] font-black uppercase tracking-widest text-primary/70">📣 Announcement</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest text-primary/70">📣 Announcement</span>
           <span className="text-[9px] text-muted-foreground/40 ml-auto">{formatTime(msg.createdAt)}</span>
         </div>
         <p className="text-xs font-semibold text-foreground/90 leading-relaxed">{msg.message}</p>
@@ -135,7 +135,7 @@ function MessageRow({ msg, isCommissioner, participantId, commissionerToken, onD
                 <button
                   key={emoji}
                   onClick={() => onReact(msg.id, emoji)}
-                  className="text-[11px] px-1 py-0.5 rounded hover:bg-muted/40 text-muted-foreground/40 hover:text-foreground/70 transition-colors"
+                  className="text-[11px] px-1 py-0.5 rounded-lg hover:bg-muted/40 text-muted-foreground/40 hover:text-foreground/70 transition-colors"
                   title={`React ${emoji}`}
                 >
                   {emoji}
@@ -233,7 +233,7 @@ export function ChatPanel({
       {isCommissioner && showAnnounce && (
         <div className="shrink-0 flex gap-1.5 px-2 py-2 border-b border-border/40 bg-primary/5">
           <input
-            className="flex-1 text-xs bg-background border border-primary/40 rounded px-2 py-1 focus:outline-none focus:border-primary/70 text-foreground placeholder:text-muted-foreground/40"
+            className="flex-1 text-xs bg-background border border-primary/40 rounded-lg px-2 py-1 focus:outline-none focus:border-primary/70 text-foreground placeholder:text-muted-foreground/40"
             placeholder="Announcement text…"
             value={announceText}
             onChange={e => setAnnounceText(e.target.value)}
@@ -241,7 +241,7 @@ export function ChatPanel({
             autoFocus
             maxLength={500}
           />
-          <button onClick={handleAnnounce} className="text-[10px] font-black uppercase tracking-widest text-primary/80 hover:text-primary border border-primary/40 hover:border-primary/70 rounded px-2 transition-colors">Post</button>
+          <button onClick={handleAnnounce} className="text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:text-primary border border-primary/40 hover:border-primary/70 rounded-lg px-2 transition-colors">Post</button>
           <button onClick={() => setShowAnnounce(false)} className="text-[11px] text-muted-foreground/40 hover:text-foreground transition-colors">✕</button>
         </div>
       )}
@@ -280,7 +280,7 @@ export function ChatPanel({
             >📣</button>
           )}
           <input
-            className="flex-1 text-xs bg-background border border-border/40 rounded px-2.5 py-1.5 focus:outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/35 min-w-0"
+            className="flex-1 text-xs bg-background border border-border/40 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/35 min-w-0"
             placeholder={isCommissioner ? "Message or 📣 for announcement…" : "Message…"}
             value={input}
             onChange={e => setInput(e.target.value.slice(0, 500))}
@@ -290,7 +290,7 @@ export function ChatPanel({
           <button
             onClick={handleSend}
             disabled={isSending || !input.trim()}
-            className="shrink-0 text-[10px] font-black uppercase tracking-widest text-primary/80 hover:text-primary disabled:text-muted-foreground/25 disabled:cursor-not-allowed border border-primary/30 hover:border-primary/60 disabled:border-border/20 rounded px-2 py-1.5 transition-colors"
+            className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-primary/80 hover:text-primary disabled:text-muted-foreground/25 disabled:cursor-not-allowed border border-primary/30 hover:border-primary/60 disabled:border-border/20 rounded-lg px-2 py-1.5 transition-colors"
           >
             Send
           </button>

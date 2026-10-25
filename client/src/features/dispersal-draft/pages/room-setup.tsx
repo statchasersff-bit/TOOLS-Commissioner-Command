@@ -23,7 +23,7 @@ import SleeperImport from "@dispersal/components/sleeper-import";
 import { sleeperThumb, sleeperTeamLogo, positionColor } from "@dispersal/lib/sleeper";
 import { PickBadgeGroup } from "@dispersal/components/pick-badge";
 import { PlayerSearchInput } from "@dispersal/components/player-search-input";
-import { Panel, PanelHeader, SectionTitle } from "@dispersal/components/ui";
+import { Panel, PanelHeader, SectionTitle, Chip, CHIP_TONE } from "@dispersal/components/ui";
 
 type WizardMode = "choice" | "sleeper" | "manual";
 type ManualStep = "settings" | "assets" | "managers" | "review";
@@ -328,7 +328,7 @@ export default function RoomSetup() {
   if (isLoading) return <div className="p-8 text-primary font-bold">Loading...</div>;
   if (!detail) return <div className="p-8 text-destructive font-bold">Room not found</div>;
   if (!commissionerToken || detail.room.commissionerToken !== commissionerToken) {
-    return <div className="flex h-screen items-center justify-center text-destructive font-bold uppercase tracking-widest bg-background">Unauthorized. Commissioner access required.</div>;
+    return <div className="flex h-screen items-center justify-center text-destructive font-bold bg-background">Unauthorized. Commissioner access required.</div>;
   }
 
   const { room } = detail;
@@ -347,7 +347,7 @@ export default function RoomSetup() {
       <p className="text-xs text-muted-foreground mb-4 relative z-10">Customize your 5-character code, then share the code and website link with managers.</p>
       <div className="relative z-10 space-y-4">
         <div>
-          <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Your Room Code</div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2">Your Room Code</div>
           {codeSaved ? (
             <div className="flex items-center gap-2">
               <div className="px-3 py-2 bg-background border border-emerald-500/40 rounded-lg font-mono text-sm font-bold text-primary select-all tracking-widest">
@@ -391,7 +391,7 @@ export default function RoomSetup() {
         <Button
           type="button"
           disabled={!codeSaved}
-          className="w-full font-black uppercase tracking-widest text-xs h-10 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full font-bold text-xs h-10 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={() => {
             const msg = `You're invited to my dispersal draft on StatChasers!\n\n🌐 Website: www.statchasers.com/dispersal-draft-tool\n🔑 Room Code: ${code}\n\nGo to the website, click "Join Draft", enter the room code, and claim your orphan slot.`;
             navigator.clipboard.writeText(msg);
@@ -544,7 +544,7 @@ export default function RoomSetup() {
 
   return (
     <div className="text-foreground">
-      <div className="max-w-4xl mx-auto px-5 py-10">
+      <div className="max-w-4xl">
 
         {/* Page header */}
         <div className="mb-8">
@@ -578,10 +578,10 @@ export default function RoomSetup() {
         {wizard === "choice" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Sleeper card */}
-            <div className="rounded-2xl border-2 border-primary/60 bg-[var(--sc-card-bg)] dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)] p-7 flex flex-col shadow-lg shadow-primary/5 hover:border-primary transition-colors">
+            <Panel className="p-7 flex flex-col border-[#d4af37]/40 hover:border-[#d4af37]/70 transition-colors">
               <div className="flex items-center gap-2.5 mb-3">
                 <h2 className="text-lg font-bold text-foreground tracking-tight">Import From Sleeper</h2>
-                <span className="px-2 py-0.5 bg-primary text-background text-[9px] font-black uppercase tracking-widest rounded-md flex-shrink-0">Recommended</span>
+                <Chip className={CHIP_TONE.gold}>Recommended</Chip>
               </div>
               <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
                 Connect your Sleeper league to automatically import teams, players, draft picks, and league settings.
@@ -589,20 +589,20 @@ export default function RoomSetup() {
               <ul className="space-y-2.5 mb-7 flex-1">
                 {["Auto-load league name & settings", "Select which orphan teams to include", "Import all players and picks", "Fastest setup, done in minutes"].map(b => (
                   <li key={b} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="text-primary font-black mt-0.5 flex-shrink-0">✓</span> {b}
+                    <span className="text-[#d4af37] font-black mt-0.5 flex-shrink-0">✓</span> {b}
                   </li>
                 ))}
               </ul>
               <Button
-                className="w-full font-black uppercase tracking-widest h-11 text-sm"
+                className="w-full font-bold h-11 text-sm"
                 onClick={() => { setWizard("sleeper"); setSleeperPhase("import"); setSleeperStepName("username"); }}
               >
                 Import From Sleeper →
               </Button>
-            </div>
+            </Panel>
 
             {/* Manual card */}
-            <div className="rounded-2xl border border-[var(--sc-border)] bg-[var(--sc-card-bg)] shadow-[var(--sc-shadow-card)] dark-any:border-white/6 dark-any:shadow-none dark-any:bg-[linear-gradient(180deg,rgba(4,13,26,0.9)_0%,rgba(4,10,20,0.95)_100%)] p-7 flex flex-col hover:border-border/80 transition-colors">
+            <Panel className="p-7 flex flex-col hover:border-border/80 transition-colors">
               <h2 className="text-lg font-bold text-foreground tracking-tight mb-3">Manual / CSV Setup</h2>
               <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
                 Build a custom dispersal draft room for non-Sleeper leagues or offline setups.
@@ -610,18 +610,18 @@ export default function RoomSetup() {
               <ul className="space-y-2.5 mb-7 flex-1">
                 {["Create orphan slots manually", "Upload assets via CSV", "Add players and picks one by one", "Full custom control"].map(b => (
                   <li key={b} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="text-primary font-black mt-0.5 flex-shrink-0">✓</span> {b}
+                    <span className="text-[#d4af37] font-black mt-0.5 flex-shrink-0">✓</span> {b}
                   </li>
                 ))}
               </ul>
               <Button
                 variant="secondary"
-                className="w-full font-black uppercase tracking-widest h-11 text-sm"
+                className="w-full font-bold h-11 text-sm"
                 onClick={() => { setWizard("manual"); setManualStep("settings"); }}
               >
                 Manual Setup →
               </Button>
-            </div>
+            </Panel>
           </div>
         )}
 
@@ -723,7 +723,7 @@ export default function RoomSetup() {
                           </FormItem>
                         )} />
                         <PauseWindowFields form={settingsForm} />
-                        <Button type="submit" variant="secondary" className="w-full font-bold uppercase tracking-widest" disabled={updateRoom.isPending}>
+                        <Button type="submit" variant="secondary" className="w-full font-bold" disabled={updateRoom.isPending}>
                           {updateRoom.isPending ? "Saving..." : "Save Settings"}
                         </Button>
                       </form>
@@ -746,7 +746,7 @@ export default function RoomSetup() {
                       {picks.length > 0 && (
                         <div className="p-3 bg-background border border-border/50 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Draft Picks ({picks.length})</div>
+                            <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Draft Picks ({picks.length})</div>
                             <Button variant="ghost" size="sm"
                               className={`h-6 px-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${clearPicksConfirm ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "text-destructive hover:text-destructive hover:bg-destructive/10"}`}
                               onClick={onClearAllPicks} disabled={clearingPicks} onBlur={() => setClearPicksConfirm(false)}>
@@ -764,7 +764,7 @@ export default function RoomSetup() {
                               <div className="space-y-2 mt-1">
                                 {keys.map(team => (
                                   <div key={team}>
-                                    <div className="text-[9px] uppercase tracking-widest font-bold text-primary/70 mb-1 border-b border-border/30 pb-1">{team}</div>
+                                    <div className="text-[9px] uppercase tracking-wider font-bold text-primary/70 mb-1 border-b border-border/30 pb-1">{team}</div>
                                     <PickBadgeGroup assets={groups[team]} onDelete={onDeleteAsset} onReassign={onReassignAsset} rosterNames={allRosterNames} />
                                   </div>
                                 ))}
@@ -804,7 +804,7 @@ export default function RoomSetup() {
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setReassigningAssetId(null)} />
                                     <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg shadow-lg min-w-40 py-1 text-xs text-foreground">
-                                      <div className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-widest text-muted-foreground border-b border-border/40 mb-1">Move to roster</div>
+                                      <div className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1">Move to roster</div>
                                       {allRosterNames.map(n => (
                                         <button key={n} type="button"
                                           className="w-full text-left px-2 py-1.5 hover:bg-primary/10 hover:text-primary transition-colors truncate"
@@ -873,7 +873,7 @@ export default function RoomSetup() {
                             </FormItem>
                           )} />
                         </div>
-                        <Button type="submit" size="sm" className="font-bold uppercase tracking-widest" disabled={createAsset.isPending}>
+                        <Button type="submit" size="sm" className="font-bold" disabled={createAsset.isPending}>
                           {createAsset.isPending ? "Adding..." : "Add Asset"}
                         </Button>
                       </form>
@@ -888,7 +888,7 @@ export default function RoomSetup() {
 
                   <a
                     href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/${code}`}
-                    className="flex items-center justify-center w-full py-3 bg-primary text-background font-black uppercase tracking-widest rounded-lg hover:bg-primary/90 transition-colors text-sm"
+                    className="flex items-center justify-center w-full py-3 bg-primary text-background font-bold rounded-lg hover:bg-primary/90 transition-colors text-sm"
                   >
                     Go to Draft Room →
                   </a>
@@ -986,7 +986,7 @@ export default function RoomSetup() {
                   </Form>
                 </Panel>
                 <div className="flex justify-end">
-                  <Button form="settings-form" type="submit" className="font-bold uppercase tracking-widest" disabled={updateRoom.isPending}>
+                  <Button form="settings-form" type="submit" className="font-bold" disabled={updateRoom.isPending}>
                     {updateRoom.isPending ? "Saving..." : "Next: Add Assets →"}
                   </Button>
                 </div>
@@ -1042,7 +1042,7 @@ export default function RoomSetup() {
                             </FormItem>
                           )} />
                         </div>
-                        <Button type="submit" size="sm" className="font-bold uppercase tracking-widest" disabled={createAsset.isPending}>Add Asset</Button>
+                        <Button type="submit" size="sm" className="font-bold" disabled={createAsset.isPending}>Add Asset</Button>
                       </form>
                     </Form>
                   </Panel>
@@ -1057,7 +1057,7 @@ export default function RoomSetup() {
                       className="font-mono text-xs bg-background border-border/50 h-28 mb-3"
                       placeholder={"Bijan Robinson,Player,RB,ATL,\n1.01,Rookie Pick,,,\n$100,FAAB,,,"}
                     />
-                    <Button onClick={onImportCsv} variant="secondary" size="sm" className="font-bold uppercase tracking-widest" disabled={importCsv.isPending}>
+                    <Button onClick={onImportCsv} variant="secondary" size="sm" className="font-bold" disabled={importCsv.isPending}>
                       {importCsv.isPending ? "Importing..." : "Import CSV"}
                     </Button>
                   </Panel>
@@ -1079,7 +1079,7 @@ export default function RoomSetup() {
                     {picks.length > 0 && (
                       <div className="p-3 bg-background border border-border/50 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Draft Picks ({picks.length})</div>
+                          <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Draft Picks ({picks.length})</div>
                           <Button variant="ghost" size="sm"
                             className={`h-6 px-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${clearPicksConfirm ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "text-destructive hover:text-destructive hover:bg-destructive/10"}`}
                             onClick={onClearAllPicks} disabled={clearingPicks} onBlur={() => setClearPicksConfirm(false)}>
@@ -1097,7 +1097,7 @@ export default function RoomSetup() {
                             <div className="space-y-2 mt-1">
                               {keys.map(team => (
                                 <div key={team}>
-                                  <div className="text-[9px] uppercase tracking-widest font-bold text-primary/70 mb-1 border-b border-border/30 pb-1">{team}</div>
+                                  <div className="text-[9px] uppercase tracking-wider font-bold text-primary/70 mb-1 border-b border-border/30 pb-1">{team}</div>
                                   <PickBadgeGroup assets={groups[team]} onDelete={onDeleteAsset} onReassign={onReassignAsset} rosterNames={allRosterNames} />
                                 </div>
                               ))}
@@ -1137,7 +1137,7 @@ export default function RoomSetup() {
                                 <>
                                   <div className="fixed inset-0 z-40" onClick={() => setReassigningAssetId(null)} />
                                   <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg shadow-lg min-w-40 py-1 text-xs text-foreground">
-                                    <div className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-widest text-muted-foreground border-b border-border/40 mb-1">Move to roster</div>
+                                    <div className="px-2 pb-1 pt-0.5 text-[9px] uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1">Move to roster</div>
                                     {allRosterNames.map(n => (
                                       <button key={n} type="button"
                                         className="w-full text-left px-2 py-1.5 hover:bg-primary/10 hover:text-primary transition-colors truncate"
@@ -1162,7 +1162,7 @@ export default function RoomSetup() {
                 </Panel>
 
                 <div className="flex justify-end">
-                  <Button className="font-bold uppercase tracking-widest" onClick={() => setManualStep("managers")}>
+                  <Button className="font-bold" onClick={() => setManualStep("managers")}>
                     Next: Invite Managers →
                   </Button>
                 </div>
@@ -1246,7 +1246,7 @@ export default function RoomSetup() {
                 </Panel>
 
                 <div className="flex justify-end">
-                  <Button className="font-bold uppercase tracking-widest" onClick={() => setManualStep("review")}>
+                  <Button className="font-bold" onClick={() => setManualStep("review")}>
                     Next: Review & Start →
                   </Button>
                 </div>
@@ -1280,7 +1280,7 @@ export default function RoomSetup() {
                 {room.status === "setup" ? (
                   <Button
                     onClick={onStartDraft}
-                    className="w-full font-black uppercase tracking-widest h-12"
+                    className="w-full font-bold h-12"
                     disabled={startDraft.isPending || managersJoined < room.numOrphanSlots || !allAssets.length}
                   >
                     {startDraft.isPending ? "Starting Draft..." : managersJoined < room.numOrphanSlots ? `Waiting for managers (${managersJoined}/${room.numOrphanSlots})` : !allAssets.length ? "Add assets first" : "Start Draft →"}

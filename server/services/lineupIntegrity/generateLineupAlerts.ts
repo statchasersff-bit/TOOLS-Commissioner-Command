@@ -102,24 +102,38 @@ export function generateLineupAlerts(
     });
   }
 
+  // Strongest start/sit gaps first — used to spell out the specific players.
+  const benchSwaps = [...(check.suspiciousBenchingDetails ?? [])].sort(
+    (a, b) => b.projectionGap - a.projectionGap,
+  );
+  const topSwap = benchSwaps[0];
+
   if (settings.enableSuspiciousBenchingChecks && check.suspiciousBenchings > 0) {
+    const more = benchSwaps.length > 1 ? ` (+${benchSwaps.length - 1} more)` : "";
     alerts.push({
       ...base,
       alertType: "suspicious_benching",
       severity: check.suspiciousBenchings >= 2 ? "high" : "medium",
       title: "Potential Suspicious Benching",
-      description: `${team} started a player while a clearly stronger eligible option was on the bench in Week ${wk}.`,
+      // Spell out the actual start/sit — e.g. "Started X (proj 8.2) over Y (proj 16.4) at FLEX".
+      description: topSwap
+        ? `Started ${topSwap.starterName} (proj ${round1(topSwap.starterProjection)}) over ${topSwap.benchName} (proj ${round1(topSwap.benchProjection)})${slotLabel(topSwap.lineupSlot)}${more}.`
+        : `${team} started a player while a clearly stronger eligible option was on the bench in Week ${wk}.`,
       suggestedAction: "Review the lineup context before issuing any warning.",
     });
   }
 
   if (check.optimalityGap >= settings.optimalityGapWarning) {
+    const gapText = `Projected lineup ${round1(check.optimalityGap)} pts below the estimated optimal in Week ${wk}.`;
     alerts.push({
       ...base,
       alertType: "large_optimality_gap",
       severity: check.optimalityGap >= settings.optimalityGapCritical ? "high" : "medium",
       title: "Large Lineup Gap",
-      description: `${team}'s projected lineup was ${round1(check.optimalityGap)} points below the estimated optimal lineup in Week ${wk}.`,
+      // Lead with the biggest single improvement so the gap is concrete.
+      description: topSwap
+        ? `${gapText} Biggest available improvement: ${topSwap.benchName} (proj ${round1(topSwap.benchProjection)}) over ${topSwap.starterName} (proj ${round1(topSwap.starterProjection)})${slotLabel(topSwap.lineupSlot)}.`
+        : gapText,
       suggestedAction: "Review whether this reflects a strategic decision or a lineup-setting lapse.",
     });
   }
@@ -166,6 +180,11 @@ function plural(n: number, noun: string): string {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+/** " at FLEX" for a real starting slot; "" for bench/unknown. */
+function slotLabel(slot: string | null): string {
+  return slot && slot !== "BN" ? ` at ${slot}` : "";
 }
 
 /** Severity ordering helper (for sorting "top alerts"). */

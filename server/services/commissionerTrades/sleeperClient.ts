@@ -83,6 +83,9 @@ export interface SleeperLeagueMeta {
   league_id: string;
   name?: string;
   season?: string;
+  status?: string;
+  /** Prior-season instance of the same league (for multi-season lineage walks). */
+  previous_league_id?: string | null;
   settings?: Record<string, number>;
   scoring_settings?: Record<string, number>;
   roster_positions?: string[];

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useSleeper } from "@/contexts/SleeperContext";
 
 // ── Sleeper API Types ──────────────────────────────────────────────────────────
 
@@ -103,13 +104,31 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
   const queryClient = useQueryClient();
   const importCsv = useImportAssetsFromCsv();
 
+  // The commissioner is already connected to Sleeper in the main app, so reuse
+  // that account: prefill the username and auto-run the lookup instead of making
+  // them retype it. Falls back to manual entry if no one is connected.
+  const { user: appSleeperUser } = useSleeper();
+  const accountUsername = appSleeperUser?.username ?? "";
+  const autoLookupTried = useRef(false);
+
   const [step, setStep] = useState<Step>("username");
 
   useEffect(() => {
     onStepChange?.(step);
   }, [step]);
 
-  const [username, setUsername] = useState("");
+  // Once the connected Sleeper account resolves, drop it into the field and run
+  // the lookup automatically (one time, only while still on the username step).
+  useEffect(() => {
+    if (autoLookupTried.current) return;
+    if (!accountUsername || step !== "username") return;
+    autoLookupTried.current = true;
+    setUsername(accountUsername);
+    handleLookup(accountUsername);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountUsername, step]);
+
+  const [username, setUsername] = useState(accountUsername);
   const season = (() => {
     const now = new Date();
     return now.getMonth() >= 2 ? String(now.getFullYear()) : String(now.getFullYear() - 1);
@@ -129,12 +148,13 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
 
   // ── Step 1: lookup user and their leagues ──────────────────────────────────
 
-  const handleLookup = async () => {
-    if (!username.trim()) return;
+  const handleLookup = async (overrideUsername?: string) => {
+    const lookupName = (typeof overrideUsername === "string" ? overrideUsername : username).trim();
+    if (!lookupName) return;
     setLoadingLeagues(true);
     setScanningLeagues(false);
     try {
-      const user = await sleeperGet<SleeperUser>(`/user/${username.trim().toLowerCase()}`);
+      const user = await sleeperGet<SleeperUser>(`/user/${lookupName.toLowerCase()}`);
       if (!user?.user_id) throw new Error("User not found");
       setSleeperUser(user);
 
@@ -459,13 +479,13 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleLookup()}
               disabled={loadingLeagues || step === "importing"}
-              className="bg-background border-border/50"
+              className="bg-background border-[var(--sc-border)] dark-any:border-white/10"
             />
           </div>
         </div>
         <Button
           data-testid="button-sleeper-lookup"
-          onClick={handleLookup}
+          onClick={() => handleLookup()}
           disabled={!username.trim() || loadingLeagues || step === "importing"}
           variant="secondary"
           className="font-bold uppercase tracking-widest w-full"
@@ -476,7 +496,7 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
 
       {/* Sleeper user pill */}
       {sleeperUser && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-sm">
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg">
           {sleeperUser.avatar && (
             <img
               src={`https://sleepercdn.com/avatars/thumbs/${sleeperUser.avatar}`}
@@ -493,7 +513,7 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
 
       {/* No leagues with orphans found */}
       {step === "leagues" && leagues.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-3 border border-border/40 rounded-sm bg-muted/20">
+        <p className="text-sm text-muted-foreground text-center py-3 border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg bg-muted/20">
           No leagues with orphan teams found for this account.
         </p>
       )}
@@ -509,14 +529,14 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
           </div>
 
           {/* Always-visible searchable list — selected league highlighted */}
-          <div className="border border-border/50 rounded-sm overflow-hidden">
-            <div className="p-2 border-b border-border/40 bg-background/60">
+          <div className="border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg overflow-hidden">
+            <div className="p-2 border-b border-[var(--sc-border)] dark-any:border-white/10 bg-background/60">
               <Input
                 data-testid="input-league-search"
                 placeholder="Search leagues..."
                 value={leagueSearch}
                 onChange={(e) => setLeagueSearch(e.target.value)}
-                className="h-7 text-sm bg-background border-border/50"
+                className="h-7 text-sm bg-background border-[var(--sc-border)] dark-any:border-white/10"
               />
             </div>
             <div className="max-h-52 overflow-y-auto">
@@ -542,18 +562,18 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
                         }`}
                     >
                       {l.avatar
-                        ? <img src={`https://sleepercdn.com/avatars/thumbs/${l.avatar}`} alt="" className="w-6 h-6 rounded-sm object-cover flex-shrink-0 bg-muted" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                        : <div className="w-6 h-6 rounded-sm bg-muted flex-shrink-0" />
+                        ? <img src={`https://sleepercdn.com/avatars/thumbs/${l.avatar}`} alt="" className="w-6 h-6 rounded-lg object-cover flex-shrink-0 bg-muted" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        : <div className="w-6 h-6 rounded-lg bg-muted flex-shrink-0" />
                       }
                       <span className="flex-1 truncate">{l.name}</span>
                       <span className="text-[10px] font-mono uppercase opacity-60 flex-shrink-0">{l.season}</span>
                       {l.orphanCount != null && !isSelected && (
-                        <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-sm px-1.5 py-0.5 flex-shrink-0">
+                        <span className="text-[10px] font-bold text-amber-600 dark-any:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-1.5 py-0.5 flex-shrink-0">
                           {l.orphanCount} orphan{l.orphanCount !== 1 ? "s" : ""}
                         </span>
                       )}
                       {isSelected && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex-shrink-0 border border-primary/40 rounded-sm px-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary flex-shrink-0 border border-primary/40 rounded-lg px-1">
                           Selected
                         </span>
                       )}
@@ -598,7 +618,7 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
               <label
                 key={team.rosterId}
                 data-testid={`orphan-team-${team.rosterId}`}
-                className="flex items-start gap-3 p-3 bg-background border border-border/50 rounded-sm cursor-pointer hover:border-primary/40 transition-colors"
+                className="flex items-start gap-3 p-3 bg-background border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg cursor-pointer hover:border-primary/40 transition-colors"
               >
                 <Checkbox
                   checked={selectedRosterIds.has(team.rosterId)}
@@ -608,7 +628,7 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-sm truncate">{team.teamName}</div>
                   {team.playerCount === 0 ? (
-                    <div className="text-[10px] uppercase tracking-wider text-amber-500 font-bold font-mono">
+                    <div className="text-[10px] uppercase tracking-wider text-amber-600 dark-any:text-amber-400 font-bold font-mono">
                       Pre-draft — no players yet
                     </div>
                   ) : (
@@ -625,7 +645,7 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
             data-testid="button-sleeper-import"
             onClick={handleImport}
             disabled={selectedRosterIds.size === 0 || importCsv.isPending}
-            className="w-full font-black uppercase tracking-widest"
+            className="w-full font-bold uppercase tracking-widest"
           >
             Import {selectedRosterIds.size} Team{selectedRosterIds.size !== 1 ? "s" : ""}
           </Button>
@@ -633,14 +653,14 @@ export default function SleeperImport({ roomId, shareCode, commissionerToken, co
       )}
 
       {orphanTeams.length === 0 && step === "orphans" && !loadingOrphans && (
-        <p className="text-sm text-muted-foreground text-center py-4 border border-border/30 rounded-sm">
+        <p className="text-sm text-muted-foreground text-center py-4 border border-[var(--sc-border)] dark-any:border-white/10 rounded-lg">
           No orphan teams found in this league
         </p>
       )}
 
       {/* Step 4 – Import progress */}
       {step === "importing" && (
-        <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/30 rounded-sm">
+        <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/30 rounded-lg">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
           <span className="text-sm font-medium text-primary">{importProgress}</span>
         </div>

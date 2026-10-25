@@ -20,7 +20,9 @@
       "Bash(awk NR==3 *)",
       "Bash(awk NR==4 *)",
       "Bash(awk NR==5{print} NR==6{print} NR==7{print} NR==8{print} NR==9{print} *)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(git ls-remote *)",
+      "Bash(git rev-list *)"
     ]
   }
 }

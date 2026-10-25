@@ -53,8 +53,10 @@ export function detectSuspiciousBenchings(input: {
       results.push({
         starterPlayerId: starter.playerId,
         starterName: starter.playerName,
+        starterProjection: round1(starter.projection),
         benchPlayerId: bestBench.playerId,
         benchName: bestBench.playerName,
+        benchProjection: round1(bestBench.projection),
         lineupSlot: starter.lineupSlot,
         projectionGap,
         valueGap,

@@ -2,8 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { getFantasyCalcValues, getFantasyCalcRedraftValues } from "./fantasycalc";
 import { getKtcValues, getKtcRedraftValues } from "./ktc";
-import { getValueFinderPlayers as getValueFinderPlayerPool } from "./valueFinder";
-import { buildMarketPlayers, computeSummary, filterMarketPlayers } from "@shared/market/marketModel";
 import { rebuildBasketSnapshots } from "./portfolioBasketValue";
 import {
   getPortfolioTimeline,
@@ -18,16 +16,11 @@ import {
   fetchSleeperLeagues,
   fetchSleeperLeagueFull,
   fetchPortfolioSummary,
-  fetchCrossLeagueTrades,
   fetchLeagueTransactions,
   fetchManagerRoster,
   type SleeperLeagueSummary,
 } from "./sleeper";
 import {
-  startCrawl,
-  pauseCrawl,
-  resumeCrawl,
-  getCrawlStatus,
   searchTrades,
   getTradeStats,
   getMostTradedPlayers,
@@ -51,9 +44,7 @@ import {
   refreshAdpSnapshot,
   refreshDefaultSnapshots,
   reclassifyAdpDrafts,
-  getAdp,
   getAdpInclusionStatus,
-  getAdpStats,
   startAdpScheduler,
   backfillLeagueScoring,
   type AdpFilters,
@@ -182,7 +173,6 @@ const playoffCalcCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL
 const weeklyMatchupsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — live scores need fresher data
 const statChasersDataCache = makeCache<any>(10 * 60 * 1000); // 10-min TTL — public-data repo JSON
 const scheduleCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — NFL week schedule (kickoff/lock state)
-const adpStatsCache = makeCache<any>(5 * 60 * 1000); // 5-min TTL — two count(*) queries, hit on every Draft tab load
 // Per-user resolved custom values. Hit on every page load (and by several
 // widgets at once), each call running getResolvedValues' DB queries. Short-TTL
 // + single-flight (keyed by userId) collapses the page-load burst to one query
@@ -249,26 +239,6 @@ export async function registerRoutes(
     }
   });
 
-  // Aggregated Value Finder pool — real market values + Sleeper production +
-  // StatChasers usage + market-value trends, joined by Sleeper ID. Custom
-  // values are overlaid when the request carries an authenticated SC user.
-  app.get("/api/value-finder/players", async (req, res) => {
-    try {
-      const format = (req.query.format as string) === "1qb" ? "1qb" : "sf";
-      const scoringRaw = String(req.query.scoring ?? "ppr");
-      const scoring =
-        scoringRaw === "half_ppr" || scoringRaw === "std" ? scoringRaw : "ppr";
-      const seasonRaw = parseInt(String(req.query.season ?? "2025"), 10);
-      const season = Number.isFinite(seasonRaw) ? seasonRaw : 2025;
-      const userId = getUserIdFromRequest(req) ?? undefined;
-      const players = await getValueFinderPlayerPool({ season, format, scoring, userId });
-      res.json({ players });
-    } catch (err: any) {
-      console.error("Value Finder pool error:", err);
-      res.status(500).json({ error: err.message || "Failed to build Value Finder pool" });
-    }
-  });
-
   app.get("/api/values/ktc", async (req, res) => {
     try {
       const format = (req.query.format as string) || "sf";
@@ -308,48 +278,6 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("FantasyCalc redraft fetch error:", err);
       res.status(500).json({ error: err.message || "Failed to fetch redraft values" });
-    }
-  });
-
-  // Market Inefficiencies — computes the normalized MarketPlayer dataset + buy/
-  // sell summary for a given value source & format using the shared model, so
-  // the client gets a single source of truth and 1QB/Superflex "just work".
-  // The page also computes Superflex client-side for instant/offline first
-  // paint; this endpoint backs the 1QB toggle and external/API consumers.
-  app.get("/api/market-inefficiencies", async (req, res) => {
-    try {
-      const format = (req.query.format as string) === "1qb" ? "1qb" : "sf";
-      const sourceRaw = (req.query.valueSource as string)?.toLowerCase() || "fantasycalc";
-      const valueSource = sourceRaw === "ktc" ? "ktc" : "fantasycalc";
-
-      const num = (v: unknown) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : undefined;
-      };
-      const ageMin = num(req.query.ageMin);
-      const ageMax = num(req.query.ageMax);
-      const minMarketValue = num(req.query.minMarketValue);
-      const position = (req.query.position as string) || undefined;
-      const search = (req.query.search as string) || undefined;
-
-      const [dynasty, redraft] = await Promise.all([
-        valueSource === "ktc" ? getKtcValues(format) : getFantasyCalcValues(format),
-        valueSource === "ktc" ? getKtcRedraftValues(format) : getFantasyCalcRedraftValues(format),
-      ]);
-
-      const sourceLabel = valueSource === "ktc" ? "KeepTradeCut" : "FantasyCalc";
-      const all = buildMarketPlayers(
-        dynasty.players,
-        redraft.valuesBySleeperId,
-        sourceLabel,
-      );
-      const players = filterMarketPlayers(all, { position, ageMin, ageMax, minMarketValue, search });
-      const summary = computeSummary(players);
-
-      res.json({ players, summary });
-    } catch (err: any) {
-      console.error("Market inefficiencies error:", err);
-      res.status(500).json({ error: err.message || "Failed to compute market inefficiencies" });
     }
   });
 
@@ -656,61 +584,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/sleeper/cross-league-trades", async (req, res) => {
-    try {
-      const { userId, currentLeagueId, rosterPlayerIds } = req.body;
-      if (!userId || !currentLeagueId || !Array.isArray(rosterPlayerIds) || rosterPlayerIds.length === 0) {
-        return res.status(400).json({ error: "userId, currentLeagueId, and a non-empty rosterPlayerIds array are required" });
-      }
-      const result = await fetchCrossLeagueTrades(userId, currentLeagueId, rosterPlayerIds);
-      res.json(result);
-    } catch (err: any) {
-      console.error("Cross-league trades error:", err);
-      res.status(500).json({ error: err.message || "Failed to fetch cross-league trades" });
-    }
-  });
-
-  app.post("/api/crawler/start", async (req, res) => {
-    try {
-      const { username } = req.body;
-      if (!username) {
-        return res.status(400).json({ error: "username is required" });
-      }
-      const status = await startCrawl(username);
-      res.json(status);
-    } catch (err: any) {
-      console.error("Crawler start error:", err);
-      res.status(500).json({ error: err.message || "Failed to start crawler" });
-    }
-  });
-
-  app.post("/api/crawler/pause", async (_req, res) => {
-    try {
-      const status = await pauseCrawl();
-      res.json(status);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to pause crawler" });
-    }
-  });
-
-  app.post("/api/crawler/resume", async (_req, res) => {
-    try {
-      const status = await resumeCrawl();
-      res.json(status);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to resume crawler" });
-    }
-  });
-
-  app.get("/api/crawler/status", async (_req, res) => {
-    try {
-      const status = await getCrawlStatus();
-      res.json(status);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to get crawler status" });
-    }
-  });
-
   app.get("/api/trades/search", async (req, res) => {
     try {
       const params = {
@@ -920,9 +793,9 @@ export async function registerRoutes(
 
   app.post("/api/finances", requireFinanceAuth, async (req, res) => {
     try {
-      const { sleeperUserId, leagueId, season, buyIn, prizes, payments, notes, isFree, ignored, leagueSafeUrl } = req.body;
+      const { sleeperUserId, leagueId, season, buyIn, prizes, payments, notes, isFree, ignored, leagueSafeUrl, leagueSafeStatus, dueDate, paymentRule } = req.body;
       if (!sleeperUserId || !leagueId) return res.status(400).json({ error: "sleeperUserId and leagueId required" });
-      const result = await upsertLeagueFinance({ sleeperUserId, leagueId, season: season || "2026", buyIn: buyIn ?? 0, prizes: prizes ?? [], payments: payments ?? [], notes, isFree: isFree ?? false, ignored: ignored ?? false, leagueSafeUrl });
+      const result = await upsertLeagueFinance({ sleeperUserId, leagueId, season: season || "2026", buyIn: buyIn ?? 0, prizes: prizes ?? [], payments: payments ?? [], notes, isFree: isFree ?? false, ignored: ignored ?? false, leagueSafeUrl, leagueSafeStatus, dueDate, paymentRule });
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message || "Failed to save finances" });
@@ -1226,13 +1099,6 @@ export async function registerRoutes(
     }
   });
 
-  // Health probe matching the playoff-calculator one — confirms /api/adp/*
-  // is reachable independent of the snapshot/Sleeper chain. Must be defined
-  // before /api/adp so it isn't shadowed by the catch-all query handler.
-  app.get("/api/adp/health", (_req, res) => {
-    res.json({ ok: true, route: "adp", ts: Date.now() });
-  });
-
   // ── NFL week schedule (kickoff times + game state) ─────────────────────────
   // Proxies the public ESPN scoreboard so the Lineup Command engine can lock
   // players whose game has started. Returns { TEAM: { start: ms, state } } where
@@ -1277,177 +1143,6 @@ export async function registerRoutes(
       console.error("[/api/schedule] error:", err?.message);
       // Degrade gracefully — empty schedule means "no one is locked".
       res.json({});
-    }
-  });
-
-  // Corpus-wide ADP totals for the explorer banner (total drafts ingested).
-  // Defined before the /api/adp catch-all so it isn't shadowed. Cached briefly.
-  app.get("/api/adp/stats", async (_req, res) => {
-    const startMs = Date.now();
-    try {
-      const stats = await adpStatsCache.getOrCompute("stats", () => getAdpStats());
-      res.setHeader("Cache-Control", "public, max-age=300");
-      res.json(stats);
-    } catch (err: any) {
-      const c = classifyDbError(err);
-      console.error(
-        `[ADP /api/adp/stats] FAILED [${c.kind}] in ${Date.now() - startMs}ms ` +
-        `pool=${pool.totalCount}/${POOL_MAX} waiting=${pool.waitingCount} :: ${c.detail}`,
-      );
-      res.status(500).json({ ok: false, error: c.error, detail: c.detail, kind: c.kind });
-    }
-  });
-
-  // ── ADP: cached read endpoint ─────────────────────────────────────────────
-  // Filters arrive as query params and map 1:1 onto AdpFilters. The handler
-  // never reaches out to Sleeper — it serves the most recent adp_snapshots
-  // row for the keyed filter set, with a fallback to computing live against
-  // our own draft_picks table when no snapshot exists yet.
-  //
-  // Response shape:
-  //   { items: AdpRow[],
-  //     meta: { computed_at, draft_count, pick_count, filter_key,
-  //             is_empty, cached, snapshot_date, message?, filters } }
-  //
-  // We never 500 for "no data ingested yet" — that case returns 200 with
-  // is_empty=true so the frontend can render an empty state instead of an
-  // error banner.
-  app.get("/api/adp", async (req, res) => {
-    const startMs = Date.now();
-    try {
-      const q = req.query;
-      const num = (v: unknown) => {
-        if (v === undefined || v === null || v === "" || v === "all") return undefined;
-        const n = parseInt(String(v), 10);
-        return Number.isFinite(n) ? n : undefined;
-      };
-      const str = <T extends string>(v: unknown, allowed: readonly T[]): T | "all" | undefined => {
-        if (v === undefined || v === null || v === "") return undefined;
-        const s = String(v);
-        if (s === "all") return "all";
-        return (allowed as readonly string[]).includes(s) ? (s as T) : undefined;
-      };
-
-      // Season parsing — accepts:
-      //   ?season=2026          → string
-      //   ?season=2026,2025     → comma-list expanded to array
-      //   ?season=all           → no season filter (admin tooling)
-      //   omitted               → defaults to current year inside AdpFilters
-      const parseSeason = (v: unknown): AdpFilters["season"] => {
-        if (v === undefined || v === null || v === "") return undefined;
-        const s = String(v).trim();
-        if (s === "all") return "all";
-        if (s.includes(",")) {
-          const parts = s.split(",").map((x) => x.trim()).filter(Boolean);
-          return parts.length > 1 ? parts : parts[0];
-        }
-        return s;
-      };
-
-      const filters: AdpFilters = {
-        season: parseSeason(q.season),
-        draftType: str(q.draftType, ["startup", "rookie", "supplemental"] as const) ?? "startup",
-        draftFormat: str(q.draftFormat, ["snake", "auction", "linear"] as const) ?? "snake",
-        scoring: str(q.scoring, ["ppr", "half", "standard"] as const) ?? "all",
-        superflex: str(q.superflex, ["yes", "no"] as const) ?? "all",
-        tePremium: str(q.tePremium, ["yes", "no"] as const) ?? "all",
-        bestBall: str(q.bestBall, ["yes", "no"] as const) ?? "all",
-        leagueMode: str(q.leagueMode, ["dynasty", "keeper", "redraft"] as const) ?? "dynasty",
-        teams: num(q.teams) ?? "all",
-        rookieMode: (str(q.rookieMode, ["picks", "direct", "both"] as const) ?? "direct") as AdpFilters["rookieMode"],
-        passTd: (num(q.passTd) === 6 ? 6 : num(q.passTd) === 4 ? 4 : "all") as AdpFilters["passTd"],
-        startDate: typeof q.startDate === "string" ? q.startDate : undefined,
-        endDate: typeof q.endDate === "string" ? q.endDate : undefined,
-      };
-
-      console.log("[ADP /api/adp] query:", q);
-      console.log("[ADP /api/adp] filters:", filters);
-
-      // getAdp() now owns an in-process memory cache + request coalescing (see
-      // server/adp.ts), so identical concurrent reads — the hot default filter
-      // hit on every Draft tab load — collapse to ONE DB query + ONE pool
-      // connection instead of stampeding all 60 slots. That cache is busted on
-      // snapshot refresh via invalidateAdpMemCache, so we deliberately do NOT
-      // add a second cache layer here (it couldn't see that invalidation and
-      // would serve stale data after a refresh).
-      const result = await getAdp(filters);
-
-      // Pool diagnostics on every ADP read so saturation is visible in the logs
-      // (totalCount = open connections, waitingCount = requests queued for a slot).
-      console.log(
-        `[ADP /api/adp] key=${result.filterKey} cached=${result.cached} ` +
-        `${result.stale ? "stale " : ""}${result.computing ? "computing " : ""}` +
-        `drafts=${result.draftCount} picks=${result.pickCount} rows=${result.rows.length} ` +
-        `in ${Date.now() - startMs}ms ` +
-        `pool=${pool.totalCount}/${POOL_MAX} idle=${pool.idleCount} waiting=${pool.waitingCount}`
-      );
-
-      const isEmpty = result.rows.length === 0;
-      // A "computing" placeholder must NOT be cached by the browser/CDN — it
-      // would pin the empty state past the few seconds the background compute
-      // needs. Real results stay cacheable for 5 minutes.
-      res.setHeader("Cache-Control", result.computing ? "no-store" : "public, max-age=300");
-      res.json({
-        items: result.rows,
-        meta: {
-          computed_at: isEmpty && result.draftCount === 0 ? null : result.computedAt,
-          draft_count: result.draftCount,
-          pick_count: result.pickCount,
-          filter_key: result.filterKey,
-          is_empty: isEmpty,
-          cached: result.cached,
-          stale: result.stale ?? false,
-          // True → rows are being built in the background; client should retry.
-          computing: result.computing ?? false,
-          snapshot_date: result.snapshotDate,
-          message: result.computing
-            ? "Building ADP for this filter… retry in a few seconds."
-            : isEmpty && result.draftCount === 0
-              ? "No ADP data has been ingested yet."
-              : undefined,
-          filters,
-        },
-      });
-    } catch (err: any) {
-      // Classify so a pool-acquire timeout (DB fine, pool saturated) reads
-      // differently from a real DB-unreachable / slow-query failure — and so
-      // the user-facing banner says something actionable instead of the raw,
-      // misleading "timeout exceeded when trying to connect".
-      const c = classifyDbError(err);
-      const durationMs = Date.now() - startMs;
-      console.error(
-        `[ADP /api/adp] FAILED [${c.kind}] in ${durationMs}ms ` +
-        `params=${JSON.stringify(req.query)} ` +
-        `pool=${pool.totalCount}/${POOL_MAX} waiting=${pool.waitingCount} ` +
-        `:: ${c.detail}`,
-      );
-      const userMessage =
-        c.kind === "pool-acquire-timeout"
-          ? "Could not connect to the ADP database (server busy — connection pool saturated). Please retry."
-          : c.kind === "connect"
-            ? "Could not reach the ADP database. Please check server logs."
-            : c.kind === "query-timeout"
-              ? "The ADP query timed out. Try a narrower date range or fewer filters."
-              : c.error;
-      res.status(500).json({
-        // New, explicit error contract (see also meta.* kept for back-compat).
-        ok: false,
-        error: userMessage,
-        detail: c.detail,
-        kind: c.kind,
-        items: [],
-        meta: {
-          computed_at: null,
-          draft_count: 0,
-          pick_count: 0,
-          filter_key: null,
-          is_empty: true,
-          cached: false,
-          snapshot_date: null,
-          message: userMessage,
-          error: true,
-        },
-      });
     }
   });
 

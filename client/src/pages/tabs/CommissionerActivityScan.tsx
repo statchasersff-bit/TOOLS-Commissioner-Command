@@ -3,9 +3,9 @@
  *
  * Scans every league the connected manager is in (best-ball excluded) and
  * renders a single comparison table: league activity score, active/inactive
- * managers, transactions, empty starter slots and open alerts. Mirrors the
- * All-League Scan in the Lineup Integrity module. Read-only — the scan just
- * kicks each league's activity ingest pipeline; nothing writes back to Sleeper.
+ * managers, and transactions. Activity scores on transaction behavior only —
+ * lineup signals are not used. Read-only — the scan just kicks each league's
+ * activity ingest pipeline; nothing writes back to Sleeper.
  */
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -21,19 +21,11 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, RefreshCw, Users, ListChecks, ShieldAlert, ArrowRight, LayoutGrid } from "lucide-react";
 import {
-  refreshActivity, fetchMultiOverview,
+  refreshActivity, fetchMultiOverview, scoreTextColor,
   type MultiLeagueRow,
 } from "@/lib/commissionerActivityApi";
 
 const GOLD = "#d4af37";
-
-function Chip({ className = "", children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${className}`}>
-      {children}
-    </span>
-  );
-}
 
 function KpiCard({ icon: Icon, label, value, accent = "slate" }: {
   icon: typeof Activity; label: string; value: React.ReactNode;
@@ -96,20 +88,23 @@ function timeAgo(iso: string | null): string {
 
 const num = (v: number | null | undefined) => (v == null ? "—" : v);
 
-const LEAGUE_TYPE_META: Record<string, { label: string; cls: string }> = {
-  dynasty: { label: "Dynasty", cls: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30 dark-any:text-indigo-400" },
-  keeper:  { label: "Keeper",  cls: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark-any:text-amber-400" },
-  redraft: { label: "Redraft", cls: "bg-slate-500/10 text-slate-600 border-slate-500/30 dark-any:text-slate-400" },
+const LEAGUE_TYPE_META: Record<string, { label: string }> = {
+  dynasty: { label: "Dynasty" },
+  keeper:  { label: "Keeper" },
+  redraft: { label: "Redraft" },
 };
 
-export default function CommissionerActivityScan() {
+export default function CommissionerActivityScan({
+  onOpenLeague,
+}: {
+  /** Open the per-league League Activity tab for the given league. */
+  onOpenLeague?: (leagueId: string) => void;
+} = {}) {
   const sleeper = useSleeper();
   const { toast } = useToast();
 
-  // Best-ball leagues are included, but only their waiver/FA/trade activity is
-  // scored — the server skips lineup-based signals (empty starters, lineup
-  // changes) for them since best-ball auto-sets lineups. We badge them in the
-  // table and blank the lineup-only columns so the score reads correctly.
+  // Activity scores purely on transaction behavior (trades / waivers / FA);
+  // lineup signals are not used. Best-ball leagues are included and badged "BB".
   const scanLeagues = sleeper.leagues;
   const leagueIds = scanLeagues.map((l) => l.leagueId);
   const nameById = Object.fromEntries(scanLeagues.map((l) => [l.leagueId, l.name]));
@@ -171,6 +166,14 @@ export default function CommissionerActivityScan() {
   );
   const totalTransactions = rows.reduce((s, r) => s + (r.totalTransactions ?? 0), 0);
 
+  // Most recent scan across all leagues, surfaced above the table.
+  const lastScannedAt = rows.reduce<string | null>((latest, r) => {
+    const ts = r.lastScan ?? null;
+    if (!ts) return latest;
+    if (!latest) return ts;
+    return Date.parse(ts) > Date.parse(latest) ? ts : latest;
+  }, null);
+
   // One display row per scanned league (rows may not yet have data for every id).
   const tableRows = leagueIds.map((id) => {
     const row = rows.find((r) => r.leagueId === id);
@@ -185,8 +188,6 @@ export default function CommissionerActivityScan() {
       score: (r) => r.row?.leagueActivityScore,
       active: (r) => r.row?.activeManagerCount,
       trans: (r) => r.row?.totalTransactions,
-      empty: (r) => r.row?.totalEmptyStarterSlots,
-      lastScan: (r) => r.row?.lastScan,
     },
     { defaultKey: "score", defaultDir: "desc" },
   );
@@ -207,25 +208,11 @@ export default function CommissionerActivityScan() {
 
   return (
     <div className="space-y-5">
-      {/* Page header — title left, scan button top-right (desktop). */}
-      <div className="flex items-start justify-between gap-4">
-        <SectionHeader
-          title="All-League Scan"
-          subtitle="Scan every league you're in and compare activity scores, engagement and transactions side by side."
-        />
-        <div className="flex items-center gap-3 flex-shrink-0 pt-1">
-          <Button
-            size="sm"
-            onClick={() => scanMut.mutate({})}
-            disabled={scanning || leagueIds.length === 0}
-            style={{ background: GOLD, color: "#1a1206" }}
-            data-testid="button-scan-all-leagues"
-          >
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${scanning ? "animate-spin" : ""}`} />
-            {scanning ? "Scanning…" : "Scan Leagues"}
-          </Button>
-        </div>
-      </div>
+      {/* Page header — scanning runs automatically when the tab opens. */}
+      <SectionHeader
+        title="All-League Scan"
+        subtitle="Scan every league you're in and compare activity scores, engagement and transactions side by side."
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -235,10 +222,22 @@ export default function CommissionerActivityScan() {
         <KpiCard icon={ListChecks} label="Total Transactions" value={totalTransactions} accent="slate" />
       </div>
 
-      {/* Swipe hint — mobile only */}
-      <div className="flex items-center justify-end gap-1.5 md:hidden -mb-2 px-1">
-        <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/25">Swipe to view</span>
-        <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark-any:text-white/20" />
+      {/* Last scanned (left) + swipe hint (mobile, right) */}
+      <div className="flex items-center justify-between gap-2 -mb-2 px-1">
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--sc-text-muted)] dark-any:text-white/40" data-testid="text-last-scanned">
+          {scanning ? (
+            <>
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              Last scanned: Scanning…
+            </>
+          ) : (
+            <>Last scanned: {timeAgo(lastScannedAt)}</>
+          )}
+        </span>
+        <span className="flex items-center gap-1.5 md:hidden">
+          <span className="text-[10px] text-[var(--sc-text-muted)] dark-any:text-white/25">Swipe to view</span>
+          <ArrowRight className="w-3 h-3 text-[var(--sc-text-muted)]/70 dark-any:text-white/20" />
+        </span>
       </div>
 
       {/* League table */}
@@ -258,8 +257,7 @@ export default function CommissionerActivityScan() {
                 <SortableTh sortKey="score" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Score</SortableTh>
                 <SortableTh sortKey="active" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Active</SortableTh>
                 <SortableTh sortKey="trans" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Trans</SortableTh>
-                <SortableTh sortKey="empty" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 py-2.5 whitespace-nowrap">Empty</SortableTh>
-                <SortableTh sortKey="lastScan" activeKey={sortKey} dir={sortDir} onSort={toggle} align="center" className="text-center font-bold px-2 md:px-5 py-2.5 whitespace-nowrap">Last Scan</SortableTh>
+                <th className="text-center font-bold px-2 md:px-5 py-2.5 whitespace-nowrap">View</th>
               </tr>
             </thead>
             <tbody>
@@ -267,13 +265,13 @@ export default function CommissionerActivityScan() {
                 Array.from({ length: Math.max(1, Math.min(leagueIds.length, 6)) }).map((_, i) => (
                   <tr key={i} className="border-b border-[#edf2f7] dark-any:border-white/5 last:border-0">
                     <td className="px-3 md:px-5 py-3"><Skeleton className="h-4 w-40" /></td>
-                    {Array.from({ length: 6 }).map((__, j) => (
+                    {Array.from({ length: 5 }).map((__, j) => (
                       <td key={j} className="px-2 py-3"><Skeleton className="h-4 w-10 mx-auto" /></td>
                     ))}
                   </tr>
                 ))
               ) : leagueIds.length === 0 ? (
-                <tr><td colSpan={7} className="text-center text-sm text-muted-foreground py-12">No eligible leagues to scan.</td></tr>
+                <tr><td colSpan={6} className="text-center text-sm text-muted-foreground py-12">No eligible leagues to scan.</td></tr>
               ) : (
                 sorted.map(({ id, name, row }) => {
                   const score = row?.leagueActivityScore ?? null;
@@ -288,34 +286,29 @@ export default function CommissionerActivityScan() {
                         <div className="flex items-center gap-2.5 min-w-0">
                           <LeagueAvatar avatar={avatarById[id] ?? null} name={name} />
                           <span className="font-bold truncate text-[var(--sc-blue)] dark-any:text-white/90">{name}</span>
-                          {isBestBall && (
-                            <Chip className="flex-shrink-0 bg-sky-500/10 text-sky-600 border-sky-500/30 dark-any:text-sky-400">Best Ball</Chip>
-                          )}
                         </div>
                       </td>
-                      <td className="text-center px-2">
-                        {(() => {
-                          const meta = LEAGUE_TYPE_META[leagueTypeById[id] ?? "redraft"];
-                          return <Chip className={meta.cls}>{meta.label}</Chip>;
-                        })()}
+                      <td className="text-center px-2 text-[var(--sc-text)] dark-any:text-white/70">
+                        {LEAGUE_TYPE_META[leagueTypeById[id] ?? "redraft"].label}{isBestBall ? " BB" : ""}
                       </td>
-                      <td className="text-center px-2 font-bold tabular-nums" style={score != null ? { color: GOLD } : undefined}>
+                      <td className={`text-center px-2 font-bold tabular-nums ${score != null ? scoreTextColor(score) : "text-[var(--sc-text-muted)] dark-any:text-white/40"}`}>
                         {score != null ? `${score}` : "—"}
                       </td>
                       <td className="text-center px-2 font-semibold tabular-nums text-[var(--sc-text)] dark-any:text-white/70">
                         {row?.activeManagerCount != null ? `${row.activeManagerCount}/${totalRostersById[id] ?? "?"}` : "—"}
                       </td>
                       <td className="text-center px-2 tabular-nums text-[var(--sc-text-muted)] dark-any:text-white/40">{num(row?.totalTransactions)}</td>
-                      <td className="text-center px-2 tabular-nums">
-                        {isBestBall ? (
-                          <span className="text-[var(--sc-text-muted)] dark-any:text-white/40" title="Not tracked for best ball leagues">—</span>
-                        ) : row?.totalEmptyStarterSlots ? (
-                          <span className="font-bold text-red-600 dark-any:text-red-400">{row.totalEmptyStarterSlots}</span>
-                        ) : (
-                          <span className="text-[var(--sc-text-muted)] dark-any:text-white/40">{num(row?.totalEmptyStarterSlots)}</span>
-                        )}
+                      <td className="text-center px-2 md:px-5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={(e) => { e.stopPropagation(); onOpenLeague?.(id); }}
+                          data-testid={`scan-view-${id}`}
+                        >
+                          View <ArrowRight className="w-3 h-3 ml-1" />
+                        </Button>
                       </td>
-                      <td className="text-center px-2 md:px-5 text-xs text-[var(--sc-text-muted)] dark-any:text-white/40 whitespace-nowrap">{timeAgo(row?.lastScan ?? null)}</td>
                     </tr>
                   );
                 })

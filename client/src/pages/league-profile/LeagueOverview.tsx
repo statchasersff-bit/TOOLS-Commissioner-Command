@@ -68,8 +68,6 @@ export function LeagueOverview({ leagueId, league, onOpenTab }: {
   const needsAttention = useMemo(() => {
     const items: { text: string; tab: ProfileTabId }[] = [];
     if (inactive > 0) items.push({ text: `${inactive} manager${inactive === 1 ? "" : "s"} flagged inactive`, tab: "managers" });
-    if (lineupIssues > 0) items.push({ text: `${lineupIssues} empty starter slot${lineupIssues === 1 ? "" : "s"} this week`, tab: "lineups" });
-    if (unreviewedTrades > 0) items.push({ text: `${unreviewedTrades} trade${unreviewedTrades === 1 ? "" : "s"} need review`, tab: "trades" });
     if (openFlags + activeStrikes > 0) items.push({ text: `${openFlags + activeStrikes} open commissioner flag${openFlags + activeStrikes === 1 ? "" : "s"}`, tab: "log" });
     if (openAlerts > 0) items.push({ text: `${openAlerts} open activity alert${openAlerts === 1 ? "" : "s"}`, tab: "operations" });
     return items;
@@ -90,8 +88,8 @@ export function LeagueOverview({ leagueId, league, onOpenTab }: {
       {/* Status cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard icon={HeartPulse} label="Health Score" value={snap?.leagueActivityScore != null ? `${snap.leagueActivityScore}` : "—"} sub={snap ? "/ 100" : "no scan yet"} accent="gold" onClick={() => onOpenTab("operations")} />
-        <StatCard icon={ShieldAlert} label="Lineup Issues" value={lineupIssues} accent={lineupIssues ? "red" : "slate"} onClick={() => onOpenTab("lineups")} />
-        <StatCard icon={ArrowRightLeft} label="Trades to Review" value={unreviewedTrades} accent={unreviewedTrades ? "yellow" : "slate"} onClick={() => onOpenTab("trades")} />
+        <StatCard icon={ShieldAlert} label="Lineup Issues" value={lineupIssues} accent={lineupIssues ? "red" : "slate"} />
+        <StatCard icon={ArrowRightLeft} label="Trades to Review" value={unreviewedTrades} accent={unreviewedTrades ? "yellow" : "slate"} />
         <StatCard icon={Coins} label="Finance" value="View" accent="emerald" onClick={() => onOpenTab("finance")} />
         <StatCard icon={Flag} label="Active Flags" value={openFlags + activeStrikes} accent={(openFlags + activeStrikes) ? "red" : "slate"} onClick={() => onOpenTab("log")} />
         <StatCard icon={Activity} label="Recent Activity" value={snap?.totalTransactions ?? "—"} sub="transactions" accent="blue" onClick={() => onOpenTab("operations")} />

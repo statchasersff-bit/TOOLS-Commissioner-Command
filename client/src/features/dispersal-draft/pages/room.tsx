@@ -573,7 +573,7 @@ export default function Room() {
             const timerProps = onClockP ? getTimerProps(onClockP) : null;
             return (
               <div className="hidden md:flex items-center gap-2">
-                <span className="text-muted-foreground text-sm uppercase font-bold tracking-widest">On Clock:</span>
+                <span className="text-muted-foreground text-sm uppercase font-bold tracking-wider">On Clock:</span>
                 <span className="text-primary font-bold">
                   {onClockP?.username || "Unknown"}
                 </span>
@@ -599,7 +599,7 @@ export default function Room() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-[10px] font-bold uppercase tracking-widest text-amber-600 dark-any:text-amber-400 hover:text-amber-700 dark-any:hover:text-amber-300 hover:bg-amber-500/20 border border-amber-300/50 dark-any:border-amber-400/20"
+                className="h-6 px-2 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark-any:text-amber-400 hover:text-amber-700 dark-any:hover:text-amber-300 hover:bg-amber-500/20 border border-amber-300/50 dark-any:border-amber-400/20"
                 onClick={retractPick}
                 disabled={retracting}
                 title="Undo your pick while it's still your turn window"
@@ -707,7 +707,7 @@ export default function Room() {
         return (
           <div className={`md:hidden flex items-center justify-between px-3 py-2 border-b border-border/40 shrink-0 ${bankEmpty ? 'bg-destructive/10' : 'bg-primary/10'}`}>
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground shrink-0">On Clock</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground shrink-0">On Clock</span>
               <span className={`font-bold text-sm truncate ${bankEmpty ? 'text-destructive' : 'text-primary'}`}>{onClockP?.username || "Unknown"}</span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -766,7 +766,7 @@ export default function Room() {
           return (
             <aside className={`${mobileTab === 'order' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-64 border-r border-border/40 bg-card/30 z-10 shadow-[4px_0_24px_-10px_rgba(0,0,0,0.5)]`}>
               {/* Section: Draft Order */}
-              <div className="px-3 py-2 border-b border-border/40 font-bold text-[9px] tracking-widest text-muted-foreground uppercase bg-card/80 backdrop-blur shrink-0">
+              <div className="px-3 py-2 border-b border-border/40 font-bold text-[9px] tracking-wider text-muted-foreground uppercase bg-card/80 backdrop-blur shrink-0">
                 Draft Order
               </div>
               <div className="flex-1 overflow-y-auto min-h-0">
@@ -842,14 +842,14 @@ export default function Room() {
                 {unassignedParticipants.length > 0 && (
                   <>
                     <div className="px-3 py-1.5 flex items-center justify-between border-t border-border/40 bg-muted/10">
-                      <span className="text-[9px] tracking-widest font-bold text-muted-foreground/50 uppercase">
+                      <span className="text-[9px] tracking-wider font-bold text-muted-foreground/50 uppercase">
                         Unassigned ({unassignedParticipants.length})
                       </span>
                       {isCommissioner && room.status === 'setup' && (
                         <button
                           onClick={randomizeUnassigned}
                           disabled={assigning}
-                          className="text-[9px] font-bold uppercase tracking-widest text-primary/70 hover:text-primary border border-primary/30 hover:border-primary/60 rounded-lg px-1.5 py-0.5 transition-colors disabled:opacity-40"
+                          className="text-[9px] font-bold uppercase tracking-wider text-primary/70 hover:text-primary border border-primary/30 hover:border-primary/60 rounded-lg px-1.5 py-0.5 transition-colors disabled:opacity-40"
                         >
                           Randomize
                         </button>
@@ -878,7 +878,7 @@ export default function Room() {
               {/* Section: Commissioner (pinned at bottom) */}
               {commissioner && (
                 <div className="shrink-0 border-t border-border/40 bg-card/80 px-3 py-2.5">
-                  <div className="text-[9px] tracking-widest font-bold text-muted-foreground/40 uppercase mb-1.5">Commissioner</div>
+                  <div className="text-[9px] tracking-wider font-bold text-muted-foreground/40 uppercase mb-1.5">Commissioner</div>
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 overflow-hidden">
                       {commissioner.sleeperAvatarId ? (
@@ -896,7 +896,7 @@ export default function Room() {
                     </div>
                     <div className="min-w-0">
                       <div className="font-bold text-sm truncate text-foreground/90">{commissioner.username}</div>
-                      <div className="text-[9px] uppercase tracking-widest font-bold text-primary/60">Commissioner</div>
+                      <div className="text-[9px] uppercase tracking-wider font-bold text-primary/60">Commissioner</div>
                     </div>
                   </div>
                 </div>
@@ -946,7 +946,7 @@ export default function Room() {
                           <div className="flex items-center gap-1 min-w-0">
                             <div className={`${isMobile ? 'text-[9px]' : 'text-sm'} font-bold truncate ${isOTC ? 'text-primary' : 'text-foreground/90'}`}>{p.username}</div>
                             {isOTC && !isMobile && (
-                              <span className="animate-otc-badge shrink-0 text-[8px] font-bold uppercase tracking-widest bg-primary text-primary-foreground px-1.5 py-0.5 rounded-lg leading-none">
+                              <span className="animate-otc-badge shrink-0 text-[8px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-1.5 py-0.5 rounded-lg leading-none">
                                 ON THE CLOCK
                               </span>
                             )}
@@ -988,7 +988,7 @@ export default function Room() {
                               ) : (
                                 <div className="text-sm font-bold text-muted-foreground/70 truncate">Slot {pos}</div>
                               )}
-                              <div className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/50 mt-0.5">Open Slot</div>
+                              <div className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground/50 mt-0.5">Open Slot</div>
                             </>
                           )}
                         </>
@@ -1003,7 +1003,7 @@ export default function Room() {
                     {/* Round Indicator */}
                     <div className={`flex items-center justify-center ${isMobile ? '' : 'h-20'}`}>
                       <div className={`flex flex-col items-center gap-0.5 border border-[var(--sc-border)] dark-any:border-white/6 rounded-lg bg-card/50 ${isMobile ? 'px-0.5 py-0.5' : 'px-2 py-1'}`}>
-                        {!isMobile && <span className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/50">Rd</span>}
+                        {!isMobile && <span className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground/50">Rd</span>}
                         <span className={`${isMobile ? 'text-[8px]' : 'text-base'} font-bold text-muted-foreground/80 leading-none`}>{round}</span>
                       </div>
                     </div>
@@ -1096,7 +1096,7 @@ export default function Room() {
                             );
                           })() : isCurrentPickCell ? (
                             <div className="flex flex-col gap-0.5">
-                              {!isMobile && <span className="text-[8px] font-bold uppercase tracking-widest text-primary/80">On the Clock</span>}
+                              {!isMobile && <span className="text-[8px] font-bold uppercase tracking-wider text-primary/80">On the Clock</span>}
                               <div className={`font-bold text-primary truncate ${isMobile ? 'text-[9px]' : 'text-[11px]'}`}>{participant?.username ?? 'Open'}</div>
                               {!isMobile && participant?.orphanTeamName && (
                                 <div className="text-[9px] text-primary/70 truncate">{participant.orphanTeamName}</div>
@@ -1146,7 +1146,7 @@ export default function Room() {
               <button
                 key={t}
                 onClick={() => setRightTab(t)}
-                className={`flex-1 py-2.5 text-[8px] font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${
+                className={`flex-1 py-2.5 text-[8px] font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
                   rightTab === t ? 'text-primary border-primary' : 'text-muted-foreground/40 border-transparent hover:text-muted-foreground/70'
                 }`}
               >
@@ -1161,7 +1161,7 @@ export default function Room() {
             <div className="flex shrink-0 border-b border-border/40 bg-card/80 backdrop-blur">
               <button
                 onClick={() => setAssetsSubTab('pool')}
-                className={`flex-1 py-2.5 text-[9px] font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${
+                className={`flex-1 py-2.5 text-[9px] font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px ${
                   assetsSubTab === 'pool' ? 'text-primary border-primary' : 'text-muted-foreground/50 border-transparent hover:text-muted-foreground/70'
                 }`}
               >
@@ -1169,7 +1169,7 @@ export default function Room() {
               </button>
               <button
                 onClick={() => setAssetsSubTab('queue')}
-                className={`flex-1 py-2.5 text-[9px] font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2.5 text-[9px] font-bold uppercase tracking-wider transition-colors border-b-2 -mb-px flex items-center justify-center gap-1.5 ${
                   assetsSubTab === 'queue'
                     ? 'text-primary border-primary'
                     : canPick && queue.length > 0
@@ -1201,7 +1201,7 @@ export default function Room() {
                     <select
                       value={assetType}
                       onChange={e => { setAssetType(e.target.value as typeof assetType); setPositionFilter("all"); setPickYearFilter("all"); setPickRoundFilter("all"); }}
-                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-wider py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                     >
                       <option value="all">All Assets</option>
                       <option value="Player">Players</option>
@@ -1215,7 +1215,7 @@ export default function Room() {
                       <select
                         value={positionFilter}
                         onChange={e => setPositionFilter(e.target.value as typeof positionFilter)}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-wider py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                       >
                         <option value="all">All Pos</option>
                         <option value="QB">QB</option>
@@ -1231,7 +1231,7 @@ export default function Room() {
                       <select
                         value={pickYearFilter}
                         onChange={e => setPickYearFilter(e.target.value)}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-wider py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                       >
                         <option value="all">All Years</option>
                         {pickYears.map(y => <option key={y} value={y}>'{y}</option>)}
@@ -1244,7 +1244,7 @@ export default function Room() {
                       <select
                         value={pickRoundFilter}
                         onChange={e => setPickRoundFilter(e.target.value)}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-wider py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                       >
                         <option value="all">All Rds</option>
                         {pickRounds.map(r => <option key={r} value={r}>Rd {r}</option>)}
@@ -1256,7 +1256,7 @@ export default function Room() {
                     <select
                       value={assetSort}
                       onChange={e => setAssetSort(e.target.value as typeof assetSort)}
-                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
+                      className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-wider py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70 hover:border-primary/50 transition-colors"
                     >
                       <option value="position">By Pos</option>
                       <option value="alpha">A–Z</option>
@@ -1271,10 +1271,10 @@ export default function Room() {
             canPick ? (
               <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-primary shrink-0 border-b border-primary/60">
                 <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-black uppercase tracking-widest text-primary-foreground/60">Your Pick</div>
-                  <div className="text-sm font-black text-primary-foreground leading-tight">Round {currentRoundNum}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-primary-foreground/60">Your Pick</div>
+                  <div className="text-sm font-bold text-primary-foreground leading-tight">Round {currentRoundNum}</div>
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-widest text-primary-foreground/80 animate-otc-badge shrink-0">On the Clock</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-primary-foreground/80 animate-otc-badge shrink-0">On the Clock</div>
               </div>
             ) : (
               <div className="md:hidden flex items-center gap-2 px-4 py-2 bg-muted/20 border-b border-border/30 shrink-0">
@@ -1294,7 +1294,7 @@ export default function Room() {
               {queue.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-16 px-4 text-center">
                   <div className="text-2xl opacity-20">☆</div>
-                  <div className="text-xs font-bold text-muted-foreground/40 uppercase tracking-widest">Queue is empty</div>
+                  <div className="text-xs font-bold text-muted-foreground/40 uppercase tracking-wider">Queue is empty</div>
                   <div className="text-[11px] text-muted-foreground/30 leading-relaxed">Star any asset in the Pool to add it to your queue.</div>
                 </div>
               ) : (
@@ -1303,7 +1303,7 @@ export default function Room() {
                   {canPick && (
                     <div className="px-3 py-2.5 bg-primary/10 border-b border-primary/20 flex items-center gap-2 shrink-0">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping shrink-0" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-primary/80">You're on the clock — draft from queue</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary/80">You're on the clock — draft from queue</span>
                     </div>
                   )}
                   {/* Queue list */}
@@ -1339,7 +1339,7 @@ export default function Room() {
                           }`} />
 
                           {/* Queue number */}
-                          <div className={`w-5 text-center text-[9px] font-black shrink-0 ml-1.5 ${isTop && !isDrafted ? 'text-primary/60' : 'text-muted-foreground/25'}`}>
+                          <div className={`w-5 text-center text-[9px] font-bold shrink-0 ml-1.5 ${isTop && !isDrafted ? 'text-primary/60' : 'text-muted-foreground/25'}`}>
                             {qIdx + 1}
                           </div>
 
@@ -1353,7 +1353,7 @@ export default function Room() {
                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                               />
                             ) : (
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black ring-1 ring-border/30 transition-all duration-150 ${
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ring-1 ring-border/30 transition-all duration-150 ${
                                 isPlayer ? positionAvatarStyle(qa.position) : isFaab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
                               } ${isDrafted ? 'opacity-50' : 'group-hover:ring-primary/40'}`}>
                                 {isPlayer ? (qa.position ?? "?") : isFaab ? "$" : "·"}
@@ -1380,7 +1380,7 @@ export default function Room() {
                                   <span className="text-[9px] text-destructive/50 uppercase tracking-wider font-bold">Drafted</span>
                                 ) : (
                                   <>
-                                    {isTop && canPick && <span className="text-[9px] text-primary/70 uppercase tracking-widest font-bold">Up next ·</span>}
+                                    {isTop && canPick && <span className="text-[9px] text-primary/70 uppercase tracking-wider font-bold">Up next ·</span>}
                                     {qa.position && <span className={`text-[10px] font-bold ${positionColor(qa.position)}`}>{qa.position}</span>}
                                     {qa.team && <span className="text-[10px] font-bold text-muted-foreground">{qa.team}</span>}
                                   </>
@@ -1399,7 +1399,7 @@ export default function Room() {
                               <button
                                 onClick={handleQueueDraft}
                                 disabled={isDraftPending}
-                                className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg mr-0.5 transition-all disabled:opacity-40 ${
+                                className={`text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg mr-0.5 transition-all disabled:opacity-40 ${
                                   canPick ? 'bg-primary text-primary-foreground shadow-[0_0_8px_hsl(var(--primary)/0.5)]' : 'bg-amber-500/80 text-white'
                                 }`}
                               >
@@ -1420,7 +1420,7 @@ export default function Room() {
                   </div>
                   {/* Clear button */}
                   <div className="px-3 py-2 border-t border-border/20 shrink-0">
-                    <button onClick={clearQueue} className="text-[9px] text-muted-foreground/30 hover:text-muted-foreground/60 uppercase tracking-widest transition-colors">Clear all</button>
+                    <button onClick={clearQueue} className="text-[9px] text-muted-foreground/30 hover:text-muted-foreground/60 uppercase tracking-wider transition-colors">Clear all</button>
                   </div>
                 </>
               )}
@@ -1451,11 +1451,11 @@ export default function Room() {
                     }, {});
                     const teamKeys = Object.keys(teamGroups).sort((a, b) => a === "Unassigned" ? 1 : b === "Unassigned" ? -1 : a.localeCompare(b));
                     return (
-                      <div className="mx-2 mb-1 mt-2 p-3 rounded-sm bg-card border border-border/40 space-y-3">
-                        <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground/70">Draft Picks</div>
+                      <div className="mx-2 mb-1 mt-2 p-3 rounded-xl bg-card border border-[var(--sc-border)] dark-any:border-white/6 space-y-3">
+                        <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground/70">Draft Picks</div>
                         {teamKeys.map(team => (
                           <div key={team}>
-                            <div className="text-[9px] uppercase tracking-widest font-bold text-primary/60 mb-1.5 border-b border-border/30 pb-1">{team}</div>
+                            <div className="text-[9px] uppercase tracking-wider font-bold text-primary/60 mb-1.5 border-b border-border/30 pb-1">{team}</div>
                             <PickBadgeGroup assets={teamGroups[team]} onPick={pickAction} actionLabel={actionLabel} />
                           </div>
                         ))}
@@ -1474,7 +1474,7 @@ export default function Room() {
                           {eThumb ? (
                             <img src={eThumb} alt="" className="w-10 h-10 rounded-full object-cover bg-muted ring-1 ring-border/30" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           ) : (
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black ring-1 ring-border/30 ${isEPlayer ? positionAvatarStyle(info.position) : 'bg-muted text-muted-foreground'}`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ring-1 ring-border/30 ${isEPlayer ? positionAvatarStyle(info.position) : 'bg-muted text-muted-foreground'}`}>
                               {isEPlayer ? (info.position ?? "?") : "$"}
                             </div>
                           )}
@@ -1484,7 +1484,7 @@ export default function Room() {
                           {isEPlayer && info.team && <div className="text-[10px] text-muted-foreground/50">{info.team}</div>}
                         </div>
                         <div className="absolute inset-0 flex items-center justify-end pr-3 bg-gradient-to-l from-background/90 via-background/60 to-transparent">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Drafted by <span className="text-primary/60">{info.draftedBy}</span></span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50">Drafted by <span className="text-primary/60">{info.draftedBy}</span></span>
                         </div>
                       </div>
                     );
@@ -1530,7 +1530,7 @@ export default function Room() {
                               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                             />
                           ) : (
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black ring-1 ring-border/30 group-hover:ring-primary/40 transition-all duration-150 ${
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold ring-1 ring-border/30 group-hover:ring-primary/40 transition-all duration-150 ${
                               isPlayer ? positionAvatarStyle(a.position) : isFaab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
                             }`}>
                               {isPlayer ? (a.position || "?") : isFaab ? "$" : "·"}
@@ -1552,7 +1552,7 @@ export default function Room() {
                           {isPlayer ? (
                             <div className="flex items-center gap-1.5 mt-0.5">
                               {a.position && (
-                                <span className={`text-[10px] font-black ${positionColor(a.position)}`}>{a.position}</span>
+                                <span className={`text-[10px] font-bold ${positionColor(a.position)}`}>{a.position}</span>
                               )}
                               {a.team && (
                                 <span className="text-[10px] font-bold text-muted-foreground">{a.team}</span>
@@ -1585,7 +1585,7 @@ export default function Room() {
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDraft(); }}
                             disabled={isDraftPending}
-                            className={`hidden md:inline-flex text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-sm transition-all duration-150 opacity-0 group-hover:opacity-100 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
+                            className={`hidden md:inline-flex text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all duration-150 opacity-0 group-hover:opacity-100 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed ${
                               canPick
                                 ? 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-[0_0_8px_hsl(var(--primary)/0.4)]'
                                 : canForce
@@ -1601,7 +1601,7 @@ export default function Room() {
                             <button
                               onClick={(e) => { e.stopPropagation(); if (!isDraftPending && (canPick || canForce)) handleDraft(); }}
                               disabled={isDraftPending || (!canPick && !canForce)}
-                              className={`md:hidden w-14 text-center text-[9px] font-black uppercase tracking-widest py-1.5 rounded-sm transition-all duration-150 shrink-0 ${
+                              className={`md:hidden w-14 text-center text-[9px] font-bold uppercase tracking-wider py-1.5 rounded-lg transition-all duration-150 shrink-0 ${
                                 isDraftPending
                                   ? 'bg-primary/40 text-primary-foreground/60 cursor-not-allowed'
                                   : canPick
@@ -1620,8 +1620,8 @@ export default function Room() {
                   })}
 
                   {bankExpiredOnClock && (
-                    <div className="mx-2 mt-3 mb-1 px-3 py-2.5 rounded-sm bg-destructive/10 border border-destructive/30 text-center">
-                      <div className="text-xs font-black uppercase tracking-widest text-destructive">Time Bank Expired</div>
+                    <div className="mx-2 mt-3 mb-1 px-3 py-2.5 rounded-xl bg-destructive/10 border border-destructive/30 text-center">
+                      <div className="text-xs font-bold uppercase tracking-wider text-destructive">Time Bank Expired</div>
                       <div className="text-[10px] text-destructive/70 mt-0.5">The commissioner will assign your pick</div>
                     </div>
                   )}
@@ -1663,13 +1663,13 @@ export default function Room() {
             return (
               <div className={['flex-col flex-1 min-h-0 overflow-hidden', mobileTab === 'roster' ? 'flex' : 'hidden', rightTab === 'roster' ? 'md:flex' : 'md:hidden'].join(' ')}>
                 <div className="p-3 border-b border-border/40 bg-card/80 backdrop-blur shrink-0 flex flex-col gap-2">
-                  <div className="font-bold text-xs tracking-widest text-muted-foreground uppercase">My Roster</div>
+                  <div className="font-bold text-xs tracking-wider text-muted-foreground uppercase">My Roster</div>
                   {sortedParticipants.length > 0 && (
                     <div className="relative">
                       <select
                         value={rosterViewId ?? ''}
                         onChange={e => setViewRosterParticipantId(Number(e.target.value))}
-                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-widest py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70"
+                        className="w-full appearance-none bg-background border border-primary/30 text-foreground text-[10px] font-bold uppercase tracking-wider py-1.5 pl-2.5 pr-6 rounded-lg cursor-pointer focus:outline-none focus:border-primary/70"
                       >
                         {sortedParticipants.map(p => (
                           <option key={p.id} value={p.id}>{p.orphanTeamName ?? p.username}</option>
@@ -1681,14 +1681,14 @@ export default function Room() {
                   {rosterPlayers.length > 0 && (
                     <div className="grid grid-cols-5 gap-1 pt-1">
                       {(['QB', 'RB', 'WR', 'TE'] as const).map(pos => (
-                        <div key={pos} className="flex flex-col items-center py-1.5 bg-card/60 rounded border border-border/30">
-                          <div className={`text-sm font-black ${positionColor(pos)}`}>{posCounts[pos] ?? 0}</div>
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/50">{pos}</div>
+                        <div key={pos} className="flex flex-col items-center py-1.5 bg-card/60 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6">
+                          <div className={`text-sm font-bold ${positionColor(pos)}`}>{posCounts[pos] ?? 0}</div>
+                          <div className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/50">{pos}</div>
                         </div>
                       ))}
-                      <div className="flex flex-col items-center py-1.5 bg-card/60 rounded border border-border/30">
-                        <div className="text-sm font-black text-amber-400/80">{rosterPickAssets.length}</div>
-                        <div className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/50">Picks</div>
+                      <div className="flex flex-col items-center py-1.5 bg-card/60 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6">
+                        <div className="text-sm font-bold text-amber-600 dark-any:text-amber-400">{rosterPickAssets.length}</div>
+                        <div className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground/50">Picks</div>
                       </div>
                     </div>
                   )}
@@ -1701,7 +1701,7 @@ export default function Room() {
                   )}
                   {starters.length > 0 && (
                     <div>
-                      <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2 flex items-center gap-1.5">
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2 flex items-center gap-1.5">
                         <span>Starting Lineup</span>
                         <span className="text-muted-foreground/25 font-normal normal-case tracking-normal text-[8px]">est.</span>
                       </div>
@@ -1709,12 +1709,12 @@ export default function Room() {
                         {starters.map(({ slot, id, asset }) => {
                           const thumb = sleeperThumb(asset.notes ?? null);
                           return (
-                            <div key={id} className="flex items-center gap-2 py-1.5 px-2 bg-card/40 rounded border border-border/20">
-                              <div className="w-9 text-[9px] font-black uppercase tracking-widest text-primary/40 shrink-0">{slot}</div>
+                            <div key={id} className="flex items-center gap-2 py-1.5 px-2 bg-card/40 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6">
+                              <div className="w-9 text-[9px] font-bold uppercase tracking-wider text-primary/40 shrink-0">{slot}</div>
                               {thumb ? (
                                 <img src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-muted shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               ) : (
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 ${positionAvatarStyle(asset.position)}`}>{asset.position ?? '?'}</div>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${positionAvatarStyle(asset.position)}`}>{asset.position ?? '?'}</div>
                               )}
                               <div className="min-w-0 flex-1">
                                 <div className="text-[12px] font-bold truncate leading-tight">{asset.name}</div>
@@ -1728,17 +1728,17 @@ export default function Room() {
                   )}
                   {bench.length > 0 && (
                     <div>
-                      <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2">Bench</div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2">Bench</div>
                       <div className="space-y-0.5">
                         {bench.map(p => {
                           const thumb = sleeperThumb(p.asset.notes ?? null);
                           return (
-                            <div key={p.id} className="flex items-center gap-2 py-1.5 px-2 bg-card/40 rounded border border-border/20 opacity-70">
-                              <div className="w-9 text-[9px] font-black uppercase tracking-widest text-muted-foreground/30 shrink-0">BN</div>
+                            <div key={p.id} className="flex items-center gap-2 py-1.5 px-2 bg-card/40 rounded-lg border border-[var(--sc-border)] dark-any:border-white/6 opacity-70">
+                              <div className="w-9 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/30 shrink-0">BN</div>
                               {thumb ? (
                                 <img src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-muted shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               ) : (
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 ${positionAvatarStyle(p.asset.position)}`}>{p.asset.position ?? '?'}</div>
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${positionAvatarStyle(p.asset.position)}`}>{p.asset.position ?? '?'}</div>
                               )}
                               <div className="min-w-0 flex-1">
                                 <div className="text-[12px] font-bold truncate leading-tight">{p.asset.name}</div>
@@ -1752,20 +1752,20 @@ export default function Room() {
                   )}
                   {rosterPickAssets.length > 0 && (
                     <div>
-                      <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2">Draft Capital</div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2">Draft Capital</div>
                       <div className="flex flex-wrap gap-1.5">
                         {rosterPickAssets.map(p => (
-                          <span key={p.id} className="inline-flex items-center px-2 py-1 bg-primary/10 border border-primary/30 rounded-sm text-[10px] font-black text-primary/80">{p.asset.name}</span>
+                          <span key={p.id} className="inline-flex items-center px-2 py-1 bg-primary/10 border border-primary/30 rounded-lg text-[10px] font-bold text-primary/80">{p.asset.name}</span>
                         ))}
                       </div>
                     </div>
                   )}
                   {rosterFaab.length > 0 && (
                     <div>
-                      <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2">FAAB</div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2">FAAB</div>
                       <div className="flex flex-wrap gap-1.5">
                         {rosterFaab.map(p => (
-                          <span key={p.id} className="inline-flex items-center px-2 py-1 bg-primary/5 border border-primary/20 rounded-sm text-[10px] font-black text-primary/60">{p.asset.name}</span>
+                          <span key={p.id} className="inline-flex items-center px-2 py-1 bg-primary/5 border border-primary/20 rounded-lg text-[10px] font-bold text-primary/60">{p.asset.name}</span>
                         ))}
                       </div>
                     </div>
@@ -1778,19 +1778,19 @@ export default function Room() {
           {/* ── LEAGUE SETTINGS PANEL ────────────────────────────── */}
           <div className={['flex-col flex-1 min-h-0 overflow-hidden', mobileTab === 'settings' ? 'flex' : 'hidden', rightTab === 'settings' ? 'md:flex' : 'md:hidden'].join(' ')}>
             <div className="p-3 border-b border-border/40 bg-card/80 backdrop-blur shrink-0">
-              <div className="font-bold text-xs tracking-widest text-muted-foreground uppercase">League Settings</div>
+              <div className="font-bold text-xs tracking-wider text-muted-foreground uppercase">League Settings</div>
             </div>
             <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-5">
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-sm">
-                <div className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-2">League</div>
-                <div className="text-base font-black text-foreground leading-tight">{room.leagueName}</div>
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                <div className="text-[9px] font-bold uppercase tracking-wider text-primary/50 mb-2">League</div>
+                <div className="text-base font-bold text-foreground leading-tight">{room.leagueName}</div>
                 <div className="text-xs text-muted-foreground mt-1.5">
                   {room.numOrphanSlots}-Team Dynasty &nbsp;·&nbsp; {room.draftFormat === 'snake' ? 'Snake' : room.draftFormat === 'linear' ? 'Linear' : room.draftFormat} Draft
                 </div>
               </div>
               <div>
-                <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-3">Draft Settings</div>
-                <div className="rounded-sm border border-border/30 overflow-hidden">
+                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-3">Draft Settings</div>
+                <div className="rounded-xl border border-[var(--sc-border)] dark-any:border-white/6 overflow-hidden">
                   {([
                     ['Format', room.draftFormat === 'snake' ? 'Snake' : room.draftFormat === 'linear' ? 'Linear' : room.draftFormat],
                     ['Teams', String(room.numOrphanSlots)],
@@ -1806,7 +1806,7 @@ export default function Room() {
               </div>
               {/* ── Sleeper Import ──────────────────────────── */}
               <div>
-                <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-3">Sleeper League</div>
+                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-3">Sleeper League</div>
                 {isCommissioner ? (
                   <div className="space-y-2">
                     <div className="text-[10px] text-muted-foreground/50 leading-relaxed">
@@ -1818,7 +1818,7 @@ export default function Room() {
                         value={sleeperIdInput}
                         onChange={e => setSleeperIdInput(e.target.value)}
                         placeholder="e.g. 1048268895199641600"
-                        className="flex-1 min-w-0 bg-background border border-border/50 text-foreground text-[11px] px-2.5 py-1.5 rounded-sm focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground/30"
+                        className="flex-1 min-w-0 bg-background border border-[var(--sc-border)] dark-any:border-white/10 text-foreground text-[11px] px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-primary/60 placeholder:text-muted-foreground/30"
                       />
                       <button
                         onClick={async () => {
@@ -1832,7 +1832,7 @@ export default function Room() {
                           }
                         }}
                         disabled={sleeperIdSaving || sleeperIdInput.trim() === (room.sleeperLeagueId ?? "")}
-                        className="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 bg-primary/80 text-primary-foreground rounded-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary transition-colors shrink-0"
+                        className="text-[9px] font-bold uppercase tracking-wider px-3 py-1.5 bg-primary/80 text-primary-foreground rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary transition-colors shrink-0"
                       >
                         {sleeperIdSaving ? "…" : "Load"}
                       </button>
@@ -1858,7 +1858,7 @@ export default function Room() {
                     <span className="text-[10px]">Loading from Sleeper…</span>
                   </div>
                 ) : sleeperError ? (
-                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-sm text-[11px] text-destructive/70">
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-[11px] text-destructive/70">
                     Could not load league — check the ID and try again.
                   </div>
                 ) : sleeperLeague ? (() => {
@@ -1886,15 +1886,15 @@ export default function Room() {
                     <>
                       {/* Scoring pills */}
                       <div>
-                        <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2">Scoring Format</div>
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2">Scoring Format</div>
                         <div className="flex flex-wrap gap-1.5 mb-3">
                           {pills.map(p => (
-                            <span key={p.label} className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-sm ${p.active ? 'bg-primary/20 text-primary/80 border border-primary/30' : 'bg-muted/30 text-muted-foreground/40 border border-border/20'}`}>
+                            <span key={p.label} className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg ${p.active ? 'bg-primary/20 text-primary/80 border border-primary/30' : 'bg-muted/30 text-muted-foreground/40 border border-border/20'}`}>
                               {p.label}
                             </span>
                           ))}
                         </div>
-                        <div className="rounded-sm border border-border/30 overflow-hidden">
+                        <div className="rounded-xl border border-[var(--sc-border)] dark-any:border-white/6 overflow-hidden">
                           {scoringRows.map(([label, value], i) => (
                             <div key={label} className={`flex justify-between items-center px-3 py-1.5 text-xs ${i > 0 ? 'border-t border-border/15' : ''}`}>
                               <span className="text-muted-foreground/60">{label}</span>
@@ -1906,16 +1906,16 @@ export default function Room() {
 
                       {/* Roster positions */}
                       <div>
-                        <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2">Roster Positions</div>
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50 mb-2">Roster Positions</div>
                         <div className="flex flex-wrap gap-1 mb-2">
                           {starterSlots.map(({ label, count }) =>
                             Array.from({ length: count }).map((_, i) => (
-                              <span key={`${label}-${i}`} className={`text-[9px] font-black px-1.5 py-0.5 rounded-sm border ${
-                                label === 'QB' ? 'bg-red-400/15 text-red-400 border-red-400/20' :
-                                label === 'RB' ? 'bg-green-400/15 text-green-400 border-green-400/20' :
-                                label === 'WR' ? 'bg-blue-400/15 text-blue-400 border-blue-400/20' :
-                                label === 'TE' ? 'bg-yellow-400/15 text-yellow-400 border-yellow-400/20' :
-                                label === 'SF' ? 'bg-purple-400/15 text-purple-400 border-purple-400/20' :
+                              <span key={`${label}-${i}`} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg border ${
+                                label === 'QB' ? 'bg-red-500/10 text-red-600 dark-any:text-red-400 border-red-300/50 dark-any:border-red-400/20' :
+                                label === 'RB' ? 'bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400 border-emerald-300/50 dark-any:border-emerald-400/20' :
+                                label === 'WR' ? 'bg-blue-500/10 text-blue-600 dark-any:text-blue-400 border-blue-300/50 dark-any:border-blue-400/20' :
+                                label === 'TE' ? 'bg-amber-500/10 text-amber-600 dark-any:text-amber-400 border-amber-300/50 dark-any:border-amber-400/20' :
+                                label === 'SF' ? 'bg-purple-500/10 text-purple-600 dark-any:text-purple-400 border-purple-300/50 dark-any:border-purple-400/20' :
                                 'bg-muted/30 text-muted-foreground/60 border-border/20'
                               }`}>
                                 {label}
@@ -1982,7 +1982,7 @@ export default function Room() {
             }`}
           >
             {tab.icon}
-            <span className="text-[8px] font-bold uppercase tracking-widest">{tab.label}</span>
+            <span className="text-[8px] font-bold uppercase tracking-wider">{tab.label}</span>
           </button>
         ))}
       </nav>
@@ -1991,7 +1991,7 @@ export default function Room() {
       <Dialog open={showJoinModal} onOpenChange={() => {}}>
         <DialogContent className="sm:max-w-md bg-card border-border shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-primary uppercase tracking-tight">Join Draft Room</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-primary tracking-tight">Join Draft Room</DialogTitle>
             <DialogDescription className="text-muted-foreground">
               Enter your manager name to join. The commissioner will assign you to a roster slot.
             </DialogDescription>
@@ -2003,7 +2003,7 @@ export default function Room() {
                 name="username"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Manager Name</FormLabel>
+                    <FormLabel className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Manager Name</FormLabel>
                     <FormControl>
                       <Input placeholder="DynastyManager99" className="bg-background border-border/50 focus-visible:ring-primary h-12" {...field} />
                     </FormControl>
@@ -2011,7 +2011,7 @@ export default function Room() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full h-12 font-bold uppercase tracking-widest" disabled={joinDraft.isPending}>
+              <Button type="submit" className="w-full h-12 font-bold" disabled={joinDraft.isPending}>
                 {joinDraft.isPending ? "Joining..." : "Claim Slot"}
               </Button>
             </form>
@@ -2023,7 +2023,7 @@ export default function Room() {
       <Dialog open={selectedAssetToPick !== null} onOpenChange={(open) => !open && setSelectedAssetToPick(null)}>
         <DialogContent className="sm:max-w-sm bg-card border-border shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-black text-primary uppercase tracking-tight">Confirm Pick</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-primary tracking-tight">Confirm Pick</DialogTitle>
             <DialogDescription>
               Are you sure you want to draft this asset? You can change it until the next manager makes their pick.
             </DialogDescription>
@@ -2036,7 +2036,7 @@ export default function Room() {
             const thumb = isPlayer ? sleeperThumb(a.notes ?? null) : null;
             const teamLogo = isPlayer ? sleeperTeamLogo(a.team ?? null) : null;
             return (
-              <div className="flex items-center overflow-hidden border border-border/50 rounded-sm bg-background/50 my-2">
+              <div className="flex items-center overflow-hidden border border-[var(--sc-border)] dark-any:border-white/10 rounded-xl bg-background/50 my-2">
                 {/* Position accent bar */}
                 <div className={`w-[4px] self-stretch shrink-0 ${isPlayer ? positionBarColor(a.position) : isFaab ? 'bg-primary/40' : 'bg-border/40'}`} />
                 {/* Avatar */}
@@ -2045,7 +2045,7 @@ export default function Room() {
                     <img src={thumb} alt="" className="w-14 h-14 rounded-full object-cover bg-muted ring-1 ring-border/30"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   ) : (
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-black ring-1 ring-border/30 ${isPlayer ? positionAvatarStyle(a.position) : isFaab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold ring-1 ring-border/30 ${isPlayer ? positionAvatarStyle(a.position) : isFaab ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
                       {isPlayer ? (a.position || '?') : isFaab ? '$' : '·'}
                     </div>
                   )}
@@ -2059,7 +2059,7 @@ export default function Room() {
                   <div className="font-bold text-base leading-tight truncate">{a.name}</div>
                   {isPlayer ? (
                     <div className="flex items-center gap-2 mt-1">
-                      {a.position && <span className={`text-xs font-black ${positionColor(a.position)}`}>{a.position}</span>}
+                      {a.position && <span className={`text-xs font-bold ${positionColor(a.position)}`}>{a.position}</span>}
                       {a.team && <span className="text-xs font-bold text-muted-foreground">{a.team}</span>}
                     </div>
                   ) : (

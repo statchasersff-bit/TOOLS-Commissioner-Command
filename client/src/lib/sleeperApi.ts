@@ -25,6 +25,8 @@ interface SleeperLeagueRaw {
   scoring_settings: { rec?: number; [key: string]: any };
   status: string;
   draft_id?: string | null;
+  /** League id of the prior season's league, or null/"0" if this is season 1. */
+  previous_league_id?: string | null;
   settings: any;
 }
 
@@ -286,6 +288,39 @@ export async function getSleeperPlayers(): Promise<Record<string, SleeperPlayerR
   });
 
   return playersPromise;
+}
+
+export interface LeagueSeasonRef {
+  leagueId: string;
+  season: string;
+}
+
+/**
+ * Walk a league's `previous_league_id` chain back through Sleeper to find the
+ * prior seasons of the SAME league. Returns prior seasons only (most recent
+ * first); the current season is NOT included. Bounded to a sane depth and
+ * failure-tolerant — a network hiccup just truncates the detected history.
+ */
+export async function fetchPriorLeagueSeasons(leagueId: string): Promise<LeagueSeasonRef[]> {
+  const out: LeagueSeasonRef[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = leagueId;
+  let first = true; // the first hop is the current league — read its link, skip it
+  for (let depth = 0; depth < 30 && cursor && !seen.has(cursor); depth++) {
+    seen.add(cursor);
+    let raw: SleeperLeagueRaw;
+    try {
+      raw = await fetchJson<SleeperLeagueRaw>(`${SLEEPER_API}/league/${cursor}`);
+    } catch {
+      break;
+    }
+    if (!raw) break;
+    if (!first && raw.season) out.push({ leagueId: raw.league_id, season: raw.season });
+    first = false;
+    const prev = raw.previous_league_id;
+    cursor = prev && prev !== "0" ? prev : null;
+  }
+  return out;
 }
 
 export async function fetchSleeperLeagueFull(leagueId: string, userId: string) {

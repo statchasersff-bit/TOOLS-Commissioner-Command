@@ -333,11 +333,18 @@ export async function updateAlert(
 
 /** Aggregate per-manager history across a season (one row per roster). */
 export async function getManagerHistory(leagueId: string, season: string) {
-  const rows = await db
+  // Integrity history is only meaningful for weeks whose lineups are locked.
+  // The current (in-progress) week and any future week can still change, so a
+  // preview check there must not feed integrity scores / worst-week stats.
+  const nflState = await getNflState().catch(() => null);
+  const currentWeek = nflState?.display_week ?? nflState?.week ?? null;
+
+  const allRows = await db
     .select()
     .from(commissionerLineupChecks)
     .where(and(eq(commissionerLineupChecks.leagueId, leagueId), eq(commissionerLineupChecks.season, season)))
     .orderBy(asc(commissionerLineupChecks.week));
+  const rows = currentWeek == null ? allRows : allRows.filter((r) => r.week < currentWeek);
 
   const strikes = await db
     .select()
@@ -461,6 +468,56 @@ export interface MultiLeagueOptions {
  * Best-ball / not-yet-drafted leagues are surfaced (not silently dropped) using
  * lightweight, cached Sleeper league metadata.
  */
+interface BenchSwap {
+  starterName: string;
+  starterProj: number;
+  benchName: string;
+  benchProj: number;
+  slot: string | null;
+  more: number;
+}
+
+/**
+ * For each lineup check, the biggest start/sit gap among its starters that had a
+ * stronger eligible bench option. Reconstructs the bench projection from the
+ * starter's projection + stored projection gap.
+ */
+async function loadTopBenchSwaps(checkIds: number[]): Promise<Map<number, BenchSwap>> {
+  const map = new Map<number, BenchSwap>();
+  if (!checkIds.length) return map;
+  const rows = await db
+    .select()
+    .from(commissionerLineupPlayerChecks)
+    .where(inArray(commissionerLineupPlayerChecks.lineupCheckId, checkIds));
+
+  const byCheck = new Map<number, typeof rows>();
+  for (const r of rows) {
+    if (r.lineupCheckId == null) continue;
+    const arr = byCheck.get(r.lineupCheckId) ?? [];
+    arr.push(r);
+    byCheck.set(r.lineupCheckId, arr);
+  }
+
+  const round1 = (x: number) => Math.round(x * 10) / 10;
+  for (const [cid, prs] of Array.from(byCheck.entries())) {
+    const swaps = prs
+      .filter((p) => p.isStarter && p.betterBenchOption && p.betterBenchPlayerName)
+      .sort((a, b) => n(b.projectionGapVsBench) - n(a.projectionGapVsBench));
+    const top = swaps[0];
+    if (!top) continue;
+    const starterProj = round1(n(top.projection));
+    map.set(cid, {
+      starterName: top.playerName ?? "Starter",
+      starterProj,
+      benchName: top.betterBenchPlayerName ?? "Bench player",
+      benchProj: round1(n(top.projection) + n(top.projectionGapVsBench)),
+      slot: top.lineupSlot,
+      more: swaps.length - 1,
+    });
+  }
+  return map;
+}
+
 export async function getMultiLeagueSummary(
   leagueIds: string[],
   season: string,
@@ -488,6 +545,20 @@ export async function getMultiLeagueSummary(
   const availableWeeks = Array.from(new Set(checks.map((c) => c.week)))
     .filter((w) => w > 0)
     .sort((a, b) => a - b);
+
+  // Specific start/sit detail for benching / optimality alerts, derived live
+  // from the stored player checks so the concrete swap ("Started X over Y")
+  // shows for already-scanned leagues without requiring a re-scan.
+  const detailCheckIds = Array.from(
+    new Set(
+      alertRows
+        .filter((a) => a.alertType === "suspicious_benching" || a.alertType === "large_optimality_gap")
+        .map((a) => a.lineupCheckId)
+        .filter((id): id is number => id != null),
+    ),
+  );
+  const benchSwapByCheck = await loadTopBenchSwaps(detailCheckIds);
+  const gapByCheck = new Map(checks.map((c) => [c.id, c.optimalityGap]));
 
   // League metadata (best ball + draft/season status), cached + failure-tolerant.
   const metaEntries = await Promise.all(
@@ -577,6 +648,38 @@ export async function getMultiLeagueSummary(
     const alerts = openAlerts
       .map((a) => {
         const nm = nameMap.get(nameKey(leagueId, a.week, a.rosterId));
+        // Spell out the actual start/sit for benching / optimality alerts.
+        const swap = a.lineupCheckId != null ? benchSwapByCheck.get(a.lineupCheckId) : undefined;
+        const isSwapAlert =
+          a.alertType === "suspicious_benching" || a.alertType === "large_optimality_gap";
+        let description = a.description;
+        // Structured start/sit so the client can render a compact "started →
+        // bench · +gap" row instead of a prose sentence. Mirrors `description`,
+        // which is kept as a fallback for older / non-swap alerts.
+        let swapDetail:
+          | { slot: string | null; startedName: string; startedProj: number; benchName: string; benchProj: number; gap: number; more: number }
+          | null = null;
+        if (swap && isSwapAlert) {
+          const slot = swap.slot && swap.slot !== "BN" ? ` at ${swap.slot}` : "";
+          const more = swap.more > 0 ? ` (+${swap.more} more)` : "";
+          // Build fresh (idempotent) sentences so re-deriving over an already
+          // enriched stored description never double-appends the detail.
+          if (a.alertType === "suspicious_benching") {
+            description = `Started ${swap.starterName} (proj ${swap.starterProj}) over ${swap.benchName} (proj ${swap.benchProj})${slot}${more}.`;
+          } else {
+            const gap = a.lineupCheckId != null ? gapByCheck.get(a.lineupCheckId) ?? 0 : 0;
+            description = `Projected lineup ${Math.round(gap * 10) / 10} pts below the estimated optimal. Biggest available improvement: ${swap.benchName} (proj ${swap.benchProj}) over ${swap.starterName} (proj ${swap.starterProj})${slot}.`;
+          }
+          swapDetail = {
+            slot: swap.slot && swap.slot !== "BN" ? swap.slot : null,
+            startedName: swap.starterName,
+            startedProj: swap.starterProj,
+            benchName: swap.benchName,
+            benchProj: swap.benchProj,
+            gap: Math.round((swap.benchProj - swap.starterProj) * 10) / 10,
+            more: swap.more,
+          };
+        }
         return {
           id: a.id,
           leagueId,
@@ -588,9 +691,10 @@ export async function getMultiLeagueSummary(
           severity: a.severity ?? "info",
           bucket: alertBucket(a.severity),
           title: a.title,
-          description: a.description,
+          description,
           suggestedAction: a.suggestedAction,
           status: a.status ?? "open",
+          swap: swapDetail,
         };
       })
       .sort(

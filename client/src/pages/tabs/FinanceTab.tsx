@@ -10,6 +10,8 @@ import { API_BASE } from "@/lib/apiBase";
 import { SleeperAuthCard } from "@/components/SleeperAuthCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { TeamLoader } from "@/components/TeamLoader";
+import { fetchTradeFeed, type TradeRow } from "@/lib/commissionerTradesApi";
+import { fetchPriorLeagueSeasons } from "@/lib/sleeperApi";
 import {
   DollarSign,
   Plus,
@@ -20,6 +22,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Check,
+  X,
   EyeOff,
   Eye,
   Tag,
@@ -28,31 +32,42 @@ import {
   Receipt,
   Trophy as TrophyIcon,
   Banknote,
-  Link2,
-  Scale,
-  ArrowRight,
   Search,
   Users,
   StickyNote,
   SlidersHorizontal,
+  CalendarClock,
+  History,
+  Copy,
+  ShieldAlert,
+  Layers,
 } from "lucide-react";
 
 // ─── Data model ───────────────────────────────────────────────────────────────
-// All persisted through the existing finance storage layer. `prizes` and
-// `payments` are schemaless jsonb on the server, so the richer commissioner
-// shapes below load alongside legacy rows (old prizes were { place, amount }
-// only; old rows have no payments — both fall back cleanly).
+// Finance is tracked PER SEASON. Dynasty/keeper leagues need prior-year
+// LeagueSafe records, the current year's dues, and future-year obligations
+// side by side, so each (league, season) pair is its own persisted row. All
+// fields are schemaless/nullable on the server, so legacy single-season rows
+// (which only ever had season "2026") load alongside the richer shapes below.
 
 interface PrizeSlot {
   place: number;        // ordering key + default label source
   amount: number;
-  label?: string;       // e.g. "1st", "Regular Season Points", "Side Pot"
+  label?: string;       // e.g. "1st", "Regular Season Points", "Empire Pool"
   paid?: boolean;
   paidDate?: string;    // optional ISO date
-  notes?: string;       // optional
+  notes?: string;       // optional — e.g. "Rolls over"
 }
 
-type ManagerPaymentStatus = "paid" | "partial" | "unpaid" | "waived";
+// Dynasty leagues need far more than paid/unpaid: prepaid (paid a future year
+// early after trading that pick), comped/discounted (orphan incentives),
+// transferred (replacement owner inherited the obligation), etc.
+type ManagerPaymentStatus =
+  | "unpaid" | "partial" | "paid" | "prepaid"
+  | "comped" | "discounted" | "waived" | "refunded" | "transferred";
+
+type PaymentReason =
+  | "entry_fee" | "future_pick_prepay" | "orphan_discount" | "empire_pool" | "side_pot";
 
 interface ManagerPayment {
   rosterId: string;     // stable Sleeper roster id (string)
@@ -60,10 +75,15 @@ interface ManagerPayment {
   status: ManagerPaymentStatus;
   paidDate?: string;
   notes?: string;
+  reason?: PaymentReason;
+  leagueSafeTransactionId?: string;
 }
+
+type LeagueSafeStatus = "not_created" | "active" | "closed";
 
 interface LeagueFinanceData {
   leagueId: string;
+  season: string;
   buyIn: number;
   prizes: PrizeSlot[];
   payments: ManagerPayment[];
@@ -71,20 +91,34 @@ interface LeagueFinanceData {
   isFree: boolean;
   ignored: boolean;
   leagueSafeUrl: string;
+  leagueSafeStatus: LeagueSafeStatus;
+  dueDate: string;       // free text / ISO date
+  paymentRule: string;   // e.g. "Pay any future year you trade a pick in"
 }
 
-const DEFAULT_FINANCE: LeagueFinanceData = {
-  leagueId: "", buyIn: 0, prizes: [], payments: [], notes: "", isFree: false, ignored: false, leagueSafeUrl: "",
-};
+function defaultFinance(leagueId: string, season: string): LeagueFinanceData {
+  return {
+    leagueId, season, buyIn: 0, prizes: [], payments: [], notes: "",
+    isFree: false, ignored: false, leagueSafeUrl: "",
+    leagueSafeStatus: "not_created", dueDate: "", paymentRule: "",
+  };
+}
+
+// Settled = no money is owed for the season (covers comp/waive/transfer cases).
+const SETTLED_STATUSES = new Set<ManagerPaymentStatus>([
+  "paid", "prepaid", "comped", "discounted", "waived", "transferred", "refunded",
+]);
+function isSettled(s: ManagerPaymentStatus) { return SETTLED_STATUSES.has(s); }
+// Statuses that mean "this manager owes nothing toward expected dues".
+const NO_DUE_STATUSES = new Set<ManagerPaymentStatus>(["comped", "waived"]);
 
 // Manager roster info, fetched lazily from Sleeper when a league is expanded so
-// the commissioner can track dues per real manager / team name.
+// the commissioner can track dues per real manager / team name. Dynasty rosters
+// persist year to year, so the current league's managers seed every season.
 interface ManagerInfo { rosterId: string; managerName: string; teamName: string; avatarUrl?: string; }
 
 const SLEEPER_API = "https://api.sleeper.app/v1";
 
-// Resolve a Sleeper avatar to a thumbnail URL. Team avatars (metadata.avatar)
-// can already be a full URL; user avatars are bare ids served from the CDN.
 function sleeperAvatarUrl(u: any): string | undefined {
   const teamAvatar: string | undefined = u?.metadata?.avatar;
   if (teamAvatar) return teamAvatar.startsWith("http") ? teamAvatar : `https://sleepercdn.com/avatars/thumbs/${teamAvatar}`;
@@ -129,25 +163,48 @@ function ordinal(place: number) {
   return `${place}th`;
 }
 
-function prizeLabel(p: PrizeSlot) {
-  return p.label?.trim() || ordinal(p.place);
+// ─── Season helpers ─────────────────────────────────────────────────────────────
+// A league anchors on its Sleeper `season`. Prior years are NOT assumed — we only
+// expose the seasons that actually existed for this league (detected by walking
+// Sleeper's `previous_league_id` chain). Around the current season we still expose
+// two future years (dues a manager may have to prepay because they traded a future
+// pick). Future Sleeper leagues don't exist yet, so future-season finance is
+// commissioner-projected.
+
+function financeKey(leagueId: string, season: string) { return `${leagueId}::${season}`; }
+
+// `priorSeasons` are the detected real prior seasons of this league (any order).
+// When empty (not yet detected, or a brand-new league) only the current + future
+// seasons are offered — we don't invent prior years that never happened.
+function seasonsFor(currentSeason: string, priorSeasons: string[] = []): string[] {
+  const cur = parseInt(currentSeason, 10) || new Date().getFullYear();
+  const past = Array.from(
+    new Set(priorSeasons.map(s => parseInt(s, 10)).filter(y => y && y < cur)),
+  ).sort((a, b) => a - b);
+  return [...past, cur, cur + 1, cur + 2].map(String);
 }
 
-// ─── Per-league derived finance metrics ────────────────────────────────────────
+type SeasonKind = "past" | "current" | "future";
+function seasonKind(season: string, current: string): SeasonKind {
+  const s = parseInt(season, 10), c = parseInt(current, 10);
+  return s < c ? "past" : s > c ? "future" : "current";
+}
+function seasonSuffix(kind: SeasonKind) {
+  return kind === "current" ? "Current" : kind === "future" ? "Future" : "";
+}
+
+// ─── Per-league/season derived finance metrics ──────────────────────────────────
 
 interface LeagueMetrics {
   teams: number;
   waivedCount: number;
-  /** Expected dues after waivers (buyIn × non-waived teams). */
   dues: number;
   collected: number;
   outstanding: number;
-  /** Managers marked paid or waived (settled), out of `teams`. */
   paidCount: number;
   prizePool: number;
-  payoutsPending: number;   // dollar total of prize rows not yet paid out
+  payoutsPending: number;
   hasUnpaidPayouts: boolean;
-  // Issue flags
   missingBuyIn: boolean;
   missingPrizes: boolean;
   missingLeagueSafe: boolean;
@@ -159,12 +216,12 @@ interface LeagueMetrics {
 function computeMetrics(f: LeagueFinanceData, teams: number): LeagueMetrics {
   const payments = f.payments || [];
   const prizes = f.prizes || [];
-  const waivedCount = payments.filter(p => p.status === "waived").length;
+  const waivedCount = payments.filter(p => NO_DUE_STATUSES.has(p.status)).length;
   const effectiveTeams = Math.max(0, teams - waivedCount);
   const dues = f.isFree ? 0 : f.buyIn * effectiveTeams;
-  const collected = payments.reduce((s, p) => s + (p.status === "waived" ? 0 : (p.paid || 0)), 0);
+  const collected = payments.reduce((s, p) => s + (NO_DUE_STATUSES.has(p.status) ? 0 : (p.paid || 0)), 0);
   const outstanding = Math.max(0, dues - collected);
-  const paidCount = payments.filter(p => p.status === "paid" || p.status === "waived").length;
+  const paidCount = payments.filter(p => isSettled(p.status)).length;
   const prizePool = prizes.reduce((s, p) => s + (p.amount || 0), 0);
   const payoutsPending = prizes.filter(p => !p.paid).reduce((s, p) => s + (p.amount || 0), 0);
   const hasUnpaidPayouts = prizes.length > 0 && prizes.some(p => !p.paid);
@@ -173,8 +230,6 @@ function computeMetrics(f: LeagueFinanceData, teams: number): LeagueMetrics {
   const missingPrizes = !f.isFree && prizes.length === 0;
   const missingLeagueSafe = !f.isFree && !f.leagueSafeUrl?.trim();
   const hasMissingPayments = !f.isFree && dues > 0 && collected < dues;
-  // Reconciliation: prizes over-allocated vs available pool, or more collected
-  // than expected (data entry drift).
   const reconIssue = (prizePool > 0 && dues > 0 && prizePool > dues) || (dues > 0 && collected > dues);
 
   const hasIssue = !f.isFree && (missingBuyIn || missingPrizes || missingLeagueSafe || hasMissingPayments || reconIssue);
@@ -186,15 +241,50 @@ function computeMetrics(f: LeagueFinanceData, teams: number): LeagueMetrics {
   };
 }
 
-// ─── Status pills ───────────────────────────────────────────────────────────────
+// ─── Future pick payment risk ────────────────────────────────────────────────────
+// Bylaw pattern: "you must pay for any future year in which you trade a future
+// pick." We read the league's trade feed and, for every future-dated pick a
+// roster traded AWAY, flag the season they now owe. Severity escalates to a
+// warning once that season's dues are still unsettled.
+
+interface PickRiskEntry { season: string; picks: string[] }
+// rosterId(string) → season → ["2027 1st", …]
+type PickRiskMap = Map<string, Map<string, string[]>>;
+
+function buildPickRisk(trades: TradeRow[], currentSeason: string): PickRiskMap {
+  const cur = parseInt(currentSeason, 10);
+  const map: PickRiskMap = new Map();
+  for (const t of trades) {
+    for (const a of t.assets || []) {
+      if (a.assetType !== "pick" || !a.pickSeason || a.fromRosterId == null) continue;
+      const ps = parseInt(a.pickSeason, 10);
+      if (!Number.isFinite(ps) || ps < cur) continue;      // only current/future obligations
+      const roster = String(a.fromRosterId);
+      const label = `${a.pickSeason} ${a.pickRound ? ordinal(a.pickRound) : "pick"}`;
+      const bySeason = map.get(roster) ?? new Map<string, string[]>();
+      const list = bySeason.get(a.pickSeason) ?? [];
+      if (!list.includes(label)) list.push(label);
+      bySeason.set(a.pickSeason, list);
+      map.set(roster, bySeason);
+    }
+  }
+  return map;
+}
+
+function pickRiskFor(map: PickRiskMap, rosterId: string): PickRiskEntry[] {
+  const bySeason = map.get(rosterId);
+  if (!bySeason) return [];
+  return Array.from(bySeason.entries())
+    .map(([season, picks]) => ({ season, picks }))
+    .sort((a, b) => a.season.localeCompare(b.season));
+}
+
+// ─── League-level status pills (collapsed table) ────────────────────────────────
 
 type StatusKey =
   | "ready" | "missing-payments" | "prize-setup" | "leaguesafe-missing"
   | "payout-pending" | "free" | "hidden";
 
-// Color signals STATE, not category: green = settled/ready, amber = needs action
-// (payments, setup, payouts), muted = low-priority/neutral. The label carries the
-// specific meaning so we don't need a distinct hue per status.
 const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string; dot: string }> = {
   ready:               { label: "Ready",            cls: "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5", dot: "bg-emerald-500" },
   "missing-payments":  { label: "Missing Payments", cls: "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5",        dot: "bg-amber-500" },
@@ -205,8 +295,6 @@ const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string; dot: string
   hidden:              { label: "Hidden",           cls: "border-border/50 text-muted-foreground",                                        dot: "bg-muted-foreground/40" },
 };
 
-// Single most-blocking status for a league row. Order = what the commissioner
-// should fix first (setup → payments → payouts → ready).
 function leagueStatus(f: LeagueFinanceData, m: LeagueMetrics): StatusKey {
   if (f.isFree) return "free";
   if (m.missingBuyIn || m.missingPrizes) return "prize-setup";
@@ -228,52 +316,46 @@ function StatusPill({ status, className = "" }: { status: StatusKey; className?:
 
 function tokenKey(userId: string) { return `dc-finance-token-${userId}`; }
 
-// ─── Expanded-row editor (module scope) ───────────────────────────────────────
-// IMPORTANT: this component MUST live at module scope so its identity is stable
-// across parent re-renders — otherwise the text inputs lose focus on each
-// keystroke (React unmounts/remounts a fresh component type every render).
+// ─── Payment status select + chips (9 dynasty statuses) ─────────────────────────
 
-interface FinanceLeagueEditorProps {
-  leagueId: string;
-  finance: LeagueFinanceData;
-  metrics: LeagueMetrics;
-  managers: ManagerInfo[] | undefined;
-  managersLoading: boolean;
-  onUpdate: (leagueId: string, patch: Partial<LeagueFinanceData>) => void;
-  onAddPrize: (leagueId: string) => void;
-  onRemovePrize: (leagueId: string, place: number) => void;
-  onUpdatePrize: (leagueId: string, place: number, patch: Partial<PrizeSlot>) => void;
-  onUpdatePayment: (leagueId: string, rosterId: string, patch: Partial<ManagerPayment>) => void;
+const PAYMENT_STATUS_OPTIONS: { value: ManagerPaymentStatus; label: string }[] = [
+  { value: "unpaid",      label: "Unpaid" },
+  { value: "partial",     label: "Partial" },
+  { value: "paid",        label: "Paid" },
+  { value: "prepaid",     label: "Prepaid" },
+  { value: "comped",      label: "Comped" },
+  { value: "discounted",  label: "Discounted" },
+  { value: "waived",      label: "Waived" },
+  { value: "refunded",    label: "Refunded" },
+  { value: "transferred", label: "Transferred" },
+];
+
+const STATUS_CHIP: Record<ManagerPaymentStatus, string> = {
+  paid:        "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+  prepaid:     "text-teal-600 dark:text-teal-400 bg-teal-500/10 border-teal-500/30",
+  partial:     "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30",
+  unpaid:      "text-red-600/90 dark:text-red-400/90 bg-red-500/[0.06] border-red-500/20",
+  comped:      "text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/30",
+  discounted:  "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/30",
+  waived:      "text-slate-500 dark:text-slate-400 bg-slate-500/10 border-slate-500/25",
+  refunded:    "text-orange-600 dark:text-orange-400 bg-orange-500/10 border-orange-500/30",
+  transferred: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border-indigo-500/30",
+};
+
+// Compute the `paid` amount implied by a status change, given the season buy-in.
+function paidForStatus(status: ManagerPaymentStatus, owed: number, prevPaid: number) {
+  if (status === "paid" || status === "prepaid") return owed;
+  if (status === "partial" || status === "discounted") return prevPaid;   // commissioner enters the amount
+  return 0;                                                                // unpaid / comped / waived / refunded / transferred
 }
 
-function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 mb-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
-      <div className="flex-1 h-px bg-border/30" />
-      {action}
-    </div>
-  );
-}
-
-function Stat({ label, value, valueCls = "" }: { label: string; value: string; valueCls?: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className={`font-semibold tabular-nums ${valueCls}`}>{value}</span>
-    </div>
-  );
-}
-
-// Compact status dropdown for a manager's payment state, color-tinted to match
-// the soft STATUS_CHIP palette.
 function PaymentStatusSelect({
-  value, onChange, testId,
-}: { value: ManagerPaymentStatus; onChange: (v: ManagerPaymentStatus) => void; testId?: string }) {
+  value, onChange, testId, className = "",
+}: { value: ManagerPaymentStatus; onChange: (v: ManagerPaymentStatus) => void; testId?: string; className?: string }) {
   return (
     <Select value={value} onValueChange={v => onChange(v as ManagerPaymentStatus)}>
       <SelectTrigger
-        className={`h-7 w-[108px] px-2 text-[11px] font-semibold rounded-md border ${STATUS_CHIP[value]}`}
+        className={`h-7 px-2 text-[11px] font-semibold rounded-md border ${STATUS_CHIP[value]} ${className || "w-[118px]"}`}
         data-testid={testId}>
         <SelectValue />
       </SelectTrigger>
@@ -286,226 +368,372 @@ function PaymentStatusSelect({
   );
 }
 
-const PAYMENT_STATUS_OPTIONS: { value: ManagerPaymentStatus; label: string }[] = [
-  { value: "paid",    label: "Paid" },
-  { value: "partial", label: "Partial" },
-  { value: "unpaid",  label: "Unpaid" },
-  { value: "waived",  label: "Waived" },
-];
+// ─── Debounced free-text fields ─────────────────────────────────────────────────
+// Hold their own draft + debounce so typing never thrashes the save endpoint and
+// inputs never lose focus on parent re-render. Give them a `key` that changes
+// with (league, season, field) so switching season remounts with fresh values.
 
-// Soft status chips — strong color reserved for true alerts (outstanding dues,
-// setup needed), so the manager list reads calmly even when nobody has paid yet.
-const STATUS_CHIP: Record<ManagerPaymentStatus, string> = {
-  paid:    "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
-  partial: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30",
-  unpaid:  "text-red-600/90 dark:text-red-400/90 bg-red-500/[0.06] border-red-500/20",
-  waived:  "text-slate-500 dark:text-slate-400 bg-slate-500/10 border-slate-500/25",
+function DebouncedInput({
+  value, onCommit, delay = 600, className = "", ...rest
+}: { value: string; onCommit: (v: string) => void; delay?: number } & Omit<React.ComponentProps<typeof Input>, "value" | "onChange">) {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const flush = (v: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => onCommit(v), delay);
+  };
+  return (
+    <Input
+      {...rest}
+      className={className}
+      value={draft}
+      onChange={e => { setDraft(e.target.value); flush(e.target.value); }}
+      onBlur={() => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (draft !== value) onCommit(draft); }}
+    />
+  );
+}
+
+function DebouncedTextarea({
+  value, onCommit, delay = 600, className = "", ...rest
+}: { value: string; onCommit: (v: string) => void; delay?: number } & Omit<React.ComponentProps<typeof Textarea>, "value" | "onChange">) {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const flush = (v: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => onCommit(v), delay);
+  };
+  return (
+    <Textarea
+      {...rest}
+      className={className}
+      value={draft}
+      onChange={e => { setDraft(e.target.value); flush(e.target.value); }}
+      onBlur={() => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (draft !== value) onCommit(draft); }}
+    />
+  );
+}
+
+// ─── Small shared bits ───────────────────────────────────────────────────────────
+
+function SectionLabel({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>
+      <div className="flex-1 h-px bg-border/30" />
+      {action}
+    </div>
+  );
+}
+
+function NotConfigured({ testId }: { testId?: string }) {
+  return <X className="w-3.5 h-3.5 text-red-500" aria-label="Not configured" data-testid={testId} />;
+}
+
+function Stat({ label, value, valueCls = "" }: { label: string; value: string; valueCls?: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={`font-semibold tabular-nums ${valueCls}`}>{value}</span>
+    </div>
+  );
+}
+
+function ManagerAvatar({ url }: { url?: string }) {
+  return (
+    <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
+      <Users className="w-3.5 h-3.5 text-[#0b3a7a]/60 dark:text-blue-400/60" />
+      {url && (
+        <img src={url} alt="" className="absolute inset-0 w-full h-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+      )}
+    </div>
+  );
+}
+
+const LEAGUE_SAFE_STATUS_OPTIONS: { value: LeagueSafeStatus; label: string }[] = [
+  { value: "not_created", label: "Not Created" },
+  { value: "active",      label: "Active" },
+  { value: "closed",      label: "Closed" },
+];
+const LEAGUE_SAFE_STATUS_CHIP: Record<LeagueSafeStatus, string> = {
+  not_created: "text-slate-500 dark:text-slate-400 bg-slate-500/10 border-slate-500/25",
+  active:      "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+  closed:      "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/30",
 };
 
-function FinanceLeagueEditor({
-  leagueId, finance, metrics, managers, managersLoading,
-  onUpdate, onAddPrize, onRemovePrize, onUpdatePrize, onUpdatePayment,
-}: FinanceLeagueEditorProps) {
-  // Local drafts for free-text fields → debounced upstream so the table reflects
-  // changes without thrashing the save endpoint or risking input focus.
-  const [urlDraft, setUrlDraft] = useState(finance.leagueSafeUrl);
-  const [notesDraft, setNotesDraft] = useState(finance.notes);
-  const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+// ════════════════════════════════════════════════════════════════════════════════
+//  Sub-views
+// ════════════════════════════════════════════════════════════════════════════════
 
-  useEffect(() => () => {
-    if (urlTimer.current) clearTimeout(urlTimer.current);
-    if (notesTimer.current) clearTimeout(notesTimer.current);
-  }, []);
+type SubviewKey = "current" | "future" | "ledger" | "leaguesafe" | "payouts";
 
-  const flushUrl = useCallback((v: string) => {
-    if (urlTimer.current) clearTimeout(urlTimer.current);
-    urlTimer.current = setTimeout(() => onUpdate(leagueId, { leagueSafeUrl: v }), 600);
-  }, [leagueId, onUpdate]);
+interface SubviewCommon {
+  leagueId: string;
+  currentSeason: string;
+  /** Detected real prior seasons of this league (newest/oldest order agnostic). */
+  priorSeasons: string[];
+  managers: ManagerInfo[] | undefined;
+  managersLoading: boolean;
+  getFinance: (season: string) => LeagueFinanceData;
+  update: (season: string, patch: Partial<LeagueFinanceData>) => void;
+  pickRisk: PickRiskMap;
+}
 
-  const flushNotes = useCallback((v: string) => {
-    if (notesTimer.current) clearTimeout(notesTimer.current);
-    notesTimer.current = setTimeout(() => onUpdate(leagueId, { notes: v }), 600);
-  }, [leagueId, onUpdate]);
+// ─── Multi-year summary bar ──────────────────────────────────────────────────────
 
-  const f = finance;
+function MultiYearSummaryBar({
+  currentSeason, priorSeasons, getFinance, managers, pickRisk,
+}: Pick<SubviewCommon, "currentSeason" | "priorSeasons" | "getFinance" | "managers" | "pickRisk">) {
+  const seasons = seasonsFor(currentSeason, priorSeasons);
+  const teams = managers?.length ?? 0;
+  const cur = getFinance(currentSeason);
+  const curM = computeMetrics(cur, teams);
 
-  // Manager-payment search + bulk actions.
-  const [search, setSearch] = useState("");
+  const futureSeasons = seasons.filter(s => seasonKind(s, currentSeason) === "future");
+  const pastSeasons = seasons.filter(s => seasonKind(s, currentSeason) === "past");
+
+  const prepaidCounts = futureSeasons.map(s => {
+    const f = getFinance(s);
+    const n = f.payments.filter(p => isSettled(p.status)).length;
+    return { season: s, n };
+  });
+
+  // A risk is "open" when a roster traded a future pick and that season is unsettled.
+  let openRisks = 0;
+  if (managers) {
+    for (const m of managers) {
+      for (const entry of pickRiskFor(pickRisk, m.rosterId)) {
+        const status = getFinance(entry.season).payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid";
+        if (!isSettled(status)) openRisks++;
+      }
+    }
+  }
+
+  const closedHistory = pastSeasons.filter(s => getFinance(s).leagueSafeStatus === "closed");
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      {/* Current */}
+      <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1.5">{currentSeason} Current</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <Stat label="Expected" value={cur.isFree ? "Free" : fmtDollar(curM.dues)} />
+          <Stat label="Collected" value={fmtDollar(curM.collected)} valueCls="text-emerald-600 dark:text-emerald-400" />
+          <Stat label="Out" value={cur.isFree ? "—" : fmtDollar(curM.outstanding)} valueCls={curM.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"} />
+          <Stat label="Paid" value={cur.isFree ? "—" : `${curM.paidCount}/${teams || curM.teams}`} />
+        </div>
+      </div>
+      {/* Future dues */}
+      <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400 mb-1.5">Future Dues</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          {prepaidCounts.map(({ season, n }) => (
+            <Stat key={season} label={`${season} prepaid`} value={`${n}/${teams}`} />
+          ))}
+          <Stat label="Pick risks" value={String(openRisks)}
+            valueCls={openRisks > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"} />
+        </div>
+      </div>
+      {/* History */}
+      <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">History</p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          {closedHistory.length > 0 ? closedHistory.map(s => (
+            <span key={s} className="inline-flex items-center gap-1 text-muted-foreground">
+              <Check className="w-3 h-3 text-blue-500" />{s} closed
+            </span>
+          )) : <span className="text-xs text-muted-foreground italic">No closed prior seasons recorded.</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Manager payment card (used in Current Season) ──────────────────────────────
+
+function ManagerPaymentCard({
+  m, leagueId, season, owed, payment, onUpdate, risk,
+}: {
+  m: ManagerInfo; leagueId: string; season: string; owed: number;
+  payment: ManagerPayment | undefined;
+  onUpdate: (rosterId: string, patch: Partial<ManagerPayment>) => void;
+  risk?: PickRiskEntry[];
+}) {
+  const status: ManagerPaymentStatus = payment?.status ?? "unpaid";
+  const openRisk = (risk ?? []).some(r => r.season === season && !isSettled(status));
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border/30 bg-muted/20 hover:bg-muted/30 transition-colors"
+      data-testid={`payment-row-${leagueId}-${season}-${m.rosterId}`}>
+      <ManagerAvatar url={m.avatarUrl} />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold truncate leading-tight flex items-center gap-1">
+          {m.managerName}
+          {openRisk && <ShieldAlert className="w-3 h-3 text-amber-500 flex-shrink-0" aria-label="Future pick payment risk" />}
+        </p>
+        <p className="text-[10px] text-muted-foreground truncate leading-tight">
+          {m.teamName} <span className="text-muted-foreground/70">· {fmtDollar(owed)}</span>
+        </p>
+      </div>
+      {(status === "partial" || status === "discounted") && (
+        <div className="relative w-16 flex-shrink-0">
+          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">$</span>
+          <Input type="number" min="0" className="pl-4 h-7 text-xs" value={payment?.paid || ""} placeholder="0"
+            onChange={e => onUpdate(m.rosterId, { paid: parseFloat(e.target.value) || 0 })}
+            data-testid={`payment-amount-${leagueId}-${season}-${m.rosterId}`} />
+        </div>
+      )}
+      <PaymentStatusSelect
+        value={status}
+        onChange={v => onUpdate(m.rosterId, { status: v, paid: paidForStatus(v, owed, payment?.paid || 0) })}
+        testId={`payment-status-${leagueId}-${season}-${m.rosterId}`} />
+    </div>
+  );
+}
+
+// ─── Current Season view ─────────────────────────────────────────────────────────
+
+function CurrentSeasonView({
+  leagueId, season, currentSeason, managers, managersLoading, getFinance, update, pickRisk, allowClone,
+}: SubviewCommon & { season: string; allowClone: boolean }) {
+  const f = getFinance(season);
+  const teams = managers?.length ?? 0;
+  const metrics = computeMetrics(f, teams);
   const owed = f.buyIn;
+  const [search, setSearch] = useState("");
+  const kind = seasonKind(season, currentSeason);
+  const prevSeason = String(parseInt(season, 10) - 1);
 
-  const filteredManagers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q || !managers) return managers ?? [];
-    return managers.filter(m =>
-      m.managerName.toLowerCase().includes(q) || m.teamName.toLowerCase().includes(q));
-  }, [managers, search]);
+  const updatePayment = useCallback((rosterId: string, patch: Partial<ManagerPayment>) => {
+    const cur = getFinance(season);
+    const existing = cur.payments.find(p => p.rosterId === rosterId);
+    const next = existing
+      ? cur.payments.map(p => p.rosterId === rosterId ? { ...p, ...patch } : p)
+      : [...cur.payments, { rosterId, paid: 0, status: "unpaid" as ManagerPaymentStatus, ...patch }];
+    update(season, { payments: next });
+  }, [getFinance, season, update]);
 
-  const paidStatusCount = useMemo(() => {
-    if (!managers) return { settled: 0, total: 0 };
-    const settled = managers.filter(m => {
-      const s = f.payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid";
-      return s === "paid" || s === "waived";
-    }).length;
-    return { settled, total: managers.length };
-  }, [managers, f.payments]);
-
-  // Build the full payments array in one update so a bulk action isn't lost to
-  // stale per-roster closures.
   const markAll = useCallback((status: ManagerPaymentStatus) => {
     if (!managers) return;
+    const cur = getFinance(season);
     const next: ManagerPayment[] = managers.map(m => {
-      const existing = f.payments.find(p => p.rosterId === m.rosterId);
+      const existing = cur.payments.find(p => p.rosterId === m.rosterId);
       return {
         rosterId: m.rosterId,
-        paid: status === "paid" ? owed : 0,
+        paid: paidForStatus(status, owed, existing?.paid || 0),
         status,
         ...(existing?.paidDate ? { paidDate: existing.paidDate } : {}),
         ...(existing?.notes ? { notes: existing.notes } : {}),
+        ...(existing?.reason ? { reason: existing.reason } : {}),
       };
     });
-    onUpdate(leagueId, { payments: next });
-  }, [managers, f.payments, owed, leagueId, onUpdate]);
+    update(season, { payments: next });
+  }, [managers, getFinance, season, owed, update]);
+
+  const cloneFromPrev = useCallback(() => {
+    const prev = getFinance(prevSeason);
+    update(season, {
+      buyIn: prev.buyIn,
+      prizes: prev.prizes.map(p => ({ ...p, paid: false, paidDate: undefined })),
+      paymentRule: prev.paymentRule,
+      notes: prev.notes,
+      payments: (managers ?? []).map(m => ({ rosterId: m.rosterId, paid: 0, status: "unpaid" as ManagerPaymentStatus })),
+      leagueSafeStatus: kind === "future" ? "not_created" : prev.leagueSafeStatus,
+    });
+  }, [getFinance, prevSeason, season, update, managers, kind]);
+
+  const settled = managers
+    ? managers.filter(m => isSettled(f.payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid")).length
+    : 0;
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q || !managers) return managers ?? [];
+    return managers.filter(m => m.managerName.toLowerCase().includes(q) || m.teamName.toLowerCase().includes(q));
+  }, [managers, search]);
 
   return (
-    <div className="border-t border-border/30 bg-muted/10 p-4 md:p-5 space-y-5">
-      {/* Tight summary strip */}
+    <div className="space-y-5">
+      {/* Summary strip */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 px-3 py-2 rounded-lg bg-muted/30 border border-border/30 text-xs">
         <Stat label="Expected" value={f.isFree ? "Free" : fmtDollar(metrics.dues)} />
         <Stat label="Collected" value={fmtDollar(metrics.collected)} valueCls="text-emerald-600 dark:text-emerald-400" />
         <Stat label="Outstanding" value={f.isFree ? "—" : fmtDollar(metrics.outstanding)}
           valueCls={metrics.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"} />
-        <Stat label="Paid" value={f.isFree ? "—" : `${metrics.paidCount} / ${metrics.teams}`} />
+        <Stat label="Paid" value={f.isFree ? "—" : `${metrics.paidCount} / ${teams || metrics.teams}`} />
       </div>
 
-      {/* Setup: two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
-        {/* Financial Setup */}
-        <div className="space-y-3">
-          <SectionLabel>Financial Setup</SectionLabel>
-          <div className="space-y-2">
-            <div>
-              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Entry Fee</label>
-              <div className="relative sm:w-40">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                <Input type="number" min="0" className="pl-6 h-9 text-sm" value={f.buyIn || ""} placeholder="0"
-                  onChange={e => onUpdate(leagueId, { buyIn: parseFloat(e.target.value) || 0 })}
-                  data-testid={`input-buyin-${leagueId}`} />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-medium text-muted-foreground mb-1 block">LeagueSafe Link</label>
-              <div className="relative">
-                <Input type="url" placeholder="https://leaguesafe.com/league/…"
-                  value={urlDraft}
-                  onChange={e => { setUrlDraft(e.target.value); flushUrl(e.target.value); }}
-                  onBlur={() => {
-                    if (urlTimer.current) { clearTimeout(urlTimer.current); urlTimer.current = null; }
-                    if (urlDraft !== finance.leagueSafeUrl) onUpdate(leagueId, { leagueSafeUrl: urlDraft });
-                  }}
-                  className={`h-9 text-sm ${urlDraft ? "pr-9" : ""}`}
-                  data-testid={`input-leaguesafe-${leagueId}`} />
-                {urlDraft && (
-                  <a href={urlDraft} target="_blank" rel="noopener noreferrer"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#d4af37] hover:opacity-70 transition-opacity"
-                    data-testid={`link-leaguesafe-${leagueId}`} onClick={e => e.stopPropagation()}>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                <StickyNote className="w-3 h-3" /> Notes
-              </label>
-              <Textarea placeholder="Payout method, side pots, dues deadline…"
-                value={notesDraft}
-                onChange={e => { setNotesDraft(e.target.value); flushNotes(e.target.value); }}
-                onBlur={() => {
-                  if (notesTimer.current) { clearTimeout(notesTimer.current); notesTimer.current = null; }
-                  if (notesDraft !== finance.notes) onUpdate(leagueId, { notes: notesDraft });
-                }}
-                className="text-sm min-h-[60px] resize-y" data-testid={`input-notes-${leagueId}`} />
+      {/* Financial setup */}
+      <div>
+        <SectionLabel action={allowClone ? (
+          <button onClick={cloneFromPrev}
+            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
+            data-testid={`button-clone-${leagueId}-${season}`}>
+            <Copy className="w-3 h-3" /> Clone from {prevSeason}
+          </button>
+        ) : undefined}>{season} Financial Setup{seasonSuffix(kind) ? ` · ${seasonSuffix(kind)}` : ""}</SectionLabel>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Entry Fee</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+              <Input type="number" min="0" className="pl-6 h-9 text-sm" value={f.buyIn || ""} placeholder="0"
+                onChange={e => update(season, { buyIn: parseFloat(e.target.value) || 0 })}
+                data-testid={`input-buyin-${leagueId}-${season}`} />
             </div>
           </div>
-        </div>
-
-        {/* Prize Setup */}
-        <div className="space-y-3">
-          <SectionLabel action={
-            <button
-              onClick={() => onAddPrize(leagueId)}
-              className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
-              data-testid={`button-add-prize-${leagueId}`}>
-              <Plus className="w-3 h-3" /> Add Place
-            </button>
-          }>Prize Setup</SectionLabel>
-          {f.prizes.length === 0 ? (
-            <button onClick={() => onAddPrize(leagueId)}
-              className="w-full text-left text-xs text-muted-foreground italic leading-relaxed rounded-lg border border-dashed border-border/50 px-3 py-4 hover:border-border hover:text-foreground transition-colors"
-              data-testid={`prize-empty-${leagueId}`}>
-              No prize structure set. <span className="text-[#d4af37] not-italic font-semibold">+ Add a payout place</span> to track expected payouts and reconciliation.
-            </button>
-          ) : (
-            <div className="space-y-1.5">
-              {[...f.prizes].sort((a, b) => a.place - b.place).map(prize => (
-                <div key={prize.place}
-                  className={`flex flex-wrap items-center gap-2 px-2.5 py-1.5 rounded-md border ${prize.paid ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/30 bg-muted/20"}`}
-                  data-testid={`prize-row-${leagueId}-${prize.place}`}>
-                  <Input
-                    className="h-8 text-sm w-24 flex-shrink-0"
-                    value={prize.label ?? ordinal(prize.place)}
-                    placeholder="Place / label"
-                    onChange={e => onUpdatePrize(leagueId, prize.place, { label: e.target.value })}
-                    data-testid={`input-prize-label-${leagueId}-${prize.place}`} />
-                  <div className="relative w-24 flex-shrink-0">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                    <Input type="number" min="0" className="pl-6 h-8 text-sm" value={prize.amount || ""} placeholder="0"
-                      onChange={e => onUpdatePrize(leagueId, prize.place, { amount: parseFloat(e.target.value) || 0 })}
-                      data-testid={`input-prize-${leagueId}-${prize.place}`} />
-                  </div>
-                  <button
-                    onClick={() => onUpdatePrize(leagueId, prize.place, { paid: !prize.paid })}
-                    className={`flex items-center gap-1 px-2 h-8 rounded-md text-[11px] font-medium border transition-colors flex-shrink-0 ${prize.paid ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10" : "border-border/40 text-muted-foreground hover:text-foreground"}`}
-                    data-testid={`button-prize-paid-${leagueId}-${prize.place}`}>
-                    <CheckCircle2 className="w-3 h-3" />{prize.paid ? "Paid out" : "Mark paid"}
-                  </button>
-                  <button onClick={() => onRemovePrize(leagueId, prize.place)}
-                    className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-1 ml-auto"
-                    data-testid={`button-remove-prize-${leagueId}-${prize.place}`}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-              {/* Prize pool vs collected reconciliation hint */}
-              <div className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg border text-xs ${metrics.reconIssue ? "border-amber-500/40 bg-amber-500/5" : "bg-muted/20 border-border/30"}`}>
-                <Stat label="Pool" value={fmtDollar(metrics.prizePool)} />
-                <span className="text-border/60">|</span>
-                <Stat label="Collected" value={fmtDollar(metrics.collected)} />
-                {metrics.reconIssue && (
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Pool exceeds collected dues
-                  </span>
-                )}
-              </div>
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Due Date</label>
+            <DebouncedInput key={`due-${leagueId}-${season}`} type="text" placeholder="Sep 1, 2026"
+              className="h-9 text-sm" value={f.dueDate} onCommit={v => update(season, { dueDate: v })}
+              data-testid={`input-duedate-${leagueId}-${season}`} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">LeagueSafe Link</label>
+            <div className="relative">
+              <DebouncedInput key={`safe-${leagueId}-${season}`} type="url" placeholder="https://leaguesafe.com/league/…"
+                className={`h-9 text-sm ${f.leagueSafeUrl ? "pr-9" : ""}`} value={f.leagueSafeUrl}
+                onCommit={v => update(season, { leagueSafeUrl: v, leagueSafeStatus: v && f.leagueSafeStatus === "not_created" ? "active" : f.leagueSafeStatus })}
+                data-testid={`input-leaguesafe-${leagueId}-${season}`} />
+              {f.leagueSafeUrl && (
+                <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#d4af37] hover:opacity-70 transition-opacity"
+                  onClick={e => e.stopPropagation()}>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
             </div>
-          )}
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Payment Rule</label>
+            <DebouncedInput key={`rule-${leagueId}-${season}`} type="text" placeholder="Pay future years if you trade a pick"
+              className="h-9 text-sm" value={f.paymentRule} onCommit={v => update(season, { paymentRule: v })}
+              data-testid={`input-paymentrule-${leagueId}-${season}`} />
+          </div>
+          <div className="sm:col-span-3">
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
+              <StickyNote className="w-3 h-3" /> Notes
+            </label>
+            <DebouncedTextarea key={`notes-${leagueId}-${season}`} placeholder="Payout method, side pots, dues deadline…"
+              className="text-sm min-h-[40px] resize-y" value={f.notes} onCommit={v => update(season, { notes: v })}
+              data-testid={`input-notes-${leagueId}-${season}`} />
+          </div>
         </div>
       </div>
 
-      {/* Manager Payments — full width */}
+      {/* Manager payments */}
       {!f.isFree && (
         <div>
-          {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <div className="flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Manager Payments</span>
             </div>
             <span className="text-[10px] text-muted-foreground tabular-nums">
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{paidStatusCount.settled} paid</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{settled} settled</span>
               {" / "}
-              <span className="font-semibold">{Math.max(0, paidStatusCount.total - paidStatusCount.settled)} unpaid</span>
+              <span className="font-semibold">{Math.max(0, teams - settled)} open</span>
             </span>
             <div className="flex-1" />
             {managers && managers.length > 0 && (
@@ -514,16 +742,16 @@ function FinanceLeagueEditor({
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                   <Input value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Search manager…" className="pl-8 h-8 text-xs"
-                    data-testid={`input-payment-search-${leagueId}`} />
+                    data-testid={`input-payment-search-${leagueId}-${season}`} />
                 </div>
                 <button onClick={() => markAll("paid")}
                   className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border/50 text-[11px] font-semibold text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40 transition-colors"
-                  data-testid={`button-mark-all-paid-${leagueId}`}>
+                  data-testid={`button-mark-all-paid-${leagueId}-${season}`}>
                   <CheckCircle2 className="w-3 h-3" /> Mark all paid
                 </button>
                 <button onClick={() => markAll("unpaid")}
                   className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border/50 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                  data-testid={`button-mark-all-unpaid-${leagueId}`}>
+                  data-testid={`button-mark-all-unpaid-${leagueId}-${season}`}>
                   <SlidersHorizontal className="w-3 h-3" /> Mark all unpaid
                 </button>
               </>
@@ -535,50 +763,16 @@ function FinanceLeagueEditor({
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading managers…
             </div>
           ) : managers && managers.length > 0 ? (
-            filteredManagers.length === 0 ? (
+            filtered.length === 0 ? (
               <p className="text-xs text-muted-foreground italic px-1 py-2">No managers match "{search}".</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
-                {filteredManagers.map(m => {
-                  const pay = f.payments.find(p => p.rosterId === m.rosterId);
-                  const status: ManagerPaymentStatus = pay?.status ?? "unpaid";
-                  return (
-                    <div key={m.rosterId}
-                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border/30 bg-muted/20 hover:bg-muted/30 transition-colors"
-                      data-testid={`payment-row-${leagueId}-${m.rosterId}`}>
-                      <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center relative">
-                        <Users className="w-3.5 h-3.5 text-[#0b3a7a]/60 dark:text-blue-400/60" />
-                        {m.avatarUrl && (
-                          <img src={m.avatarUrl} alt=""
-                            className="absolute inset-0 w-full h-full object-cover"
-                            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                            data-testid={`img-manager-avatar-${leagueId}-${m.rosterId}`} />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold truncate leading-tight">{m.managerName}</p>
-                        <p className="text-[10px] text-muted-foreground truncate leading-tight">
-                          {m.teamName} <span className="text-muted-foreground/70">· {fmtDollar(owed)}</span>
-                        </p>
-                      </div>
-                      {status === "partial" && (
-                        <div className="relative w-16 flex-shrink-0">
-                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">$</span>
-                          <Input type="number" min="0" className="pl-4 h-7 text-xs" value={pay?.paid || ""} placeholder="0"
-                            onChange={e => onUpdatePayment(leagueId, m.rosterId, { paid: parseFloat(e.target.value) || 0 })}
-                            data-testid={`payment-amount-${leagueId}-${m.rosterId}`} />
-                        </div>
-                      )}
-                      <PaymentStatusSelect
-                        value={status}
-                        onChange={v => onUpdatePayment(leagueId, m.rosterId, {
-                          status: v,
-                          paid: v === "paid" ? owed : v === "unpaid" || v === "waived" ? 0 : (pay?.paid || 0),
-                        })}
-                        testId={`payment-status-${leagueId}-${m.rosterId}`} />
-                    </div>
-                  );
-                })}
+                {filtered.map(m => (
+                  <ManagerPaymentCard key={m.rosterId} m={m} leagueId={leagueId} season={season} owed={owed}
+                    payment={f.payments.find(p => p.rosterId === m.rosterId)}
+                    risk={pickRiskFor(pickRisk, m.rosterId)}
+                    onUpdate={updatePayment} />
+                ))}
               </div>
             )
           ) : (
@@ -586,17 +780,510 @@ function FinanceLeagueEditor({
           )}
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* Secondary actions */}
-      <div className="flex flex-wrap justify-end gap-1.5">
+// ─── Future Dues view ────────────────────────────────────────────────────────────
+
+function FutureDuesView({
+  leagueId, currentSeason, managers, managersLoading, getFinance, update, pickRisk,
+}: SubviewCommon) {
+  const seasons = seasonsFor(currentSeason).filter(s => seasonKind(s, currentSeason) !== "past");
+
+  const setStatus = useCallback((season: string, rosterId: string, status: ManagerPaymentStatus, reason?: PaymentReason) => {
+    const cur = getFinance(season);
+    const owed = cur.buyIn;
+    const existing = cur.payments.find(p => p.rosterId === rosterId);
+    const patch: Partial<ManagerPayment> = { status, paid: paidForStatus(status, owed, existing?.paid || 0), ...(reason ? { reason } : {}) };
+    const next = existing
+      ? cur.payments.map(p => p.rosterId === rosterId ? { ...p, ...patch } : p)
+      : [...cur.payments, { rosterId, paid: 0, status: "unpaid" as ManagerPaymentStatus, ...patch }];
+    update(season, { payments: next });
+  }, [getFinance, update]);
+
+  if (managersLoading) {
+    return <div className="flex items-center gap-2 text-xs text-muted-foreground py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading managers…</div>;
+  }
+  if (!managers || managers.length === 0) {
+    return <p className="text-xs text-muted-foreground italic">Could not load this league's managers from Sleeper.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Who owes for upcoming seasons. Managers who traded a future pick should be paid for that year —
+        <span className="text-amber-600 dark:text-amber-400 font-medium"> ⚠ flags an unsettled obligation</span>.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-separate border-spacing-0 min-w-[640px]">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <th className="text-left font-bold px-2 py-2 sticky left-0 bg-background">Manager</th>
+              {seasons.map(s => (
+                <th key={s} className="text-center font-bold px-2 py-2 whitespace-nowrap">
+                  {s}{seasonKind(s, currentSeason) === "current" ? " ·now" : ""}
+                </th>
+              ))}
+              <th className="text-left font-bold px-2 py-2">Future Pick Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {managers.map(m => {
+              const risks = pickRiskFor(pickRisk, m.rosterId);
+              const openRisks = risks.filter(r =>
+                seasons.includes(r.season) &&
+                !isSettled(getFinance(r.season).payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid"));
+              return (
+                <tr key={m.rosterId} className="border-b border-border/20" data-testid={`future-row-${leagueId}-${m.rosterId}`}>
+                  <td className="px-2 py-1.5 sticky left-0 bg-background">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <ManagerAvatar url={m.avatarUrl} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold truncate leading-tight">{m.managerName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate leading-tight">{m.teamName}</p>
+                      </div>
+                    </div>
+                  </td>
+                  {seasons.map(s => {
+                    const status = getFinance(s).payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid";
+                    return (
+                      <td key={s} className="px-2 py-1.5 text-center">
+                        <PaymentStatusSelect value={status} className="w-[110px] mx-auto"
+                          onChange={v => setStatus(s, m.rosterId, v)}
+                          testId={`future-status-${leagueId}-${s}-${m.rosterId}`} />
+                      </td>
+                    );
+                  })}
+                  <td className="px-2 py-1.5">
+                    {risks.length === 0 ? (
+                      <span className="text-[11px] text-muted-foreground">Clear</span>
+                    ) : (
+                      <div className="space-y-1">
+                        {risks.map(r => {
+                          const status = getFinance(r.season).payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid";
+                          const open = !isSettled(status);
+                          return (
+                            <div key={r.season} className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${open ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                                {open && <ShieldAlert className="w-3 h-3" />}
+                                Traded {r.picks.join(", ")}
+                              </span>
+                              {open && (
+                                <button
+                                  onClick={() => setStatus(r.season, m.rosterId, "prepaid", "future_pick_prepay")}
+                                  className="px-1.5 py-0.5 rounded border border-teal-500/40 text-teal-600 dark:text-teal-400 text-[10px] font-semibold hover:bg-teal-500/10 transition-colors"
+                                  data-testid={`button-mark-prepaid-${leagueId}-${r.season}-${m.rosterId}`}>
+                                  Mark {r.season} prepaid
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Manager Ledger view ─────────────────────────────────────────────────────────
+
+const PAYMENT_REASON_OPTIONS: { value: PaymentReason; label: string }[] = [
+  { value: "entry_fee", label: "Entry fee" },
+  { value: "future_pick_prepay", label: "Future pick prepay" },
+  { value: "orphan_discount", label: "Orphan discount" },
+  { value: "empire_pool", label: "Empire pool" },
+  { value: "side_pot", label: "Side pot" },
+];
+
+function ManagerLedgerView({
+  leagueId, currentSeason, priorSeasons, managers, managersLoading, getFinance, update,
+}: SubviewCommon) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const seasons = seasonsFor(currentSeason, priorSeasons);
+
+  const updatePayment = useCallback((season: string, rosterId: string, patch: Partial<ManagerPayment>) => {
+    const cur = getFinance(season);
+    const existing = cur.payments.find(p => p.rosterId === rosterId);
+    const next = existing
+      ? cur.payments.map(p => p.rosterId === rosterId ? { ...p, ...patch } : p)
+      : [...cur.payments, { rosterId, paid: 0, status: "unpaid" as ManagerPaymentStatus, ...patch }];
+    update(season, { payments: next });
+  }, [getFinance, update]);
+
+  if (managersLoading) {
+    return <div className="flex items-center gap-2 text-xs text-muted-foreground py-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading managers…</div>;
+  }
+  if (!managers || managers.length === 0) {
+    return <p className="text-xs text-muted-foreground italic">Could not load this league's managers from Sleeper.</p>;
+  }
+
+  const sel = selected ?? managers[0]?.rosterId ?? null;
+  const selManager = managers.find(m => m.rosterId === sel);
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+      {/* Manager list */}
+      <div className="space-y-1 md:max-h-[420px] md:overflow-y-auto pr-1">
+        {managers.map(m => {
+          const active = m.rosterId === sel;
+          const settledCount = seasons.filter(s => isSettled(getFinance(s).payments.find(p => p.rosterId === m.rosterId)?.status ?? "unpaid")).length;
+          return (
+            <button key={m.rosterId} onClick={() => setSelected(m.rosterId)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md border text-left transition-colors ${active ? "border-[#d4af37]/40 bg-[#d4af37]/5" : "border-border/30 bg-muted/10 hover:bg-muted/30"}`}
+              data-testid={`ledger-manager-${leagueId}-${m.rosterId}`}>
+              <ManagerAvatar url={m.avatarUrl} />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold truncate leading-tight">{m.managerName}</p>
+                <p className="text-[10px] text-muted-foreground truncate leading-tight">{settledCount}/{seasons.length} seasons settled</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected manager's multi-year ledger */}
+      <div className="space-y-2">
+        {selManager && (
+          <>
+            <div className="flex items-center gap-2 mb-1">
+              <ManagerAvatar url={selManager.avatarUrl} />
+              <div>
+                <p className="text-sm font-bold leading-tight">{selManager.managerName}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{selManager.teamName}</p>
+              </div>
+            </div>
+            {seasons.map(s => {
+              const f = getFinance(s);
+              const pay = f.payments.find(p => p.rosterId === sel);
+              const status = pay?.status ?? "unpaid";
+              const kind = seasonKind(s, currentSeason);
+              return (
+                <div key={s} className="rounded-lg border border-border/30 bg-muted/15 px-3 py-2 space-y-2" data-testid={`ledger-season-${leagueId}-${s}-${sel}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold tabular-nums w-12">{s}</span>
+                    {seasonSuffix(kind) && <span className="text-[9px] uppercase tracking-wide text-muted-foreground">{seasonSuffix(kind)}</span>}
+                    <PaymentStatusSelect value={status}
+                      onChange={v => updatePayment(s, sel!, { status: v, paid: paidForStatus(v, f.buyIn, pay?.paid || 0) })}
+                      testId={`ledger-status-${leagueId}-${s}-${sel}`} />
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {isSettled(status) || status === "partial" ? fmtDollar(pay?.paid || 0) : "—"}
+                      <span className="text-muted-foreground/60"> / {fmtDollar(f.buyIn)}</span>
+                    </span>
+                    {f.leagueSafeStatus && f.leagueSafeStatus !== "not_created" && (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${LEAGUE_SAFE_STATUS_CHIP[f.leagueSafeStatus]}`}>
+                        LeagueSafe {f.leagueSafeStatus}
+                      </span>
+                    )}
+                    <div className="flex-1" />
+                    <Select value={pay?.reason ?? "entry_fee"}
+                      onValueChange={v => updatePayment(s, sel!, { reason: v as PaymentReason })}>
+                      <SelectTrigger className="h-7 w-[150px] text-[11px]" data-testid={`ledger-reason-${leagueId}-${s}-${sel}`}>
+                        <SelectValue placeholder="Reason" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_REASON_OPTIONS.map(o => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <DebouncedInput key={`ledger-note-${leagueId}-${s}-${sel}`} type="text"
+                    placeholder="Credits, orphan discount, refund, prepay note…"
+                    className="h-8 text-xs" value={pay?.notes ?? ""}
+                    onCommit={v => updatePayment(s, sel!, { notes: v })}
+                    data-testid={`ledger-note-${leagueId}-${s}-${sel}`} />
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── LeagueSafe History view ─────────────────────────────────────────────────────
+
+function LeagueSafeHistoryView({
+  leagueId, currentSeason, priorSeasons, managers, getFinance, update,
+}: SubviewCommon) {
+  const seasons = seasonsFor(currentSeason, priorSeasons);
+  const teams = managers?.length ?? 0;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Year-based LeagueSafe records. Future years can be tracked manually before a LeagueSafe link exists.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[760px]">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border/40">
+              <th className="text-left font-bold px-2 py-2">Season</th>
+              <th className="text-left font-bold px-2 py-2">LeagueSafe Link</th>
+              <th className="text-center font-bold px-2 py-2">Status</th>
+              <th className="text-right font-bold px-2 py-2">Expected</th>
+              <th className="text-right font-bold px-2 py-2">Collected</th>
+              <th className="text-center font-bold px-2 py-2">Paid</th>
+              <th className="text-left font-bold px-2 py-2">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {seasons.map(s => {
+              const f = getFinance(s);
+              const m = computeMetrics(f, teams);
+              const kind = seasonKind(s, currentSeason);
+              return (
+                <tr key={s} className="border-b border-border/20" data-testid={`leaguesafe-row-${leagueId}-${s}`}>
+                  <td className="px-2 py-2 align-top">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold tabular-nums">{s}</span>
+                      {seasonSuffix(kind) && <span className="text-[9px] uppercase tracking-wide text-muted-foreground">{seasonSuffix(kind)}</span>}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 align-top">
+                    <div className="relative">
+                      <DebouncedInput key={`safe-link-${leagueId}-${s}`} type="url" placeholder="https://leaguesafe.com/…"
+                        className={`h-8 text-xs ${f.leagueSafeUrl ? "pr-8" : ""}`} value={f.leagueSafeUrl}
+                        onCommit={v => update(s, { leagueSafeUrl: v, leagueSafeStatus: v && f.leagueSafeStatus === "not_created" ? "active" : f.leagueSafeStatus })}
+                        data-testid={`leaguesafe-link-${leagueId}-${s}`} />
+                      {f.leagueSafeUrl && (
+                        <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#d4af37] hover:opacity-70">
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 align-top text-center">
+                    <Select value={f.leagueSafeStatus} onValueChange={v => update(s, { leagueSafeStatus: v as LeagueSafeStatus })}>
+                      <SelectTrigger className={`h-7 w-[112px] mx-auto text-[11px] font-semibold border ${LEAGUE_SAFE_STATUS_CHIP[f.leagueSafeStatus]}`}
+                        data-testid={`leaguesafe-status-${leagueId}-${s}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LEAGUE_SAFE_STATUS_OPTIONS.map(o => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-2 py-2 align-top text-right text-xs tabular-nums">{f.isFree ? "Free" : fmtDollar(m.dues)}</td>
+                  <td className="px-2 py-2 align-top text-right text-xs tabular-nums text-emerald-600 dark:text-emerald-400">{fmtDollar(m.collected)}</td>
+                  <td className="px-2 py-2 align-top text-center text-xs tabular-nums">{f.isFree ? "—" : `${m.paidCount}/${teams || m.teams}`}</td>
+                  <td className="px-2 py-2 align-top">
+                    <DebouncedInput key={`safe-note-${leagueId}-${s}`} type="text" placeholder="Paid out, rollover…"
+                      className="h-8 text-xs" value={f.notes} onCommit={v => update(s, { notes: v })}
+                      data-testid={`leaguesafe-note-${leagueId}-${s}`} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Payouts view (season-scoped) ────────────────────────────────────────────────
+
+function PayoutsView({
+  leagueId, season, currentSeason, managers, getFinance, update,
+}: SubviewCommon & { season: string }) {
+  const f = getFinance(season);
+  const teams = managers?.length ?? 0;
+  const metrics = computeMetrics(f, teams);
+  const kind = seasonKind(season, currentSeason);
+
+  const addPrize = useCallback(() => {
+    const cur = getFinance(season);
+    const nextPlace = (cur.prizes.length > 0 ? Math.max(...cur.prizes.map(p => p.place)) : 0) + 1;
+    update(season, { prizes: [...cur.prizes, { place: nextPlace, amount: 0, label: ordinal(nextPlace), paid: false }] });
+  }, [getFinance, season, update]);
+
+  const updatePrize = useCallback((place: number, patch: Partial<PrizeSlot>) => {
+    const cur = getFinance(season);
+    update(season, { prizes: cur.prizes.map(p => p.place === place ? { ...p, ...patch } : p) });
+  }, [getFinance, season, update]);
+
+  const removePrize = useCallback((place: number) => {
+    const cur = getFinance(season);
+    update(season, { prizes: cur.prizes.filter(p => p.place !== place) });
+  }, [getFinance, season, update]);
+
+  return (
+    <div className="space-y-3">
+      <SectionLabel action={
+        <button onClick={addPrize}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#d4af37] hover:opacity-80 transition-opacity"
+          data-testid={`button-add-prize-${leagueId}-${season}`}>
+          <Plus className="w-3 h-3" /> Add Place
+        </button>
+      }>Payouts for {season}{seasonSuffix(kind) ? ` · ${seasonSuffix(kind)}` : ""}</SectionLabel>
+
+      {f.prizes.length === 0 ? (
+        <button onClick={addPrize}
+          className="w-full text-left text-xs text-muted-foreground italic leading-relaxed rounded-lg border border-dashed border-border/50 px-3 py-4 hover:border-border hover:text-foreground transition-colors"
+          data-testid={`prize-empty-${leagueId}-${season}`}>
+          No payout structure for {season}. <span className="text-[#d4af37] not-italic font-semibold">+ Add a place</span>,
+          side pot, or empire/rollover pool.
+        </button>
+      ) : (
+        <div className="space-y-1.5">
+          {[...f.prizes].sort((a, b) => a.place - b.place).map(prize => (
+            <div key={prize.place}
+              className={`flex flex-wrap items-center gap-2 px-2.5 py-1.5 rounded-md border ${prize.paid ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/30 bg-muted/20"}`}
+              data-testid={`prize-row-${leagueId}-${season}-${prize.place}`}>
+              <Input className="h-8 text-sm w-28 flex-shrink-0" value={prize.label ?? ordinal(prize.place)} placeholder="Place / label"
+                onChange={e => updatePrize(prize.place, { label: e.target.value })}
+                data-testid={`input-prize-label-${leagueId}-${season}-${prize.place}`} />
+              <div className="relative w-24 flex-shrink-0">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                <Input type="number" min="0" className="pl-6 h-8 text-sm" value={prize.amount || ""} placeholder="0"
+                  onChange={e => updatePrize(prize.place, { amount: parseFloat(e.target.value) || 0 })}
+                  data-testid={`input-prize-${leagueId}-${season}-${prize.place}`} />
+              </div>
+              <DebouncedInput key={`prize-note-${leagueId}-${season}-${prize.place}`} type="text" placeholder="Rolls over / side pot note"
+                className="h-8 text-xs flex-1 min-w-[120px]" value={prize.notes ?? ""}
+                onCommit={v => updatePrize(prize.place, { notes: v })}
+                data-testid={`input-prize-note-${leagueId}-${season}-${prize.place}`} />
+              <button onClick={() => updatePrize(prize.place, { paid: !prize.paid })}
+                className={`flex items-center gap-1 px-2 h-8 rounded-md text-[11px] font-medium border transition-colors flex-shrink-0 ${prize.paid ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10" : "border-border/40 text-muted-foreground hover:text-foreground"}`}
+                data-testid={`button-prize-paid-${leagueId}-${season}-${prize.place}`}>
+                <CheckCircle2 className="w-3 h-3" />{prize.paid ? "Paid out" : "Mark paid"}
+              </button>
+              <button onClick={() => removePrize(prize.place)}
+                className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 p-1"
+                data-testid={`button-remove-prize-${leagueId}-${season}-${prize.place}`}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          <div className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 rounded-lg border text-xs ${metrics.reconIssue ? "border-amber-500/40 bg-amber-500/5" : "bg-muted/20 border-border/30"}`}>
+            <Stat label="Pool" value={fmtDollar(metrics.prizePool)} />
+            <span className="text-border/60">|</span>
+            <Stat label="Collected" value={fmtDollar(metrics.collected)} />
+            <span className="text-border/60">|</span>
+            <Stat label="Pending payout" value={fmtDollar(metrics.payoutsPending)}
+              valueCls={metrics.payoutsPending > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"} />
+            {metrics.reconIssue && (
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Pool exceeds collected dues
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Expanded-row editor ─────────────────────────────────────────────────────────
+
+interface FinanceLeagueEditorProps {
+  leagueId: string;
+  currentSeason: string;
+  /** Detected real prior seasons of this league. */
+  priorSeasons: string[];
+  isDynasty: boolean;
+  finance: LeagueFinanceData;          // current-season finance (for free/hide toggles)
+  managers: ManagerInfo[] | undefined;
+  managersLoading: boolean;
+  getFinance: (season: string) => LeagueFinanceData;
+  update: (season: string, patch: Partial<LeagueFinanceData>) => void;
+  pickRisk: PickRiskMap;
+}
+
+const SUBVIEWS: { key: SubviewKey; label: string; icon: typeof Wallet; dynastyOnly?: boolean }[] = [
+  { key: "current",    label: "Current Season",    icon: Wallet },
+  { key: "future",     label: "Future Dues",       icon: CalendarClock, dynastyOnly: true },
+  { key: "ledger",     label: "Manager Ledger",    icon: Users,        dynastyOnly: true },
+  { key: "leaguesafe", label: "LeagueSafe History", icon: History,     dynastyOnly: true },
+  { key: "payouts",    label: "Payouts",           icon: TrophyIcon },
+];
+
+function FinanceLeagueEditor({
+  leagueId, currentSeason, priorSeasons, isDynasty, finance, managers, managersLoading, getFinance, update, pickRisk,
+}: FinanceLeagueEditorProps) {
+  const [subview, setSubview] = useState<SubviewKey>("current");
+  const [selectedSeason, setSelectedSeason] = useState(currentSeason);
+  const seasons = seasonsFor(currentSeason, priorSeasons);
+  const f = finance;
+
+  // Season selector applies to the season-scoped views (Current Season, Payouts).
+  const seasonScoped = subview === "current" || subview === "payouts";
+  const subviews = SUBVIEWS.filter(s => isDynasty || !s.dynastyOnly);
+
+  const common: SubviewCommon = {
+    leagueId, currentSeason, priorSeasons, managers, managersLoading, getFinance, update, pickRisk,
+  };
+
+  return (
+    <div className="border-t border-border/30 bg-muted/10 p-4 md:p-5 space-y-4">
+      {isDynasty && <MultiYearSummaryBar currentSeason={currentSeason} priorSeasons={priorSeasons} getFinance={getFinance} managers={managers} pickRisk={pickRisk} />}
+
+      {/* Subview pills + season selector */}
+      {isDynasty && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 p-0.5 rounded-lg bg-muted/40 border border-border/30">
+            {subviews.map(sv => {
+              const active = subview === sv.key;
+              const Icon = sv.icon;
+              return (
+                <button key={sv.key} onClick={() => setSubview(sv.key)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  data-testid={`subview-${leagueId}-${sv.key}`}>
+                  <Icon className="w-3 h-3" />{sv.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex-1" />
+          {seasonScoped && (
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+              <div className="flex flex-wrap gap-1">
+                {seasons.map(s => {
+                  const kind = seasonKind(s, currentSeason);
+                  const active = selectedSeason === s;
+                  return (
+                    <button key={s} onClick={() => setSelectedSeason(s)}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold tabular-nums border transition-colors ${active
+                        ? "border-[#d4af37]/50 bg-[#d4af37]/10 text-[#d4af37]"
+                        : "border-border/40 text-muted-foreground hover:text-foreground hover:border-border"}`}
+                      data-testid={`season-pill-${leagueId}-${s}`}>
+                      {s}{kind === "current" ? " ·now" : kind === "future" ? " ·fut" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Subview content */}
+      {subview === "current" && <CurrentSeasonView {...common} season={isDynasty ? selectedSeason : currentSeason} allowClone={isDynasty} />}
+      {subview === "future" && <FutureDuesView {...common} />}
+      {subview === "ledger" && <ManagerLedgerView {...common} />}
+      {subview === "leaguesafe" && <LeagueSafeHistoryView {...common} />}
+      {subview === "payouts" && <PayoutsView {...common} season={isDynasty ? selectedSeason : currentSeason} />}
+
+      {/* Secondary actions — operate on the current season row */}
+      <div className="flex flex-wrap justify-end gap-1.5 pt-1 border-t border-border/20">
         <button
-          onClick={() => onUpdate(leagueId, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes, payments: !f.isFree ? [] : f.payments })}
+          onClick={() => update(currentSeason, { isFree: !f.isFree, buyIn: !f.isFree ? 0 : f.buyIn, prizes: !f.isFree ? [] : f.prizes, payments: !f.isFree ? [] : f.payments })}
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.isFree ? "bg-slate-500/10 text-slate-500 dark:text-slate-400 hover:bg-slate-500/15" : "text-muted-foreground hover:bg-muted/50 hover:text-slate-500 dark:hover:text-slate-400"}`}
           data-testid={`button-toggle-free-${leagueId}`}>
           <Tag className="w-3 h-3" />{f.isFree ? "Free League ✓" : "Mark as Free League"}
         </button>
         <button
-          onClick={() => onUpdate(leagueId, { ignored: !f.ignored })}
+          onClick={() => update(currentSeason, { ignored: !f.ignored })}
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${f.ignored ? "bg-muted text-muted-foreground hover:bg-muted/70" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
           data-testid={`button-toggle-ignore-${leagueId}`}>
           {f.ignored ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -607,38 +1294,40 @@ function FinanceLeagueEditor({
   );
 }
 
-// ─── Summary card ──────────────────────────────────────────────────────────────
+// ─── Global summary card ─────────────────────────────────────────────────────────
 
-function SummaryCard({ icon: Icon, label, value, sub, accent, testId }: {
-  icon: typeof Wallet; label: string; value: string; sub?: string; accent?: string; testId?: string;
+const LEAGUE_TYPE_LABEL: Record<string, string> = {
+  dynasty: "Dynasty",
+  keeper: "Keeper",
+  redraft: "Redraft",
+};
+
+const SUMMARY_ACCENT: Record<string, string> = {
+  slate:   "bg-slate-500/10 text-slate-500 dark-any:text-slate-400",
+  emerald: "bg-emerald-500/10 text-emerald-600 dark-any:text-emerald-400",
+  amber:   "bg-amber-500/10 text-amber-600 dark-any:text-amber-400",
+  red:     "bg-red-500/10 text-red-600 dark-any:text-red-400",
+  blue:    "bg-blue-500/10 text-blue-600 dark-any:text-blue-400",
+  gold:    "bg-[#d4af37]/10 text-[var(--sc-gold-deep)] dark-any:text-[#d4af37]",
+};
+
+function SummaryCard({ icon: Icon, label, value, sub, accent = "slate", testId }: {
+  icon: typeof Wallet; label: string; value: string; sub?: string;
+  accent?: keyof typeof SUMMARY_ACCENT; testId?: string;
 }) {
   return (
-    <Card className="p-3 md:p-4" data-testid={testId}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className={`w-3.5 h-3.5 ${accent ?? "text-muted-foreground"}`} />
-        <p className="text-[10px] md:text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+    <Card className="p-4 flex items-start gap-3 min-w-0" data-testid={testId}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${SUMMARY_ACCENT[accent]}`}>
+        <Icon className="w-4 h-4" />
       </div>
-      <p className={`text-lg md:text-xl font-bold ${accent ?? "text-foreground"}`}>{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+      <div className="min-w-0">
+        <p className="text-xl font-bold tabular-nums leading-tight text-foreground">{value}</p>
+        <p className="text-[11px] font-medium leading-tight mt-0.5 text-muted-foreground">{label}</p>
+        {sub && <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate">{sub}</p>}
+      </div>
     </Card>
   );
 }
-
-// ─── Action Required bucket ──────────────────────────────────────────────────────
-
-interface ActionBucket {
-  key: string;
-  title: string;
-  cta: string;
-  icon: typeof Wallet;
-  accent: string;       // severity text color — used only for the icon + count badge
-  leagues: { leagueId: string; name: string }[];
-}
-
-// Shared neutral league chip for every action bucket — color lives in the icon
-// and count badge, so the repeated chips stay calm and scannable.
-const ACTION_CHIP =
-  "max-w-full truncate px-2 py-0.5 rounded-md border border-border/50 bg-muted/30 text-[10.5px] font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors";
 
 // ─── Main League Treasury Tab ────────────────────────────────────────────────────
 
@@ -646,22 +1335,31 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
   const { isConnected, user, leagues } = useSleeper();
   const [token, setToken] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [finances, setFinances] = useState<Record<string, LeagueFinanceData>>({});
-  // When embedded in a single league's profile, default that league open.
+  const [finances, setFinances] = useState<Record<string, LeagueFinanceData>>({});  // keyed by financeKey(leagueId, season)
   const [expanded, setExpanded] = useState<string | null>(scopeLeagueId ?? null);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [loadingFinances, setLoadingFinances] = useState(false);
   const [managers, setManagers] = useState<Record<string, ManagerInfo[]>>({});
   const [managersLoading, setManagersLoading] = useState<Record<string, boolean>>({});
+  const [tradesByLeague, setTradesByLeague] = useState<Record<string, TradeRow[]>>({});
+  // Detected real prior seasons per league (from Sleeper's previous_league_id chain).
+  const [priorSeasonsByLeague, setPriorSeasonsByLeague] = useState<Record<string, string[]>>({});
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Every league this commissioner manages (Commissioner Command leagues).
-  // Scoped to a single league when embedded in that league's profile.
   const managedLeagues = leagues
     .filter(l => l.status !== "archived")
     .filter(l => !scopeLeagueId || l.leagueId === scopeLeagueId);
+
+  const currentSeasonOf = useCallback((leagueId: string) =>
+    managedLeagues.find(l => l.leagueId === leagueId)?.season ?? String(new Date().getFullYear()),
+    [managedLeagues]);
+
+  const isDynastyLeague = useCallback((leagueId: string) => {
+    const t = managedLeagues.find(l => l.leagueId === leagueId)?.leagueType;
+    return t === "dynasty" || t === "keeper";
+  }, [managedLeagues]);
 
   useEffect(() => {
     if (!user?.userId) return;
@@ -690,8 +1388,8 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }), [token]);
 
-  // Load persisted finance rows. Migration/fallback: legacy rows have no
-  // `payments` and prizes with only { place, amount } — both default safely.
+  // Load persisted finance rows (all seasons). Legacy rows lack the dynasty
+  // columns and default cleanly.
   useEffect(() => {
     if (!isConnected || !user?.userId || !token) return;
     setLoadingFinances(true);
@@ -701,8 +1399,10 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
         if (!rows) return;
         const map: Record<string, LeagueFinanceData> = {};
         for (const row of rows) {
-          map[row.leagueId] = {
+          const season = row.season ?? "2026";
+          map[financeKey(row.leagueId, season)] = {
             leagueId: row.leagueId,
+            season,
             buyIn: row.buyIn ?? 0,
             prizes: Array.isArray(row.prizes) ? row.prizes as PrizeSlot[] : [],
             payments: Array.isArray(row.payments) ? row.payments as ManagerPayment[] : [],
@@ -710,6 +1410,9 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
             isFree: row.isFree ?? false,
             ignored: row.ignored ?? false,
             leagueSafeUrl: row.leagueSafeUrl ?? "",
+            leagueSafeStatus: (row.leagueSafeStatus as LeagueSafeStatus) ?? (row.leagueSafeUrl ? "active" : "not_created"),
+            dueDate: row.dueDate ?? "",
+            paymentRule: row.paymentRule ?? "",
           };
         }
         setFinances(map);
@@ -718,24 +1421,25 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
       .finally(() => setLoadingFinances(false));
   }, [isConnected, user?.userId, token]);
 
-  const getFinance = useCallback((leagueId: string): LeagueFinanceData =>
-    finances[leagueId] ?? { ...DEFAULT_FINANCE, leagueId }, [finances]);
+  const getFinance = useCallback((leagueId: string, season: string): LeagueFinanceData =>
+    finances[financeKey(leagueId, season)] ?? defaultFinance(leagueId, season), [finances]);
 
-  const saveFinance = useCallback((leagueId: string, data: LeagueFinanceData) => {
+  const saveFinance = useCallback((leagueId: string, season: string, data: LeagueFinanceData) => {
     if (!user?.userId || !token) return;
-    clearTimeout(saveTimers.current[leagueId]);
+    const key = financeKey(leagueId, season);
+    clearTimeout(saveTimers.current[key]);
     setSaved(prev => ({ ...prev, [leagueId]: false }));
-    saveTimers.current[leagueId] = setTimeout(async () => {
+    saveTimers.current[key] = setTimeout(async () => {
       setSaving(prev => ({ ...prev, [leagueId]: true }));
       try {
         const r = await fetch(`${API_BASE}/api/finances`, {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
-            sleeperUserId: user.userId, leagueId,
-            season: managedLeagues.find(l => l.leagueId === leagueId)?.season ?? "2026",
+            sleeperUserId: user.userId, leagueId, season,
             buyIn: data.buyIn, prizes: data.prizes, payments: data.payments, notes: data.notes,
             isFree: data.isFree, ignored: data.ignored, leagueSafeUrl: data.leagueSafeUrl || null,
+            leagueSafeStatus: data.leagueSafeStatus, dueDate: data.dueDate || null, paymentRule: data.paymentRule || null,
           }),
         });
         if (r.status === 401) { handleLock(); return; }
@@ -744,44 +1448,17 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
       } catch {}
       setSaving(prev => ({ ...prev, [leagueId]: false }));
     }, 800);
-  }, [user?.userId, token, managedLeagues, authHeaders]);
+  }, [user?.userId, token, authHeaders]);
 
-  const updateFinance = useCallback((leagueId: string, patch: Partial<LeagueFinanceData>) => {
+  const updateFinance = useCallback((leagueId: string, season: string, patch: Partial<LeagueFinanceData>) => {
     setFinances(prev => {
-      const current = prev[leagueId] ?? { ...DEFAULT_FINANCE, leagueId };
+      const key = financeKey(leagueId, season);
+      const current = prev[key] ?? defaultFinance(leagueId, season);
       const updated = { ...current, ...patch };
-      saveFinance(leagueId, updated);
-      return { ...prev, [leagueId]: updated };
+      saveFinance(leagueId, season, updated);
+      return { ...prev, [key]: updated };
     });
   }, [saveFinance]);
-
-  const addPrize = useCallback((leagueId: string) => {
-    const f = getFinance(leagueId);
-    const nextPlace = (f.prizes.length > 0 ? Math.max(...f.prizes.map(p => p.place)) : 0) + 1;
-    updateFinance(leagueId, { prizes: [...f.prizes, { place: nextPlace, amount: 0, label: ordinal(nextPlace), paid: false }] });
-  }, [getFinance, updateFinance]);
-
-  const removePrize = useCallback((leagueId: string, place: number) => {
-    const f = getFinance(leagueId);
-    updateFinance(leagueId, { prizes: f.prizes.filter(p => p.place !== place) });
-  }, [getFinance, updateFinance]);
-
-  const updatePrize = useCallback((leagueId: string, place: number, patch: Partial<PrizeSlot>) => {
-    const f = getFinance(leagueId);
-    updateFinance(leagueId, { prizes: f.prizes.map(p => p.place === place ? { ...p, ...patch } : p) });
-  }, [getFinance, updateFinance]);
-
-  const updatePayment = useCallback((leagueId: string, rosterId: string, patch: Partial<ManagerPayment>) => {
-    const f = getFinance(leagueId);
-    const existing = f.payments.find(p => p.rosterId === rosterId);
-    let next: ManagerPayment[];
-    if (existing) {
-      next = f.payments.map(p => p.rosterId === rosterId ? { ...p, ...patch } : p);
-    } else {
-      next = [...f.payments, { rosterId, paid: 0, status: "unpaid", ...patch }];
-    }
-    updateFinance(leagueId, { payments: next });
-  }, [getFinance, updateFinance]);
 
   // Lazily fetch managers when a league is first expanded.
   const ensureManagers = useCallback((leagueId: string) => {
@@ -793,22 +1470,40 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
       .finally(() => setManagersLoading(prev => ({ ...prev, [leagueId]: false })));
   }, [managers, managersLoading]);
 
+  // Lazily fetch the trade feed (dynasty/keeper only) to detect future-pick risk.
+  const ensureTrades = useCallback((leagueId: string) => {
+    if (tradesByLeague[leagueId] || !isDynastyLeague(leagueId)) return;
+    fetchTradeFeed(leagueId)
+      .then(res => setTradesByLeague(prev => ({ ...prev, [leagueId]: res.trades ?? [] })))
+      .catch(() => setTradesByLeague(prev => ({ ...prev, [leagueId]: [] })));
+  }, [tradesByLeague, isDynastyLeague]);
+
+  // Detect the league's real prior seasons by walking Sleeper's previous_league_id
+  // chain, so only seasons that actually existed are offered to fill in.
+  const ensurePriorSeasons = useCallback((leagueId: string) => {
+    if (priorSeasonsByLeague[leagueId]) return;
+    fetchPriorLeagueSeasons(leagueId)
+      .then(refs => setPriorSeasonsByLeague(prev => ({ ...prev, [leagueId]: refs.map(r => r.season) })))
+      .catch(() => setPriorSeasonsByLeague(prev => ({ ...prev, [leagueId]: [] })));
+  }, [priorSeasonsByLeague]);
+
   const toggleExpand = useCallback((leagueId: string) => {
     setExpanded(prev => {
       const next = prev === leagueId ? null : leagueId;
-      if (next) ensureManagers(next);
+      if (next) { ensureManagers(next); ensureTrades(next); ensurePriorSeasons(next); }
       return next;
     });
-  }, [ensureManagers]);
+  }, [ensureManagers, ensureTrades, ensurePriorSeasons]);
 
-  // Jump to + open a league from an Action Required CTA.
-  const openLeague = useCallback((leagueId: string) => {
-    setExpanded(leagueId);
-    ensureManagers(leagueId);
-    requestAnimationFrame(() => {
-      rowRefs.current[leagueId]?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }, [ensureManagers]);
+  // Load lazy data for whichever league is expanded — covers the initially-
+  // expanded league when scoped to one (e.g. League Profile), where toggleExpand
+  // never fires. The ensure* helpers are idempotent.
+  useEffect(() => {
+    if (!expanded) return;
+    ensureManagers(expanded);
+    ensureTrades(expanded);
+    ensurePriorSeasons(expanded);
+  }, [expanded, ensureManagers, ensureTrades, ensurePriorSeasons]);
 
   const teamsOf = useCallback((leagueId: string) =>
     managedLeagues.find(l => l.leagueId === leagueId)?.totalRosters ?? 0, [managedLeagues]);
@@ -853,16 +1548,16 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
     return <div className="min-h-[40vh] flex items-center justify-center"><TeamLoader size="lg" context="Loading league treasury" /></div>;
   }
 
-  // ── Derived state across visible leagues ─────────────────────────────────────
-  const visibleLeagues = managedLeagues.filter(l => !getFinance(l.leagueId).ignored);
-  const hiddenLeagues = managedLeagues.filter(l => getFinance(l.leagueId).ignored);
+  // ── Derived state across visible leagues (current season) ────────────────────
+  const curFinance = (l: typeof managedLeagues[number]) => getFinance(l.leagueId, currentSeasonOf(l.leagueId));
+  const visibleLeagues = managedLeagues.filter(l => !curFinance(l).ignored);
+  const hiddenLeagues = managedLeagues.filter(l => curFinance(l).ignored);
 
   const metricsByLeague: Record<string, LeagueMetrics> = {};
-  managedLeagues.forEach(l => { metricsByLeague[l.leagueId] = computeMetrics(getFinance(l.leagueId), teamsOf(l.leagueId)); });
+  managedLeagues.forEach(l => { metricsByLeague[l.leagueId] = computeMetrics(curFinance(l), teamsOf(l.leagueId)); });
 
-  // Summary totals (visible, non-free count toward dues math).
   const totals = visibleLeagues.reduce((acc, l) => {
-    const f = getFinance(l.leagueId);
+    const f = curFinance(l);
     const m = metricsByLeague[l.leagueId];
     acc.dues += m.dues;
     acc.collected += m.collected;
@@ -874,38 +1569,18 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
   }, { dues: 0, collected: 0, prizePool: 0, payoutsPending: 0, payoutLeagues: 0, issueLeagues: 0 });
   const outstanding = Math.max(0, totals.dues - totals.collected);
 
-  // Action Required buckets.
-  const inBucket = (pred: (m: LeagueMetrics, f: LeagueFinanceData) => boolean) =>
-    visibleLeagues
-      .filter(l => { const f = getFinance(l.leagueId); return !f.isFree && pred(metricsByLeague[l.leagueId], f); })
-      .map(l => ({ leagueId: l.leagueId, name: l.name }));
-
-  const AMBER = "text-amber-600 dark:text-amber-400";
-  const buckets: ActionBucket[] = [
-    { key: "missing-payments", title: "Missing Payments", cta: "Review dues", icon: Wallet,
-      accent: AMBER, leagues: inBucket(m => m.hasMissingPayments) },
-    { key: "prize-setup", title: "Prize Setup Needed", cta: "Configure prizes", icon: TrophyIcon,
-      accent: AMBER, leagues: inBucket(m => m.missingPrizes || m.missingBuyIn) },
-    { key: "leaguesafe-missing", title: "LeagueSafe Missing", cta: "Add LeagueSafe link", icon: Link2,
-      accent: "text-muted-foreground", leagues: inBucket(m => m.missingLeagueSafe) },
-    { key: "payout-pending", title: "Payouts Pending", cta: "Mark payouts", icon: Banknote,
-      accent: AMBER, leagues: inBucket(m => m.hasUnpaidPayouts) },
-    { key: "recon", title: "Reconciliation Issues", cta: "Reconcile", icon: Scale,
-      accent: "text-red-600 dark:text-red-400", leagues: inBucket(m => m.reconIssue) },
-  ];
-  const activeBuckets = buckets.filter(b => b.leagues.length > 0);
-
   const stillLoadingTeams = managedLeagues.some(l => teamsOf(l.leagueId) === 0);
 
-  // Desktop grid: League | Format | Teams | Buy-In | Paid | Outstanding | Prize Pool | LeagueSafe | Status | Actions
-  const COL = "grid-cols-[minmax(160px,1.4fr)_minmax(120px,1fr)_52px_64px_60px_84px_84px_72px_140px_84px]";
+  const COL = "grid-cols-[minmax(200px,1.8fr)_64px_60px_84px_72px_100px]";
 
   function renderLeagueRow(league: typeof managedLeagues[number]) {
-    const f = getFinance(league.leagueId);
+    const cs = currentSeasonOf(league.leagueId);
+    const f = getFinance(league.leagueId, cs);
     const m = metricsByLeague[league.leagueId];
     const status = leagueStatus(f, m);
     const isExpanded = expanded === league.leagueId;
     const hasSafe = !!f.leagueSafeUrl?.trim();
+    const dynasty = isDynastyLeague(league.leagueId);
 
     return (
       <div key={league.leagueId}
@@ -936,12 +1611,14 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
               {!f.isFree && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-[11px]">
                   <span className="text-muted-foreground">Paid <span className="font-semibold text-foreground">{m.paidCount}/{m.teams}</span></span>
-                  <span className="text-muted-foreground">Out <span className={`font-semibold ${m.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{fmtDollar(m.outstanding)}</span></span>
                   <span className="text-muted-foreground">Pool <span className="font-semibold text-foreground">{fmtDollar(m.prizePool)}</span></span>
                 </div>
               )}
               <div className="flex items-center justify-between gap-2 mt-2">
-                <StatusPill status={status} />
+                <div className="flex items-center gap-1.5">
+                  <StatusPill status={status} />
+                  {dynasty && <span className="text-[9px] font-bold uppercase tracking-wide text-[#d4af37]">Multi-year</span>}
+                </div>
                 <button
                   onClick={e => { e.stopPropagation(); toggleExpand(league.leagueId); }}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border/50 text-[11px] font-semibold hover:bg-muted/50 transition-colors"
@@ -971,49 +1648,45 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
                   data-testid={`img-league-avatar-${league.leagueId}`} />
               )}
             </div>
-            <p className="font-semibold text-xs truncate leading-tight">{league.name}</p>
+            <div className="min-w-0">
+              <p className="font-semibold text-xs truncate leading-tight">{league.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                {league.totalRosters}-team{league.leagueType ? ` · ${LEAGUE_TYPE_LABEL[league.leagueType]}` : ""}
+              </p>
+            </div>
           </div>
-          {/* Format */}
-          <span className="text-[11px] text-muted-foreground truncate">{league.scoringFormat} · {league.format} · {league.season}</span>
-          {/* Teams */}
-          <span className="text-xs font-medium text-center">{league.totalRosters}</span>
           {/* Buy-In */}
-          <div className="text-right">
+          <div className="flex justify-end">
             {f.isFree ? <span className="text-[10px] text-slate-500 font-semibold">Free</span>
               : f.buyIn > 0 ? <span className="text-xs font-medium">{fmtDollar(f.buyIn)}</span>
-              : <span className="text-[10px] text-muted-foreground">—</span>}
+              : <NotConfigured testId={`row-buyin-missing-${league.leagueId}`} />}
           </div>
           {/* Paid */}
           <span className="text-xs font-medium text-center tabular-nums">{f.isFree ? "—" : `${m.paidCount}/${m.teams}`}</span>
-          {/* Outstanding */}
-          <div className="text-right">
-            {f.isFree ? <span className="text-[10px] text-muted-foreground">—</span>
-              : <span className={`text-xs font-semibold ${m.outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>{fmtDollar(m.outstanding)}</span>}
-          </div>
           {/* Prize Pool */}
-          <div className="text-right">
-            {m.prizePool > 0 ? <span className="text-xs font-medium">{fmtDollar(m.prizePool)}</span> : <span className="text-[10px] text-muted-foreground">—</span>}
+          <div className="flex justify-end">
+            {m.prizePool > 0 ? <span className="text-xs font-medium">{fmtDollar(m.prizePool)}</span>
+              : f.isFree ? <span className="text-[10px] text-muted-foreground">—</span>
+              : <NotConfigured testId={`row-prizepool-missing-${league.leagueId}`} />}
           </div>
           {/* LeagueSafe */}
           <div className="flex justify-center">
             {f.isFree ? <span className="text-[10px] text-muted-foreground">—</span>
               : hasSafe ? (
                 <a href={f.leagueSafeUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#d4af37] hover:underline"
+                  className="inline-flex items-center gap-0.5 text-emerald-500 hover:opacity-70 transition-opacity"
                   onClick={e => e.stopPropagation()}
+                  title="LeagueSafe configured — open link"
                   data-testid={`row-leaguesafe-${league.leagueId}`}>
-                  Added <ExternalLink className="w-2.5 h-2.5" />
+                  <Check className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-2.5 h-2.5" />
                 </a>
-              ) : <span className="text-[10px] font-semibold text-muted-foreground">Missing</span>}
-          </div>
-          {/* Status */}
-          <div className="flex items-center gap-1.5">
-            <StatusPill status={status} />
-            {saving[league.leagueId] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-            {saved[league.leagueId] && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
+              ) : <NotConfigured testId={`row-leaguesafe-missing-${league.leagueId}`} />}
           </div>
           {/* Actions */}
-          <div className="flex justify-end">
+          <div className="flex justify-end items-center gap-1.5">
+            {saving[league.leagueId] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            {saved[league.leagueId] && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
             <button
               onClick={e => { e.stopPropagation(); toggleExpand(league.leagueId); }}
               className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border/50 text-[11px] font-semibold hover:bg-muted/50 transition-colors"
@@ -1026,15 +1699,15 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
         {isExpanded && (
           <FinanceLeagueEditor
             leagueId={league.leagueId}
+            currentSeason={cs}
+            priorSeasons={priorSeasonsByLeague[league.leagueId] ?? []}
+            isDynasty={dynasty}
             finance={f}
-            metrics={m}
             managers={managers[league.leagueId]}
             managersLoading={!!managersLoading[league.leagueId]}
-            onUpdate={updateFinance}
-            onAddPrize={addPrize}
-            onRemovePrize={removePrize}
-            onUpdatePrize={updatePrize}
-            onUpdatePayment={updatePayment}
+            getFinance={(season) => getFinance(league.leagueId, season)}
+            update={(season, patch) => updateFinance(league.leagueId, season, patch)}
+            pickRisk={buildPickRisk(tradesByLeague[league.leagueId] ?? [], cs)}
           />
         )}
       </div>
@@ -1043,16 +1716,16 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
 
   return (
     <div className="space-y-5">
-      <SectionHeader title="League Treasury" subtitle="Track dues, prize pools, LeagueSafe links, and payout readiness across your leagues." />
+      <SectionHeader title="League Treasury" subtitle="Track dues, prize pools, LeagueSafe links, and payout readiness across your leagues. Dynasty leagues get multi-year dues, future-pick risk, and LeagueSafe history." />
 
-      {/* Summary cards */}
+      {/* Summary cards (current season) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 md:gap-3">
-        <SummaryCard icon={Wallet}   label="Total League Dues" value={fmtDollar(totals.dues)} testId="card-total-dues" />
-        <SummaryCard icon={Receipt}  label="Collected"   value={fmtDollar(totals.collected)} accent="text-emerald-600 dark:text-emerald-400" testId="card-collected" />
-        <SummaryCard icon={Receipt}  label="Outstanding" value={fmtDollar(outstanding)} accent={outstanding > 0 ? "text-amber-600 dark:text-amber-400" : undefined} testId="card-outstanding" />
-        <SummaryCard icon={TrophyIcon} label="Prize Pool" value={fmtDollar(totals.prizePool)} testId="card-prize-pool" />
-        <SummaryCard icon={Banknote} label="Payouts Pending" value={fmtDollar(totals.payoutsPending)} sub={totals.payoutLeagues > 0 ? `${totals.payoutLeagues} league${totals.payoutLeagues > 1 ? "s" : ""}` : undefined} accent={totals.payoutsPending > 0 ? "text-amber-600 dark:text-amber-400" : undefined} testId="card-payouts-pending" />
-        <SummaryCard icon={AlertCircle} label="Issues" value={String(totals.issueLeagues)} sub={totals.issueLeagues === 1 ? "league" : "leagues"} accent={totals.issueLeagues > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"} testId="card-issues" />
+        <SummaryCard icon={Wallet}   label="Total League Dues" value={fmtDollar(totals.dues)} accent="blue" testId="card-total-dues" />
+        <SummaryCard icon={Receipt}  label="Collected"   value={fmtDollar(totals.collected)} accent="emerald" testId="card-collected" />
+        <SummaryCard icon={Receipt}  label="Outstanding" value={fmtDollar(outstanding)} accent={outstanding > 0 ? "amber" : "slate"} testId="card-outstanding" />
+        <SummaryCard icon={TrophyIcon} label="Prize Pool" value={fmtDollar(totals.prizePool)} accent="gold" testId="card-prize-pool" />
+        <SummaryCard icon={Banknote} label="Payouts Pending" value={fmtDollar(totals.payoutsPending)} sub={totals.payoutLeagues > 0 ? `${totals.payoutLeagues} league${totals.payoutLeagues > 1 ? "s" : ""}` : undefined} accent={totals.payoutsPending > 0 ? "amber" : "slate"} testId="card-payouts-pending" />
+        <SummaryCard icon={AlertCircle} label="Issues" value={String(totals.issueLeagues)} sub={totals.issueLeagues === 1 ? "league" : "leagues"} accent={totals.issueLeagues > 0 ? "red" : "emerald"} testId="card-issues" />
       </div>
 
       {visibleLeagues.length === 0 && !stillLoadingTeams && (
@@ -1061,81 +1734,17 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
         </Card>
       )}
 
-      {/* Action Required */}
-      {visibleLeagues.length > 0 && (
-        <Card className="p-4 md:p-5 space-y-3 border border-border/50" data-testid="card-action-required">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#0b3a7a]/10 dark:bg-blue-400/10 flex items-center justify-center ring-1 ring-[#0b3a7a]/20 dark:ring-blue-400/20">
-              <AlertCircle className="w-3.5 h-3.5 text-[#0b3a7a] dark:text-blue-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold tracking-tight">Action Required</h3>
-              <p className="text-[10.5px] text-muted-foreground/85 leading-tight">Quickly find leagues with missing payments, incomplete prize setup, or payout issues.</p>
-            </div>
-          </div>
-
-          {activeBuckets.length === 0 ? (
-            <div className="flex items-center gap-2 px-3 py-4 rounded-lg border border-dashed border-emerald-500/30 bg-emerald-500/5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              <p className="text-xs text-emerald-700 dark:text-emerald-300">All leagues are squared away — dues collected, prizes configured, and LeagueSafe links in place.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {activeBuckets.map(bucket => {
-                const Icon = bucket.icon;
-                return (
-                  <div key={bucket.key} className="rounded-xl border border-border/50 bg-muted/10 overflow-hidden flex flex-col" data-testid={`bucket-${bucket.key}`}>
-                    <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
-                      <Icon className={`w-3.5 h-3.5 ${bucket.accent}`} />
-                      <h4 className="text-[12px] font-bold flex-1 min-w-0 truncate">{bucket.title}</h4>
-                      <span className={`shrink-0 inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full text-[11px] font-bold tabular-nums ${bucket.accent} bg-foreground/[0.04] border border-border/40`} data-testid={`bucket-count-${bucket.key}`}>
-                        {bucket.leagues.length}
-                      </span>
-                    </div>
-                    <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                      {bucket.leagues.slice(0, 6).map(lg => (
-                        <button key={lg.leagueId}
-                          onClick={() => openLeague(lg.leagueId)}
-                          className={ACTION_CHIP}
-                          data-testid={`bucket-league-${bucket.key}-${lg.leagueId}`}>
-                          {lg.name}
-                        </button>
-                      ))}
-                      {bucket.leagues.length > 6 && (
-                        <span className="px-2 py-0.5 text-[10.5px] text-muted-foreground">+{bucket.leagues.length - 6} more</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => openLeague(bucket.leagues[0].leagueId)}
-                      className="mt-auto px-3 py-1.5 border-t border-border/40 flex items-center justify-between gap-2 text-[11px] font-semibold text-[#d4af37] hover:bg-muted/40 transition-colors"
-                      data-testid={`bucket-cta-${bucket.key}`}>
-                      {bucket.cta}
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-      )}
-
       {/* League table */}
       {visibleLeagues.length > 0 && (
         <Card className="overflow-hidden">
           <div className="md:overflow-x-auto">
             <div className="md:min-w-[920px]">
-              {/* Desktop header */}
               <div className={`hidden md:grid ${COL} gap-x-2 px-4 py-2.5 border-b border-border/50 bg-muted/30 items-center`}>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">League</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Format</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Teams</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Buy-In</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">Paid</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Outstanding</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Prize Pool</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-center">LeagueSafe</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Status</span>
                 <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Actions</span>
               </div>
               {visibleLeagues.map(renderLeagueRow)}
@@ -1154,6 +1763,7 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
           </div>
           {hiddenLeagues.map(league => {
             const isExpanded = expanded === league.leagueId;
+            const cs = currentSeasonOf(league.leagueId);
             return (
               <Card key={league.leagueId} className="overflow-hidden opacity-60 hover:opacity-90 transition-opacity" data-testid={`finance-card-hidden-${league.leagueId}`}>
                 <button className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left" onClick={() => toggleExpand(league.leagueId)}>
@@ -1166,7 +1776,7 @@ export function FinanceTab({ scopeLeagueId }: { scopeLeagueId?: string } = {}) {
                 </button>
                 {isExpanded && (
                   <div className="border-t border-border/30 px-4 py-3">
-                    <button onClick={() => updateFinance(league.leagueId, { ignored: false })}
+                    <button onClick={() => updateFinance(league.leagueId, cs, { ignored: false })}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
                       data-testid={`button-unhide-${league.leagueId}`}>
                       <Eye className="w-3 h-3" /> Unhide from Summary

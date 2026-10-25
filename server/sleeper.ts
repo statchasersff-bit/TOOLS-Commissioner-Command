@@ -134,7 +134,8 @@ export async function fetchSleeperUser(username: string): Promise<SleeperUser> {
 
 export async function fetchSleeperLeagues(
   userId: string,
-  season: string = "2026"
+  season: string = "2026",
+  opts: { includeAllTypes?: boolean } = {},
 ): Promise<SleeperLeagueSummary[]> {
   const raw = await fetchJson<SleeperLeagueRaw[]>(
     `${SLEEPER_API}/user/${userId}/leagues/nfl/${season}`
@@ -142,10 +143,10 @@ export async function fetchSleeperLeagues(
   if (!raw || !Array.isArray(raw)) {
     return [];
   }
-  const dynastyOnly = raw.filter((lg) =>
-    lg.settings?.type === 2
-  );
-  return dynastyOnly.map((lg) => ({
+  // Default: dynasty only (type 2). Callers that want redraft/keeper too (e.g.
+  // the Collusion Risk Check) pass includeAllTypes to keep every league.
+  const filtered = opts.includeAllTypes ? raw : raw.filter((lg) => lg.settings?.type === 2);
+  return filtered.map((lg) => ({
     leagueId: lg.league_id,
     name: lg.name,
     season: lg.season,

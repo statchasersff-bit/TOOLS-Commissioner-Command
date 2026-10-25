@@ -30,6 +30,7 @@ import {
   type LeagueDirectory,
   type ReviewStatus,
 } from "./services/commissionerTrades";
+import { runCollusionRiskCheck } from "./services/commissionerTrades/collusionRisk";
 
 const REVIEW_STATUSES: ReviewStatus[] = [
   "unreviewed",
@@ -87,6 +88,33 @@ export function registerCommissionerTradesRoutes(app: Express): void {
     }
   });
 
+  // ── Collusion Risk Check ───────────────────────────────────────────────────
+  // Read-only forensic scan of two Sleeper users across their shared leagues.
+  // Surfaces signals, never verdicts. Reads only public Sleeper data + explicit
+  // username inputs, so it does not require a StatChasers login (matches the
+  // tool's "readonly" gate). Nothing is persisted.
+  app.get("/api/commissioner/collusion-risk", async (req, res) => {
+    const usernameA = String(req.query.userA || "").trim();
+    const usernameB = String(req.query.userB || "").trim();
+    if (!usernameA || !usernameB) {
+      return res.status(400).json({ error: "Two Sleeper usernames are required." });
+    }
+    try {
+      const result = await runCollusionRiskCheck(usernameA, usernameB);
+      res.json(result);
+    } catch (err: any) {
+      const msg = err?.message || "Collusion risk check failed";
+      const status = /not found/i.test(msg)
+        ? 404
+        : /different sleeper/i.test(msg)
+          ? 400
+          : /sleeper|fetch/i.test(msg)
+            ? 502
+            : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
   // ── Trade feed (filtered) ──────────────────────────────────────────────────
   // Accepts either a single `leagueId` or a comma-separated `leagueIds` so the
   // Trade Review Center can show one league or every league the user commissions.
@@ -137,6 +165,7 @@ export function registerCommissionerTradesRoutes(app: Express): void {
 
       const assets = await loadAssetsFor(rows.map((r) => r.id));
       const flags = await loadFlagsFor(rows.map((r) => r.id));
+      const noted = await loadNotedTradeIds(rows.map((r) => r.id));
 
       // Resolve display names (league + team names) and startup-draft seasons for
       // every league present in the result. Both cached per league.
@@ -173,7 +202,7 @@ export function registerCommissionerTradesRoutes(app: Express): void {
       });
 
       const feed = visibleRows.map((r) =>
-        shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? [], directories.get(r.leagueId)),
+        shapeTrade(r, assets.get(r.id) ?? [], flags.get(r.id) ?? [], directories.get(r.leagueId), noted.has(r.id)),
       );
       res.json({ leagueId: leagueIds[0], leagueIds, trades: feed });
     } catch (err: any) {
@@ -339,8 +368,9 @@ export function registerCommissionerTradesRoutes(app: Express): void {
         .orderBy(desc(commissionerTradeReviews.createdAt));
 
       const directory = await getLeagueDirectory(trade.leagueId).catch(() => undefined);
+      const hasNote = reviews.some((r) => typeof r.notes === "string" && r.notes.trim().length > 0);
       res.json({
-        trade: shapeTrade(trade, assets, flags, directory),
+        trade: shapeTrade(trade, assets, flags, directory, hasNote),
         assets,
         flags,
         reviews,
@@ -418,12 +448,27 @@ async function loadFlagsFor(tradeIds: number[]) {
   return map;
 }
 
+/** Trade ids that have at least one review row carrying a non-empty note. */
+async function loadNotedTradeIds(tradeIds: number[]): Promise<Set<number>> {
+  const set = new Set<number>();
+  if (tradeIds.length === 0) return set;
+  const rows = await db
+    .select({ tradeId: commissionerTradeReviews.tradeId, notes: commissionerTradeReviews.notes })
+    .from(commissionerTradeReviews)
+    .where(inArray(commissionerTradeReviews.tradeId, tradeIds));
+  for (const r of rows) {
+    if (typeof r.notes === "string" && r.notes.trim().length > 0) set.add(r.tradeId);
+  }
+  return set;
+}
+
 /** Flatten a trade row + its assets/flags into the shape the UI consumes. */
 function shapeTrade(
   trade: typeof commissionerTrades.$inferSelect,
   assets: (typeof commissionerTradeAssets.$inferSelect)[],
   flags: (typeof commissionerTradeFlags.$inferSelect)[],
   directory?: LeagueDirectory,
+  hasNote = false,
 ) {
   const rosterNames: Record<number, string> = {};
   if (directory) {
@@ -451,6 +496,7 @@ function shapeTrade(
     fairnessScore: trade.fairnessScore ?? 100,
     reviewStatus: trade.reviewStatus,
     summary: trade.summary ?? "",
+    hasNote,
     isMultiTeam: ((trade.rosterIds as number[]) ?? []).length > 2,
     assets: assets.map((a) => ({
       id: a.id,

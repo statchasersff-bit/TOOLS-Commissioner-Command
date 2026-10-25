@@ -12,7 +12,7 @@
  * messages a manager. Commissioner actions (resolve / ignore / note / copy
  * message / escalate) are recorded to an audit trail for dispute protection.
  */
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -32,7 +32,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { SortableTh } from "@/components/SortableTh";
 import { useSortableTable } from "@/hooks/useSortableTable";
 import {
-  RefreshCw, Loader2, ChevronLeft, ChevronRight, ShieldAlert, AlertTriangle,
+  RefreshCw, Loader2, ChevronLeft, ChevronRight, ChevronDown, ShieldAlert, AlertTriangle,
   Users, CircleSlash, UserX, CheckCircle2, ClipboardCopy, Flag, ExternalLink,
   StickyNote, Ban, ArrowUpRight, Eye, History, ListChecks, CalendarClock, Gavel,
   Layers,
@@ -139,7 +139,6 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
   const { toast } = useToast();
 
   const currentYear = new Date().getFullYear();
-  const [season] = useState<string>(String(currentYear));
   const [week, setWeek] = useState<number | null>(initialWeek ?? null); // null → latest week with data
   const [filter, setFilter] = useState<string>("open");
   const [openIssue, setOpenIssue] = useState<AuditIssue | null>(null);
@@ -147,9 +146,26 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
 
   const avatars = useLeagueAvatars(leagueId);
 
+  // Resolve the active NFL season + current week from the state feed — the same
+  // source the rest of the tool uses. Hardcoding the calendar year breaks in the
+  // offseason, when Sleeper still reports the prior season: the audit would then
+  // query a season with no scanned data and show "No data yet" even on the
+  // Current option. Everything downstream (audit fetch, scan, drawer) keys off
+  // this resolved season.
+  const overviewQuery = useQuery({
+    queryKey: ["li", leagueId, "current-week"],
+    queryFn: () => lineupIntegrityApi.overview(leagueId),
+  });
+  const currentWeek = overviewQuery.data?.currentWeek ?? null;
+  const season = overviewQuery.data?.season ?? String(currentYear);
+
   const auditQuery = useQuery({
     queryKey: ["li-audit", leagueId, season, week],
     queryFn: () => lineupIntegrityApi.leagueWeekAudit(leagueId, { week: week ?? undefined, season }),
+    // Wait until the season feed has settled so we don't fetch the wrong
+    // (calendar-year) season first; on a feed error we fall back to it and still
+    // run rather than getting stuck.
+    enabled: !overviewQuery.isLoading,
   });
   const audit = auditQuery.data;
   const effectiveWeek = week ?? audit?.week ?? 1;
@@ -167,12 +183,7 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
   // Lineups for the current (or a future) NFL week aren't locked yet, so the
   // audit is VIEW-ONLY for those weeks: no reviews, notes, or strikes until the
   // week's results are final. No one should be penalized for a lineup they can
-  // still change. The current week comes from the overview/state feed.
-  const overviewQuery = useQuery({
-    queryKey: ["li", leagueId, "current-week"],
-    queryFn: () => lineupIntegrityApi.overview(leagueId),
-  });
-  const currentWeek = overviewQuery.data?.currentWeek ?? null;
+  // still change.
   const isLiveWeek = currentWeek != null && effectiveWeek >= currentWeek;
   // You can only scan through the current (in-progress) week — a future week
   // can't be scanned until the prior week is complete. Cap navigation and the
@@ -194,8 +205,17 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
     onError: (e: any) => toast({ title: "Scan failed", description: e?.message, variant: "destructive" }),
   });
 
-  const issues = audit?.issues ?? [];
-  const filtered = issues.filter((i) => matchesFilter(i, filter));
+  // During a live week lineups aren't locked, so nothing can legitimately be
+  // resolved/acknowledged yet — every issue is just a preview. Force all
+  // statuses to "open" so no stale "Resolved" badges leak into the preview.
+  const issues = useMemo<AuditIssue[]>(() => {
+    const raw = audit?.issues ?? [];
+    return isLiveWeek ? raw.map((i) => ({ ...i, issueStatus: "open" as const })) : raw;
+  }, [audit, isLiveWeek]);
+  // The All / Open Issues / Resolved filters only make sense once the week is
+  // final and real issues can be triaged. During a live week we show every
+  // preview issue and hide the filter chips entirely.
+  const filtered = issues.filter((i) => matchesFilter(i, isLiveWeek ? "all" : filter));
   const isBestBall = league.isBestBall === true;
 
   // Every team in the league (deduped), used to target a manually-issued strike.
@@ -239,9 +259,13 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
             onClick={() => setWeek(Math.max(1, effectiveWeek - 1))} data-testid="button-prev-week">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Select value={String(effectiveWeek)} onValueChange={(v) => setWeek(Number(v))}>
-            <SelectTrigger className="h-9 w-[110px]" data-testid="select-audit-week"><SelectValue /></SelectTrigger>
+          <Select
+            value={week === null ? "current" : String(effectiveWeek)}
+            onValueChange={(v) => setWeek(v === "current" ? null : Number(v))}
+          >
+            <SelectTrigger className="h-9 w-[120px]" data-testid="select-audit-week"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="current">Current</SelectItem>
               {Array.from({ length: maxScanWeek }, (_, i) => i + 1).map((w) => (
                 <SelectItem key={w} value={String(w)}>Week {w}</SelectItem>
               ))}
@@ -253,22 +277,34 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
           </Button>
         </div>
 
-        <Button variant="ghost" size="sm" onClick={() => setWeek(null)} data-testid="button-current-week">
-          <CalendarClock className="mr-1.5 h-4 w-4" /> Current
-        </Button>
-
-        {audit && (
-          <Pill cls={LEAGUE_STATUS_META[audit.status].cls}>
-            <ShieldAlert className="h-3 w-3" /> {LEAGUE_STATUS_META[audit.status].label}
-          </Pill>
-        )}
+        {audit && (() => {
+          // A live week can't be "Resolved" — re-derive a preview status from
+          // the (all-open) issues instead of trusting stale alert statuses.
+          const displayStatus: LeagueStatus = isLiveWeek && audit.status === "resolved"
+            ? (issues.some((i) => i.severity === "critical") ? "critical" : issues.length > 0 ? "needs_review" : "clean")
+            : audit.status;
+          return (
+            <Pill cls={LEAGUE_STATUS_META[displayStatus].cls}>
+              <ShieldAlert className="h-3 w-3" /> {LEAGUE_STATUS_META[displayStatus].label}
+            </Pill>
+          );
+        })()}
       </div>
 
       {/* Best ball / loading / empty states */}
       {isBestBall ? (
         <EmptyState icon={CircleSlash} title="Best ball league"
           body="Best ball leagues are excluded from manual lineup integrity checks because managers do not set weekly starting lineups." />
-      ) : auditQuery.isLoading ? (
+      ) : (week !== null && isLiveWeek) ? (
+        // A specific week was picked that isn't final yet (the live week or a
+        // future one). Lineups aren't locked, so the audit can't be trusted —
+        // surface a clear "not available" state instead of a misleading preview.
+        <EmptyState icon={CalendarClock}
+          title={isFutureWeek ? `Week ${effectiveWeek} hasn’t started yet` : `Week ${effectiveWeek} isn’t final yet`}
+          body={`The lineup audit for Week ${effectiveWeek} becomes available once the week’s results are final. Lineups aren’t locked yet, so managers can still change them — no one can be reviewed until the week is complete.`}
+          action={<Button variant="outline" onClick={() => setWeek(null)} data-testid="button-view-current">
+            <CalendarClock className="mr-2 h-4 w-4" /> View current</Button>} />
+      ) : (overviewQuery.isLoading || auditQuery.isLoading) ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading week {effectiveWeek}…
         </div>
@@ -297,13 +333,15 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
           {(() => {
             const badStarters = audit.summary.emptyStarterSlots + audit.summary.inactiveStarters;
             const overRosteredLineups = audit.summary.overRosteredLineups;
-            const pendingResolve = Math.max(0, audit.summary.totalIssues - audit.summary.resolved);
+            // Live week → nothing can be resolved yet; every issue is pending.
+            const resolvedCount = isLiveWeek ? 0 : audit.summary.resolved;
+            const pendingResolve = Math.max(0, audit.summary.totalIssues - resolvedCount);
             return (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                 <SummaryCard icon={UserX} label="Inactive Starters" value={badStarters} accent="red" sub="Out · IR · Bye · Empty" />
                 <SummaryCard icon={Layers} label="Over Rostered Lineups" value={overRosteredLineups} accent="amber" sub="Too many starters" />
                 <SummaryCard icon={AlertTriangle} label="Tanking" value={tankingCount} accent="orange" sub="Potential signals" />
-                <SummaryCard icon={CheckCircle2} label="Resolved" value={audit.summary.resolved} accent="blue" sub="This week" />
+                <SummaryCard icon={CheckCircle2} label="Resolved" value={resolvedCount} accent="blue" sub="This week" />
                 <SummaryCard icon={CalendarClock} label="Pending Resolve" value={pendingResolve} accent="slate" sub="Open issues" />
               </div>
             );
@@ -338,17 +376,19 @@ export default function LeagueLineupAudit({ league, initialWeek }: { league: Lea
                     body={`No lineup integrity issues found for this league in Week ${audit.week}. All matchups are currently clean.`} />
                 </div>
               ) : null}
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {ISSUE_FILTERS.map((f) => (
-                  <button key={f.id} onClick={() => setFilter(f.id)}
-                    data-testid={`filter-issue-${f.id}`}
-                    className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                      filter === f.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              <IssuesTable issues={filtered} avatars={avatars} onOpen={setOpenIssue} />
+              {!isLiveWeek && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {ISSUE_FILTERS.map((f) => (
+                    <button key={f.id} onClick={() => setFilter(f.id)}
+                      data-testid={`filter-issue-${f.id}`}
+                      className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                        filter === f.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <IssuesTable issues={filtered} avatars={avatars} onOpen={setOpenIssue} showStatus={!isLiveWeek} rosterPositions={league.rosterPositions ?? []} />
             </>
           )}
 
@@ -406,13 +446,24 @@ function OwnerAvatar({
 
 // ── League Issues table ───────────────────────────────────────────────────────
 
-function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatars: Record<number, RosterIdentity>; onOpen: (i: AuditIssue) => void }) {
+function IssuesTable({ issues, avatars, onOpen, showStatus = true, rosterPositions = [] }: { issues: AuditIssue[]; avatars: Record<number, RosterIdentity>; onOpen: (i: AuditIssue) => void; showStatus?: boolean; rosterPositions?: string[] }) {
   const { sorted, sortKey, sortDir, toggle } = useSortableTable(issues, {
     manager: (i) => i.managerName || i.teamName,
     player: (i) => i.playerName,
     issue: (i) => i.issueType,
     status: (i) => i.issueStatus,
   });
+
+  // Rows expand inline to show the full starting lineup + bench replacements.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  // Manager + Player + Issue + (Status) + Action, plus the leading expander cell.
+  const colCount = (showStatus ? 5 : 4) + 1;
 
   if (issues.length === 0) {
     return <p className="py-8 text-center text-sm text-muted-foreground">No issues match the current filter.</p>;
@@ -424,66 +475,104 @@ function IssuesTable({ issues, avatars, onOpen }: { issues: AuditIssue[]; avatar
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="w-8 px-2 py-2" aria-hidden />
               <SortableTh sortKey="manager" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Manager</SortableTh>
               <SortableTh sortKey="player" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Player</SortableTh>
               <SortableTh sortKey="issue" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Issue</SortableTh>
-              <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Status</SortableTh>
+              {showStatus && (
+                <SortableTh sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggle} className="px-3 py-2 font-semibold">Status</SortableTh>
+              )}
               <th className="px-3 py-2 text-right font-semibold">Action</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((i) => (
-              <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{i.managerName}</div>
-                      {i.teamName && i.teamName !== i.managerName && (
-                        <div className="text-xs text-muted-foreground truncate">{i.teamName}</div>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  {i.playerName ? (
-                    <PlayerAvatar id={i.playerId ?? ""} name={i.playerName} pos={i.position ?? ""} team={i.nflTeam ?? ""} size="xs" />
-                  ) : "—"}
-                </td>
-                <td className="px-3 py-2">
-                  <div>{i.issueType}</div>
-                  {i.isRepeatOffender && <span className="text-xs text-amber-500">repeat offender</span>}
-                </td>
-                <td className="px-3 py-2"><IssueStatusPill issue={i} /></td>
-                <td className="px-3 py-2 text-right">
-                  <Button size="sm" variant="outline" onClick={() => onOpen(i)} data-testid={`button-open-issue-${i.id}`}>Review</Button>
-                </td>
-              </tr>
-            ))}
+            {sorted.map((i) => {
+              const isOpen = expanded.has(i.id);
+              return (
+                <Fragment key={i.id}>
+                  <tr
+                    className="cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/30"
+                    onClick={() => toggleExpand(i.id)}
+                    data-testid={`issue-row-${i.id}`}
+                  >
+                    <td className="px-2 py-2 text-muted-foreground">
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", !isOpen && "-rotate-90")} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{i.managerName}</div>
+                          {i.teamName && i.teamName !== i.managerName && (
+                            <div className="text-xs text-muted-foreground truncate">{i.teamName}</div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {i.playerName ? (
+                        <PlayerAvatar id={i.playerId ?? ""} name={i.playerName} pos={i.position ?? ""} team={i.nflTeam ?? ""} size="xs" />
+                      ) : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div>{i.issueType}</div>
+                      {i.isRepeatOffender && <span className="text-xs text-amber-500">repeat offender</span>}
+                    </td>
+                    {showStatus && <td className="px-3 py-2"><IssueStatusPill issue={i} /></td>}
+                    <td className="px-3 py-2 text-right">
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); onOpen(i); }} data-testid={`button-open-issue-${i.id}`}>Review</Button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="border-b border-border/60 last:border-0 bg-muted/20">
+                      <td colSpan={colCount} className="px-4 py-4">
+                        <CompactLineupDetail issue={i} checkId={i.checkId} rosterPositions={rosterPositions} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </Card>
 
       {/* Mobile/tablet stacked cards */}
       <div className="grid gap-2 lg:hidden">
-        {issues.map((i) => (
-          <Card key={i.id} className="p-3">
-            <div className="flex items-center justify-end gap-2">
-              <IssueStatusPill issue={i} />
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-sm font-semibold">
-              <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
-              <span className="truncate">{i.teamName && i.teamName !== i.managerName ? `${i.managerName} · ${i.teamName}` : i.managerName}</span>
-            </div>
-            <div className="text-xs text-muted-foreground">{i.opponentTeamName ? `vs ${i.opponentTeamName}` : ""}</div>
-            <div className="mt-1.5 text-sm">
-              <span className="font-medium">{i.slot ?? "—"}</span> · {i.playerName ?? "—"} — {i.issueType}
-            </div>
-            <div className="mt-2 flex justify-end">
-              <Button size="sm" variant="outline" onClick={() => onOpen(i)}>Review</Button>
-            </div>
-          </Card>
-        ))}
+        {issues.map((i) => {
+          const isOpen = expanded.has(i.id);
+          return (
+            <Card key={i.id} className="p-3">
+              {showStatus && (
+                <div className="flex items-center justify-end gap-2">
+                  <IssueStatusPill issue={i} />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => toggleExpand(i.id)}
+                className="mt-2 flex w-full items-center gap-2 text-left text-sm font-semibold"
+                data-testid={`issue-card-${i.id}`}
+              >
+                <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform", !isOpen && "-rotate-90")} />
+                <OwnerAvatar rosterId={i.rosterId} name={i.managerName || i.teamName} avatars={avatars} />
+                <span className="truncate">{i.teamName && i.teamName !== i.managerName ? `${i.managerName} · ${i.teamName}` : i.managerName}</span>
+              </button>
+              <div className="text-xs text-muted-foreground">{i.opponentTeamName ? `vs ${i.opponentTeamName}` : ""}</div>
+              <div className="mt-1.5 text-sm">
+                <span className="font-medium">{i.slot ?? "—"}</span> · {i.playerName ?? "—"} — {i.issueType}
+              </div>
+              {isOpen && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <CompactLineupDetail issue={i} checkId={i.checkId} rosterPositions={rosterPositions} />
+                </div>
+              )}
+              <div className="mt-2 flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => onOpen(i)}>Review</Button>
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </>
   );
@@ -538,6 +627,268 @@ function statusTone(label: string): string {
   return "text-red-600 dark-any:text-red-400";
 }
 
+// Eligible active bench options (not out/ir/bye), best projection first.
+function eligibleBench(detail: CheckDetail | undefined, limit = 6): PlayerCheckView[] {
+  return (detail?.bench ?? [])
+    .filter((p) => !p.isIr && !p.isOnBye && !p.isInactive)
+    .sort((a, b) => b.projection - a.projection)
+    .slice(0, limit);
+}
+
+// Compact one-letter-ish status code for inline summaries: "Q", "D", "Out", …
+function shortStatus(label: string): string {
+  switch (label) {
+    case "Questionable": return "Q";
+    case "Doubtful": return "D";
+    case "Out": return "Out";
+    case "Inactive": return "Out";
+    case "IR": return "IR";
+    case "Bye": return "Bye";
+    case "Empty": return "Empty";
+    default: return label;
+  }
+}
+
+// Full slot-by-slot starting lineup. Behind progressive disclosure in the inline
+// row; always shown in the Team Lineup Audit drawer.
+function StartingLineupTable({ detail, rosterPositions }: { detail: CheckDetail; rosterPositions: string[] }) {
+  const lineupRows = buildLineupRows(detail, rosterPositions ?? []);
+  return (
+    <Card className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <th className="px-2.5 py-1.5 font-semibold">Slot</th>
+            <th className="px-2.5 py-1.5 font-semibold">Player</th>
+            <th className="px-2.5 py-1.5 font-semibold">Pos</th>
+            <th className="px-2.5 py-1.5 font-semibold">NFL</th>
+            <th className="px-2.5 py-1.5 font-semibold">Status</th>
+            <th className="px-2.5 py-1.5 font-semibold">Issue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lineupRows.map((r, idx) => {
+            const label = r.player ? playerStatusLabel(r.player) : "Empty";
+            const problem = !r.player || ["Out", "IR", "Bye", "Inactive"].includes(label);
+            return (
+              <tr key={idx} className={cn("border-b border-border/60 last:border-0", problem && "bg-red-500/[0.04]")}>
+                <td className="px-2.5 py-1.5 font-medium">{r.slot}</td>
+                <td className="px-2.5 py-1.5">{r.player?.playerName ?? <span className="text-muted-foreground">Empty</span>}</td>
+                <td className="px-2.5 py-1.5 text-muted-foreground">{r.player?.position ?? "—"}</td>
+                <td className="px-2.5 py-1.5 text-muted-foreground">{r.player?.team ?? "—"}</td>
+                <td className={cn("px-2.5 py-1.5 font-medium", statusTone(label))}>{label}</td>
+                <td className="px-2.5 py-1.5">
+                  {!r.player ? <span className="text-xs text-red-500">Empty slot</span>
+                    : r.player.betterBenchOption ? <span className="text-xs text-amber-500">Better bench option</span>
+                    : problem ? <span className="text-xs text-red-500">{label}</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+// Tiny uppercase section label for the compact panel.
+function MiniLabel({ children }: { children: React.ReactNode }) {
+  return <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{children}</div>;
+}
+
+// Full starting lineup + eligible bench replacements — the deep dive shown in the
+// Team Lineup Audit drawer (Review action).
+function LineupDetailPanel({ checkId, rosterPositions }: { checkId: number; rosterPositions: string[] }) {
+  const detailQuery = useQuery({
+    queryKey: ["li-check-detail", checkId],
+    queryFn: () => lineupIntegrityApi.checkDetail(checkId),
+  });
+  const detail = detailQuery.data;
+  const benchOptions = eligibleBench(detail);
+  const replacementContext = !detail
+    ? "Bench data unavailable."
+    : benchOptions.length > 0
+      ? "An eligible active replacement was available on the bench."
+      : "No eligible active replacement was available.";
+
+  if (detailQuery.isLoading) {
+    return <div className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading lineup…</div>;
+  }
+  if (!detail) return <p className="py-6 text-center text-sm text-muted-foreground">No detail available.</p>;
+
+  return (
+    <div className="space-y-5">
+      {/* Full starting lineup */}
+      <div>
+        <SectionTitle icon={ListChecks}>Starting Lineup</SectionTitle>
+        <StartingLineupTable detail={detail} rosterPositions={rosterPositions} />
+      </div>
+
+      {/* Eligible bench replacements */}
+      <div>
+        <SectionTitle icon={Users}>Eligible Bench Replacements</SectionTitle>
+        {benchOptions.length > 0 ? (
+          <BenchReplacementsTable options={benchOptions} />
+        ) : (
+          <p className="text-sm text-muted-foreground">No eligible active bench replacements found.</p>
+        )}
+        <p className="mt-2 text-xs">
+          <span className="font-semibold">Replacement context: </span>
+          <span className="text-muted-foreground">{replacementContext}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Compact inline detail for an expanded issue row. Defaults to just the flagged
+// starter + top 3 replacements in a two-column layout; the full starting lineup
+// and full bench list are progressive disclosure behind toggles.
+function CompactLineupDetail({ issue, checkId, rosterPositions }: { issue: AuditIssue; checkId: number; rosterPositions: string[] }) {
+  const [showFullLineup, setShowFullLineup] = useState(false);
+  const [showAllBench, setShowAllBench] = useState(false);
+  const detailQuery = useQuery({
+    queryKey: ["li-check-detail", checkId],
+    queryFn: () => lineupIntegrityApi.checkDetail(checkId),
+  });
+  const detail = detailQuery.data;
+
+  if (detailQuery.isLoading) {
+    return <div className="py-4 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading lineup…</div>;
+  }
+  if (!detail) return <p className="py-4 text-center text-sm text-muted-foreground">No detail available.</p>;
+
+  // The flagged starter: match by playerId, else by slot (empty slots have no player).
+  const flagged = issue.playerId
+    ? detail.starters.find((p) => p.playerId === issue.playerId) ?? null
+    : detail.starters.find((p) => p.lineupSlot === issue.slot) ?? null;
+  const slot = issue.slot ?? flagged?.lineupSlot ?? "—";
+  const flaggedLabel = flagged ? playerStatusLabel(flagged) : "Empty";
+  const flaggedName = flagged?.playerName ?? issue.playerName ?? "Empty slot";
+  const flaggedProj = flagged?.projection ?? 0;
+
+  const benchAll = eligibleBench(detail, 50);
+  const best = benchAll[0];
+  const top3 = benchAll.slice(0, 3);
+  const moreCount = Math.max(0, benchAll.length - top3.length);
+  const gap = best ? best.projection - flaggedProj : null;
+
+  return (
+    <div className="space-y-3">
+      {/* One-line decision summary — what's flagged, the best swap, the gap. */}
+      <div className="text-sm">
+        <span className="font-semibold text-foreground">{flaggedName}</span>
+        {flagged && <span className="text-muted-foreground"> ({shortStatus(flaggedLabel)})</span>}
+        <span className="text-muted-foreground"> at {slot}</span>
+        {best ? (
+          <>
+            <span className="mx-1.5 text-muted-foreground/60">→</span>
+            <span className="text-muted-foreground">Best replacement: </span>
+            <span className="font-semibold text-foreground">{best.playerName}</span>
+            <span className="ml-1 tabular-nums text-muted-foreground">({best.projection.toFixed(1)})</span>
+          </>
+        ) : (
+          <span className="ml-1.5 text-muted-foreground">· No eligible replacement available</span>
+        )}
+      </div>
+      {best && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {gap !== null && (
+            <span className={cn("font-bold tabular-nums", gap >= 0 ? "text-amber-600 dark-any:text-amber-400" : "text-muted-foreground")}>
+              Gap: {gap >= 0 ? "+" : ""}{gap.toFixed(1)} pts
+            </span>
+          )}
+          {moreCount > 0 && (
+            <span className="text-muted-foreground">{moreCount} other eligible replacement{moreCount === 1 ? "" : "s"}</span>
+          )}
+        </div>
+      )}
+
+      {/* Two compact columns: the flagged starter, and the top replacements. */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Section A — Current Starter */}
+        <div>
+          <MiniLabel>Current Starter</MiniLabel>
+          <div className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card/40 px-3 py-2">
+            <span className="w-16 flex-shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{slot}</span>
+            {flagged ? (
+              <>
+                <div className="min-w-0 flex-1">
+                  <PlayerAvatar id={flagged.playerId} name={flagged.playerName ?? "—"} pos={flagged.position ?? ""} team={flagged.team ?? ""} size="xs" />
+                </div>
+                <span className={cn("flex-shrink-0 text-xs font-medium", statusTone(flaggedLabel))}>{flaggedLabel}</span>
+                <span className="flex-shrink-0 w-10 text-right text-sm font-bold tabular-nums text-foreground/90">{flaggedProj.toFixed(1)}</span>
+              </>
+            ) : (
+              <span className="text-sm font-medium text-red-600 dark-any:text-red-400">Empty slot</span>
+            )}
+          </div>
+        </div>
+
+        {/* Section B — Top replacements (top 3, with progressive disclosure) */}
+        <div>
+          <MiniLabel>Best Replacements</MiniLabel>
+          {top3.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No eligible active bench replacements found.</p>
+          ) : (
+            <div className="space-y-1">
+              {top3.map((p, idx) => {
+                const g = p.projection - flaggedProj;
+                const label = playerStatusLabel(p);
+                return (
+                  <div key={p.playerId} className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+                    <span className="w-4 flex-shrink-0 text-xs tabular-nums text-muted-foreground">{idx + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <PlayerAvatar id={p.playerId} name={p.playerName ?? "—"} pos={p.position ?? ""} team={p.team ?? ""} size="xs" />
+                    </div>
+                    <span className={cn("flex-shrink-0 text-xs font-medium", statusTone(label))}>{label}</span>
+                    <span className="flex-shrink-0 w-10 text-right text-sm font-bold tabular-nums text-foreground/90">{p.projection.toFixed(1)}</span>
+                    <span className={cn("flex-shrink-0 w-12 text-right text-xs font-semibold tabular-nums", g >= 0 ? "text-amber-600 dark-any:text-amber-400" : "text-muted-foreground")}>
+                      {g >= 0 ? "+" : ""}{g.toFixed(1)}
+                    </span>
+                  </div>
+                );
+              })}
+              {showAllBench && (
+                <div className="pt-1">
+                  <BenchReplacementsTable options={benchAll} />
+                </div>
+              )}
+              {moreCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllBench((v) => !v)}
+                  className="mt-0.5 text-xs font-medium text-[#0b3a7a] hover:underline dark-any:text-sky-400"
+                >
+                  {showAllBench ? "Hide bench options" : "Show all eligible bench options"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Full starting lineup — progressive disclosure, not default content. */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowFullLineup((v) => !v)}
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !showFullLineup && "-rotate-90")} />
+          {showFullLineup ? "Hide full starting lineup" : "Show full starting lineup"}
+        </button>
+        {showFullLineup && (
+          <div className="mt-2">
+            <StartingLineupTable detail={detail} rosterPositions={rosterPositions} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TeamLineupAuditDrawer({
   issue, league, season, week, readOnly, onClose,
 }: { issue: AuditIssue; league: League; season: string; week: number; readOnly?: boolean; onClose: () => void }) {
@@ -545,10 +896,6 @@ function TeamLineupAuditDrawer({
   const leagueId = league.id;
   const avatars = useLeagueAvatars(leagueId);
 
-  const detailQuery = useQuery({
-    queryKey: ["li-check-detail", issue.checkId],
-    queryFn: () => lineupIntegrityApi.checkDetail(issue.checkId),
-  });
   const historyQuery = useQuery({
     queryKey: ["li", leagueId, "history"],
     queryFn: () => lineupIntegrityApi.managerHistory(leagueId),
@@ -558,7 +905,6 @@ function TeamLineupAuditDrawer({
     queryFn: () => lineupIntegrityApi.auditLog(leagueId, { season, lineupCheckId: issue.checkId, issueKey: issue.id }),
   });
 
-  const detail = detailQuery.data;
   const managerRow: ManagerHistoryRow | undefined = historyQuery.data?.managers.find((m) => m.rosterId === issue.rosterId);
 
   const [note, setNote] = useState("");
@@ -625,18 +971,6 @@ function TeamLineupAuditDrawer({
     }
   };
 
-  const lineupRows = detail ? buildLineupRows(detail, league.rosterPositions ?? []) : [];
-  // Eligible active bench options (not out/ir/bye), best projection first.
-  const benchOptions = (detail?.bench ?? [])
-    .filter((p) => !p.isIr && !p.isOnBye && !p.isInactive)
-    .sort((a, b) => b.projection - a.projection)
-    .slice(0, 6);
-  const replacementContext = !detail
-    ? "Bench data unavailable."
-    : benchOptions.length > 0
-      ? "An eligible active replacement was available on the bench."
-      : "No eligible active replacement was available.";
-
   return (
     <div>
       <SheetHeader className="border-b border-border bg-muted/30 p-4">
@@ -687,63 +1021,8 @@ function TeamLineupAuditDrawer({
           <p className="italic text-muted-foreground">{managerMessage}</p>
         </Card>
 
-        {/* Full starting lineup */}
-        <div>
-          <SectionTitle icon={ListChecks}>Starting Lineup</SectionTitle>
-          {detailQuery.isLoading ? (
-            <div className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Loading…</div>
-          ) : (
-            <Card className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-2.5 py-1.5 font-semibold">Slot</th>
-                    <th className="px-2.5 py-1.5 font-semibold">Player</th>
-                    <th className="px-2.5 py-1.5 font-semibold">Pos</th>
-                    <th className="px-2.5 py-1.5 font-semibold">NFL</th>
-                    <th className="px-2.5 py-1.5 font-semibold">Status</th>
-                    <th className="px-2.5 py-1.5 font-semibold">Issue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineupRows.map((r, idx) => {
-                    const label = r.player ? playerStatusLabel(r.player) : "Empty";
-                    const problem = !r.player || ["Out", "IR", "Bye", "Inactive"].includes(label);
-                    return (
-                      <tr key={idx} className={cn("border-b border-border/60 last:border-0", problem && "bg-red-500/[0.04]")}>
-                        <td className="px-2.5 py-1.5 font-medium">{r.slot}</td>
-                        <td className="px-2.5 py-1.5">{r.player?.playerName ?? <span className="text-muted-foreground">Empty</span>}</td>
-                        <td className="px-2.5 py-1.5 text-muted-foreground">{r.player?.position ?? "—"}</td>
-                        <td className="px-2.5 py-1.5 text-muted-foreground">{r.player?.team ?? "—"}</td>
-                        <td className={cn("px-2.5 py-1.5 font-medium", statusTone(label))}>{label}</td>
-                        <td className="px-2.5 py-1.5">
-                          {!r.player ? <span className="text-xs text-red-500">Empty slot</span>
-                            : r.player.betterBenchOption ? <span className="text-xs text-amber-500">Better bench option</span>
-                            : problem ? <span className="text-xs text-red-500">{label}</span>
-                            : <span className="text-muted-foreground">—</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </Card>
-          )}
-        </div>
-
-        {/* Eligible bench replacements */}
-        <div>
-          <SectionTitle icon={Users}>Eligible Bench Replacements</SectionTitle>
-          {benchOptions.length > 0 ? (
-            <BenchReplacementsTable options={benchOptions} />
-          ) : (
-            <p className="text-sm text-muted-foreground">No eligible active bench replacements found.</p>
-          )}
-          <p className="mt-2 text-xs">
-            <span className="font-semibold">Replacement context: </span>
-            <span className="text-muted-foreground">{replacementContext}</span>
-          </p>
-        </div>
+        {/* Full starting lineup + eligible bench replacements */}
+        <LineupDetailPanel checkId={issue.checkId} rosterPositions={league.rosterPositions ?? []} />
 
         {/* Manager integrity history */}
         <div>

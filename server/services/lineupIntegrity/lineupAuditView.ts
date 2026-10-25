@@ -317,7 +317,11 @@ export async function getLeagueWeekAudit(
         );
       }
       // 3) Suspicious benching — a higher-ranked bench player was left out.
+      // Spell out the actual start/sit with projections so the issue is concrete.
       if (p.betterBenchOption) {
+        const starterProj = Math.round(Number(p.projection ?? 0) * 10) / 10;
+        const benchProj =
+          Math.round((Number(p.projection ?? 0) + Number(p.projectionGapVsBench ?? 0)) * 10) / 10;
         issues.push(
           baseIssue({
             id: `${r.id}:bench:${p.playerId}`,
@@ -330,7 +334,7 @@ export async function getLeagueWeekAudit(
             nflTeam: p.team,
             playerStatus: "Benched better option",
             issueType: p.betterBenchPlayerName
-              ? `Higher-ranked bench option (${p.betterBenchPlayerName})`
+              ? `Started ${p.playerName ?? "starter"} (proj ${starterProj}) over ${p.betterBenchPlayerName} (proj ${benchProj})`
               : "Higher-ranked bench option available",
           }),
         );

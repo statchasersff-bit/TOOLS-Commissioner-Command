@@ -1,4 +1,4 @@
-import { Crosshair, Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
+import { Share2, Trophy, ArrowLeftRight, Search, Inbox, Calculator, Database, MessageSquare, Lock, ChevronRight, Package, Heart } from "lucide-react";
 
 interface FeatureDef {
   id: string;
@@ -26,21 +26,6 @@ const FEATURES: FeatureDef[] = [
     ],
     tab: "portfolio",
     sub: "portfolio-summary",
-  },
-  {
-    id: "lineup-command",
-    category: "Portfolio",
-    title: "Lineup Command",
-    icon: Crosshair,
-    description: "Review lineup issues across every league, optimize your starters, and submit lineup changes without leaving Commissioner Command.",
-    bullets: [
-      "Cross-league lineup war room in a single table",
-      "Bench vs. starter value comparisons",
-      "Projected score and injury/status alerts",
-      "Submit lineup changes directly through Sleeper",
-    ],
-    tab: "portfolio",
-    sub: "lineup-command",
   },
   {
     id: "league-analyzer",
@@ -168,7 +153,7 @@ export function AboutPage({ onNavigate, onOpenFeedback, onOpenCookies, onOpenTer
               <h3 className="text-[14px] font-bold text-foreground leading-tight mb-1">
                 Help Keep Commissioner Command Free
               </h3>
-              <p className="text-[12px] text-muted-foreground leading-snug mb-3">
+              <p className="text-[12px] text-muted-foreground dark:text-white/80 leading-snug mb-3">
                 If Commissioner Command has helped you, share it with your dynasty leagues. It helps StatChasers grow and keeps the tool free for more managers.
               </p>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">

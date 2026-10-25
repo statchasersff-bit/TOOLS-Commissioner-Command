@@ -130,8 +130,10 @@ export type ReviewStatus =
 export interface SuspiciousBenching {
   starterPlayerId: string;
   starterName: string;
+  starterProjection: number;
   benchPlayerId: string;
   benchName: string;
+  benchProjection: number;
   lineupSlot: string | null;
   projectionGap: number;
   valueGap: number;

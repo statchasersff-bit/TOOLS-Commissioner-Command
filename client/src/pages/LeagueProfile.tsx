@@ -7,9 +7,9 @@
  * internal tab is driven by the :profileTab URL segment and kept in sync via
  * wouter's setLocation, so deep links and browser back/forward work.
  *
- * Most tabs REUSE existing league-scoped surfaces (Lineups, Trades, Operations,
- * Finance). The net-new tabs (Overview, Rulebook, Managers, Draft Picks, Log)
- * are implemented alongside this shell.
+ * Some tabs REUSE existing league-scoped surfaces (Operations, Finance). The
+ * net-new tabs (Overview, Rulebook, Managers, Log) are implemented alongside
+ * this shell.
  */
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation } from "wouter";
@@ -18,37 +18,31 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { League, Team } from "@/types";
 import {
-  LayoutDashboard, Activity, BookOpen, Users, ShieldAlert,
-  ArrowRightLeft, Layers, Coins, ClipboardList, ArrowLeft, Loader2,
+  LayoutDashboard, Activity, BookOpen, Users,
+  Coins, ClipboardList, ArrowLeft, Loader2,
 } from "lucide-react";
 
 // ── Reused league-scoped tab surfaces (already code-split elsewhere) ──────────
 const Operations        = lazy(() => import("./tabs/CommissionerActivity"));
-const LeagueLineupAudit  = lazy(() => import("./tabs/LeagueLineupAudit"));
-const TradeReviewCenter  = lazy(() => import("./tabs/TradeReviewCenter").then(m => ({ default: m.TradeReviewCenter })));
 const FinanceTab         = lazy(() => import("./tabs/FinanceTab").then(m => ({ default: m.FinanceTab })));
 
 // ── Net-new tabs ──────────────────────────────────────────────────────────────
 const LeagueOverview      = lazy(() => import("./league-profile/LeagueOverview").then(m => ({ default: m.LeagueOverview })));
 const LeagueRulebook      = lazy(() => import("./league-profile/LeagueRulebook").then(m => ({ default: m.LeagueRulebook })));
 const LeagueManagers      = lazy(() => import("./league-profile/LeagueManagers").then(m => ({ default: m.LeagueManagers })));
-const LeagueDraftPicks    = lazy(() => import("./league-profile/LeagueDraftPicks").then(m => ({ default: m.LeagueDraftPicks })));
 const LeagueCommissionerLog = lazy(() => import("./league-profile/LeagueCommissionerLog").then(m => ({ default: m.LeagueCommissionerLog })));
 
 const GOLD = "#d4af37";
 
 export type ProfileTabId =
   | "overview" | "operations" | "rulebook" | "managers"
-  | "lineups" | "trades" | "draft-picks" | "finance" | "log";
+  | "finance" | "log";
 
 const PROFILE_TABS: { id: ProfileTabId; label: string; icon: typeof Activity; needsLeague?: boolean }[] = [
   { id: "overview",    label: "Overview",    icon: LayoutDashboard },
   { id: "operations",  label: "Operations",  icon: Activity },
   { id: "rulebook",    label: "Rulebook",    icon: BookOpen },
   { id: "managers",    label: "Managers",    icon: Users, needsLeague: true },
-  { id: "lineups",     label: "Lineups",     icon: ShieldAlert, needsLeague: true },
-  { id: "trades",      label: "Trades",      icon: ArrowRightLeft, needsLeague: true },
-  { id: "draft-picks", label: "Draft Picks", icon: Layers, needsLeague: true },
   { id: "finance",     label: "Finance",     icon: Coins },
   { id: "log",         label: "Log",         icon: ClipboardList },
 ];
@@ -127,12 +121,6 @@ export function LeagueProfile({ leagueId, initialTab, league, userTeam, onNaviga
         return leagueReady
           ? <LeagueManagers leagueId={leagueId} league={league!} />
           : <NeedsLeague />;
-      case "lineups":
-        return leagueReady ? <LeagueLineupAudit league={league!} /> : <NeedsLeague />;
-      case "trades":
-        return leagueReady ? <TradeReviewCenter league={league!} /> : <NeedsLeague />;
-      case "draft-picks":
-        return leagueReady ? <LeagueDraftPicks leagueId={leagueId} league={league!} /> : <NeedsLeague />;
       case "finance":
         return <FinanceTab scopeLeagueId={leagueId} />;
       case "log":

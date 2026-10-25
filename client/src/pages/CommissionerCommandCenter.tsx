@@ -66,10 +66,9 @@ const PortfolioConnect  = lazy(() => import("./tabs/Portfolio").then(m => ({ def
 const PortfolioSummary  = lazy(() => import("./tabs/Portfolio").then(m => ({ default: m.PortfolioSummary })));
 const FinanceTab        = lazy(() => import("./tabs/FinanceTab").then(m => ({ default: m.FinanceTab })));
 const CommandersReport  = lazy(() => import("./tabs/CommandersReport").then(m => ({ default: m.CommandersReport })));
-const TradeCalculatorView  = lazy(() => import("./tabs/TradeCenter").then(m => ({ default: m.TradeCalculatorView })));
 const TradeReviewCenter    = lazy(() => import("./tabs/TradeReviewCenter").then(m => ({ default: m.TradeReviewCenter })));
 const UserSearch        = lazy(() => import("./tabs/UserSearch"));
-const LineupCommand     = lazy(() => import("./tabs/LineupCommand").then(m => ({ default: m.LineupCommand })));
+const CollusionRiskCheck = lazy(() => import("./tabs/CollusionRiskCheck"));
 const PickTracker       = lazy(() => import("./tabs/PickTracker").then(m => ({ default: m.PickTracker })));
 const DispersalDraft    = lazy(() => import("@dispersal/DispersalDraft").then(m => ({ default: m.DispersalDraft })));
 const AboutPage         = lazy(() => import("@/components/AboutModal").then(m => ({ default: m.AboutPage })));
@@ -77,6 +76,7 @@ const FeedbackPage      = lazy(() => import("@/components/FeedbackPage").then(m 
 const RedraftCommandPage       = lazy(() => import("@/components/ComingSoonCommand").then(m => ({ default: m.RedraftCommandPage })));
 const CommissionerActivity        = lazy(() => import("./tabs/CommissionerActivity"));
 const CommissionerActivityScan    = lazy(() => import("./tabs/CommissionerActivityScan"));
+const ManagerDirectory            = lazy(() => import("./tabs/ManagerDirectory"));
 const CommissionerLineupIntegrity = lazy(() => import("./tabs/CommissionerLineupIntegrity"));
 const LeagueLineupAudit        = lazy(() => import("./tabs/LeagueLineupAudit"));
 const ManageAccount            = lazy(() => import("./tabs/ManageAccount").then(m => ({ default: m.ManageAccount })));
@@ -123,6 +123,12 @@ function getInitialState(pathTab?: string, pathSub?: string) {
   // portfolio landing so the user isn't dropped on a nav-less, unrenderable tab.
   if (requestedTab === "dashboard") {
     requestedTab = "portfolio";
+    requestedSub = "portfolio-summary";
+  }
+
+  // Legacy redirect — the "Lineup Command" sub-tab was removed from the Command
+  // Center module. Send stale URLs / saved state to the My Leagues landing.
+  if (requestedTab === "portfolio" && requestedSub === "lineup-command") {
     requestedSub = "portfolio-summary";
   }
 
@@ -188,11 +194,11 @@ function getInitialState(pathTab?: string, pathSub?: string) {
     requestedTab = "trade-center";
   }
 
-  // Removed Trade Center sub-tab — Intel (trade-block) was retired. Send any
-  // stale URL / saved state to the Calculator so the user isn't dropped on a
-  // nav-less, unrenderable sub-tab.
-  if (requestedTab === "trade-center" && requestedSub === "trade-block") {
-    requestedSub = "trade-calculator";
+  // Removed Trade Center sub-tabs — Intel (trade-block) and Calculator
+  // (trade-calculator) were retired. Send any stale URL / saved state to the
+  // Review Center so the user isn't dropped on a nav-less, unrenderable sub-tab.
+  if (requestedTab === "trade-center" && (requestedSub === "trade-block" || requestedSub === "trade-calculator")) {
+    requestedSub = "trade-review";
   }
 
   return {
@@ -216,11 +222,9 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
     const p = (fn: () => Promise<unknown>) => fn().catch(() => {});
     p(() => import("./tabs/Dashboard"));
     p(() => import("./tabs/Portfolio"));
-    p(() => import("./tabs/TradeCenter"));
     const t = setTimeout(() => {
       p(() => import("./tabs/LeagueAnalyzer"));
       p(() => import("./tabs/Transactions"));
-      p(() => import("./tabs/LineupCommand"));
       p(() => import("./tabs/PickTracker"));
       p(() => import("@dispersal/DispersalDraft"));
       p(() => import("@/components/AboutModal"));
@@ -415,18 +419,22 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
   }, []);
 
   const handleSubTabChange = useCallback((id: string) => {
+    // Calculator (trade-calculator) was retired — fold it into Review Center so
+    // any lingering in-app links land on the remaining trade tool.
+    const sub = id === "trade-calculator" ? "trade-review" : id;
     setIsTransitioning(true);
     startTransition(() => {
-      setActiveSubTab(id);
+      setActiveSubTab(sub);
     });
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
 
   const navigateToSubTab = useCallback((mainTabId: string, subTabId: string) => {
+    const sub = mainTabId === "trade-center" && subTabId === "trade-calculator" ? "trade-review" : subTabId;
     setIsTransitioning(true);
     startTransition(() => {
       setActiveMainTab(mainTabId);
-      setActiveSubTab(subTabId);
+      setActiveSubTab(sub);
     });
     setTimeout(() => setIsTransitioning(false), 180);
   }, []);
@@ -612,6 +620,7 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
     // available to guests).
     if (activeMainTab === "draft") {
       if (activeSubTab === "user-search") return <UserSearch />;
+      if (activeSubTab === "collusion-risk") return <CollusionRiskCheck />;
       if (activeSubTab === "dispersal-draft") return <DispersalDraft />;
       return <PickTracker />;
     }
@@ -620,7 +629,6 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
       const key = `portfolio:${activeSubTab}`;
       switch (key) {
         case "portfolio:connect":          return <PortfolioConnect onNavigate={navigateToSubTab} />;
-        case "portfolio:lineup-command":   return <LineupCommand />;
         case "portfolio:portfolio-summary":return <PortfolioSummary onNavigate={navigateToSubTab} onOpenLeagueProfile={(id) => { sleeper.setActiveLeague(id); setLocation(`/league/${id}/overview`); }} />;
         case "portfolio:finances":         return <FinanceTab />;
         default:                           return <PortfolioConnect onNavigate={navigateToSubTab} />;
@@ -652,14 +660,17 @@ export default function CommissionerCommandCenter({ params, managerProfileId, va
     // All-League Scan aggregates activity across every league (cross-league, no
     // single active league required), so it also renders above the guard.
     if (activeMainTab === "league-analyzer" && activeSubTab === "all-league-scan") {
-      return <CommissionerActivityScan />;
+      return (
+        <CommissionerActivityScan
+          onOpenLeague={(id) => { sleeper.setActiveLeague(id); navigateToSubTab("league-analyzer", "league-activity"); }}
+        />
+      );
     }
 
-    // Trade Calculator has a guest-accessible "Quick" mode (no login/league), so
-    // it renders above the active-league guard. Logged-in users also get the full
-    // league-based calculator inside it.
-    if (activeMainTab === "trade-center" && activeSubTab === "trade-calculator") {
-      return <TradeCalculatorView league={league} userTeam={userTeam} onNavigate={navigateToSubTab} />;
+    // Manager Directory aggregates managers across every league (cross-league,
+    // no single active league required), so it renders above the guard too.
+    if (activeMainTab === "league-analyzer" && activeSubTab === "managers") {
+      return <ManagerDirectory />;
     }
 
     // Past this point we need an active league. AccessGate has already

@@ -28,7 +28,7 @@ function getTabLabel(tab: string, sub: string): string {
     "trade-center": "Trades",
   };
   const subLabels: Record<string, string> = {
-    "portfolio-summary": "My Leagues", "lineup-command": "Lineup Command",
+    "portfolio-summary": "My Leagues",
     "power-rankings": "Rankings",
     "roster-comparison": "Compare", "transactions": "Transactions",
     "trade-calculator": "Calculator",

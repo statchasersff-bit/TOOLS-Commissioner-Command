@@ -44,6 +44,7 @@ import {
   updateActivitySettings,
 } from "../services/commissionerActivity/activitySettings";
 import { getNflState } from "../services/commissionerActivity/sleeperActivityApi";
+import { getManagerDirectory } from "../services/managerDirectory";
 import type { ActivitySettings } from "../services/commissionerActivity/types";
 import type { CommissionerManagerActivity } from "@shared/schema";
 
@@ -367,6 +368,27 @@ export function registerCommissionerActivityRoutes(app: Express): void {
     } catch (err) {
       console.error("[CommissionerActivity] multi-overview failed:", err);
       res.status(500).json({ error: "Failed to load multi-league overview", detail: errMsg(err) });
+    }
+  });
+
+  // ── Manager Directory ──
+  // Cross-league manager database: who appears in which of the commissioner's
+  // leagues, their verified-StatChasers status, flags, payment issues and
+  // activity. `leagueIds` is the commissioner's league set (comma-separated).
+  app.get(`${BASE}/managers-directory`, async (req: Request, res: Response) => {
+    const raw = typeof req.query.leagueIds === "string" ? req.query.leagueIds : "";
+    const leagueIds = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!leagueIds.length) return res.status(400).json({ error: "leagueIds (comma-separated) is required" });
+    const withKnownLeagues = req.query.knownLeagues !== "0";
+    try {
+      const season = typeof req.query.season === "string" && req.query.season
+        ? req.query.season
+        : await safeSeason();
+      const result = await getManagerDirectory(leagueIds, season, { withKnownLeagues });
+      res.json(result);
+    } catch (err) {
+      console.error("[CommissionerActivity] managers-directory failed:", err);
+      res.status(500).json({ error: "Failed to load manager directory", detail: errMsg(err) });
     }
   });
 }

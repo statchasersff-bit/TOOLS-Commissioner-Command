@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils";
 import {
   BarChart2,
   Trophy, Coins, ArrowLeftRight, Database, Search,
-  Calculator, TrendingUp, ChevronDown,
-  LucideIcon, Crosshair, LayoutGrid, Inbox, MessageCircle,
+  TrendingUp, ChevronDown,
+  LucideIcon, LayoutGrid, Inbox, MessageCircle,
   Hexagon, ClipboardList, ScrollText, ListOrdered,
-  Activity, ShieldAlert,
+  Activity, ShieldAlert, Users,
 } from "lucide-react";
 import type { MainTabConfig } from "../types";
 import logoDark from "@assets/statchasers_logo_transparent_dark_1772764844282.png";
@@ -35,7 +35,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
       items: [
         { subId: "portfolio-summary", label: "My Leagues",       description: "Cross-league exposure & metrics",              icon: BarChart2  },
         { subId: "finances",          label: "Finances",         description: "Track buy-ins, prizes & ROI across leagues",   icon: Coins      },
-        { subId: "lineup-command",    label: "Lineup Command",   description: "Cross-league lineup war room & swap finder",   icon: Crosshair  },
       ],
     },
   ],
@@ -52,8 +51,9 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "League Analysis",
       items: [
-        { subId: "league-activity",    label: "League Activity",    description: "Engagement, transactions & at-risk managers",      icon: Activity },
         { subId: "all-league-scan",    label: "All-League Scan",    description: "Compare activity scores across every league you're in", icon: LayoutGrid },
+        { subId: "league-activity",    label: "League Activity",    description: "Engagement, transactions & at-risk managers",      icon: Activity },
+        { subId: "managers",           label: "Manager Directory",  description: "Every manager across your leagues — verified status, shared leagues & issues", icon: Users },
         // TEMPORARILY HIDDEN: Commander's Report nav entry. Component, route
         // (CommissionerCommandCenter "league-analyzer:commanders-report"), API, and
         // public-share page are all still in place — re-enable by uncommenting.
@@ -65,7 +65,6 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
     {
       title: "Trade Tools",
       items: [
-        { subId: "trade-calculator",    label: "Calculator", description: "Value-based trade evaluator",                 icon: Calculator },
         { subId: "trade-review",        label: "Review Center", description: "Auto-track league trades, flag risk & document commissioner reviews", icon: ClipboardList },
       ],
     },
@@ -77,6 +76,7 @@ const MEGA_DATA: Record<string, MegaSection[]> = {
         { subId: "pick-tracker", label: "Pick Tracker", description: "Rookie picks derived from kicker draft order, live during your startup draft", icon: ListOrdered },
         { subId: "dispersal-draft", label: "Dispersal Draft", description: "Run a live dispersal draft of orphan-team assets with real-time board & chat", icon: Trophy },
         { subId: "user-search",     label: "User Search",     description: "Find any Sleeper user & open their profile",     icon: Search     },
+        { subId: "collusion-risk",  label: "Collusion Risk Check", description: "Scan two managers' shared leagues & trade history for unusual patterns", icon: ShieldAlert },
       ],
     },
   ],

@@ -21,7 +21,7 @@ import {
   type SleeperLeagueSummary,
 } from "@/lib/sleeperApi";
 import {
-  Users, ListOrdered, Radio, RefreshCw, Share2, Search, Hash,
+  Users, ListOrdered, Radio, RefreshCw, Share2,
   Trophy, Clock, AlertTriangle, Loader2, X,
 } from "lucide-react";
 
@@ -29,7 +29,6 @@ const SEASON = "2026";
 const POLL_MS = 3_000;
 const LAST_LEAGUE_KEY = "lastLeagueId";
 
-type SearchMode = "username" | "leagueId";
 type ViewMode = "team" | "pick";
 
 function teamInitials(name: string): string {
@@ -77,11 +76,9 @@ function writeUrl(league: string | null, view: ViewMode) {
 
 export function PickTracker() {
   const { toast } = useToast();
-  const { activeLeagueId } = useSleeper();
+  const { activeLeagueId, user, isConnected } = useSleeper();
 
-  const [searchMode, setSearchMode] = useState<SearchMode>("username");
   const [username, setUsername] = useState("");
-  const [leagueIdInput, setLeagueIdInput] = useState("");
   const [leagues, setLeagues] = useState<SleeperLeagueSummary[]>([]);
   const [selectedLeague, setSelectedLeague] = useState<string>("");
   const [loadingLeagues, setLoadingLeagues] = useState(false);
@@ -99,6 +96,11 @@ export function PickTracker() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevKickerCount = useRef(0);
   const [pulsePick, setPulsePick] = useState<string | null>(null);
+
+  // One-time init guards so the connected-user prefill and a shared deep link
+  // don't fight each other or re-run on every render.
+  const didInitFromUrl = useRef(false);
+  const didPrefillUser = useRef(false);
 
   const lastLeagueId = useMemo(() => {
     try { return localStorage.getItem(LAST_LEAGUE_KEY); } catch { return null; }
@@ -159,49 +161,79 @@ export function PickTracker() {
     }
   }, [refresh, stopPolling, view]);
 
-  // Auto-track from the URL (deep link) or the active league on mount.
+  // Auto-track from the URL (a shared deep link) on mount. A connected user's
+  // own leagues are prefilled separately (below) so the username box is
+  // populated for them rather than being bypassed.
   useEffect(() => {
     const { league, view: urlView } = readUrl();
     setView(urlView);
-    const initial = league || activeLeagueId;
-    if (initial) {
-      setSearchMode("leagueId");
-      setLeagueIdInput(initial);
-      void trackPicks(initial);
+    if (league) {
+      didInitFromUrl.current = true;
+      void trackPicks(league);
     }
     return () => stopPolling();
     // Run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // When the viewer is connected/logged into Commissioner Command, auto-fill
+  // their Sleeper username and load their leagues — they shouldn't have to type
+  // it. If a league is already active it's preselected and tracked. Guests (not
+  // connected) keep the empty box for manual entry, and a shared deep link
+  // (handled above) always wins.
+  useEffect(() => {
+    if (didPrefillUser.current || didInitFromUrl.current) return;
+    if (!isConnected || !user?.username) return;
+    didPrefillUser.current = true;
+    setUsername(user.username);
+    void loadLeaguesFor(user.username, { silent: true, autoTrack: activeLeagueId ?? null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, user, activeLeagueId]);
+
   // Keep the URL's view param in sync.
   useEffect(() => {
     if (trackedLeagueId) writeUrl(trackedLeagueId, view);
   }, [view, trackedLeagueId]);
 
-  const loadLeagues = useCallback(async () => {
-    const name = username.trim();
-    if (!name) {
-      toast({ title: "Enter a Sleeper username", variant: "destructive" });
+  // Look up a Sleeper user's leagues for the season. `silent` suppresses toasts
+  // for the auto-prefill path (a connected user who never clicked anything);
+  // `autoTrack` immediately tracks a known league id (e.g. the commissioner's
+  // active league) and preselects it in the dropdown.
+  const loadLeaguesFor = useCallback(async (
+    name: string,
+    opts: { silent?: boolean; autoTrack?: string | null } = {},
+  ) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      if (!opts.silent) toast({ title: "Enter a Sleeper username", variant: "destructive" });
       return;
     }
     setLoadingLeagues(true);
     setLeagues([]);
     setSelectedLeague("");
     try {
-      const user = await fetchSleeperUser(name);
-      const lgs = await fetchSleeperLeagues(user.userId, SEASON);
-      if (!lgs.length) {
-        toast({ title: "No leagues found", description: `No ${SEASON} leagues for ${name}.` });
+      const sleeperUser = await fetchSleeperUser(trimmed);
+      const lgs = await fetchSleeperLeagues(sleeperUser.userId, SEASON);
+      if (!lgs.length && !opts.silent) {
+        toast({ title: "No leagues found", description: `No ${SEASON} leagues for ${trimmed}.` });
       }
       setLeagues(lgs);
-      if (lgs.length) setSelectedLeague(lgs[0].leagueId);
+      const preselect =
+        opts.autoTrack && lgs.some((l) => l.leagueId === opts.autoTrack)
+          ? opts.autoTrack
+          : lgs[0]?.leagueId ?? "";
+      if (preselect) setSelectedLeague(preselect);
+      if (opts.autoTrack) void trackPicks(opts.autoTrack);
     } catch (e: any) {
-      toast({ title: "Couldn't load leagues", description: e?.message || "User not found", variant: "destructive" });
+      if (!opts.silent) {
+        toast({ title: "Couldn't load leagues", description: e?.message || "User not found", variant: "destructive" });
+      }
     } finally {
       setLoadingLeagues(false);
     }
-  }, [username, toast]);
+  }, [toast, trackPicks]);
+
+  const loadLeagues = useCallback(() => loadLeaguesFor(username), [loadLeaguesFor, username]);
 
   const onShare = useCallback(async () => {
     try {
@@ -234,26 +266,7 @@ export function PickTracker() {
 
       {/* ── Search controls ─────────────────────────────────────────────── */}
       <Card className="p-4 space-y-4">
-        <div className="flex gap-2">
-          <Button
-            variant={searchMode === "username" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSearchMode("username")}
-            data-testid="picktracker-mode-username"
-          >
-            <Search className="h-4 w-4 mr-1.5" /> By Username
-          </Button>
-          <Button
-            variant={searchMode === "leagueId" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSearchMode("leagueId")}
-            data-testid="picktracker-mode-leagueid"
-          >
-            <Hash className="h-4 w-4 mr-1.5" /> By League ID
-          </Button>
-        </div>
-
-        {searchMode === "username" ? (
+        <div className="space-y-2">
           <div className="flex flex-col sm:flex-row gap-2">
             <Input
               placeholder="Sleeper username"
@@ -289,21 +302,12 @@ export function PickTracker() {
               </>
             )}
           </div>
-        ) : (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input
-              placeholder="Sleeper league ID"
-              value={leagueIdInput}
-              onChange={(e) => setLeagueIdInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void trackPicks(leagueIdInput.trim()); }}
-              className="sm:max-w-xs"
-              data-testid="picktracker-leagueid-input"
-            />
-            <Button onClick={() => void trackPicks(leagueIdInput.trim())} disabled={!leagueIdInput.trim()} data-testid="picktracker-track-leagueid">
-              Track Picks
-            </Button>
-          </div>
-        )}
+          {isConnected && user?.username && username.trim().toLowerCase() === user.username.toLowerCase() && (
+            <p className="text-xs text-muted-foreground" data-testid="picktracker-connected-hint">
+              Auto-filled from your connected Sleeper account. Edit the username to look up a different manager.
+            </p>
+          )}
+        </div>
 
         {!data && !loading && lastLeagueId && (
           <Button
@@ -439,9 +443,6 @@ export function PickTracker() {
         </>
       )}
 
-      <footer className="pt-4 text-center text-xs text-muted-foreground">
-        <span className="font-semibold">StatChasers</span> · Powered by Sleeper API
-      </footer>
     </div>
   );
 }

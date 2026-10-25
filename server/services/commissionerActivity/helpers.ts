@@ -57,6 +57,22 @@ export function getTeamName(
   return "Unowned Team";
 }
 
+/**
+ * Team name for the Manager column / per-roster rows. Mirrors the Weekly Audit
+ * (lineup integrity) semantics: the manager's *custom* Sleeper team name, or the
+ * manager handle when none is set. This lets the UI hide the team subline when
+ * it would only repeat the username — unlike getTeamName, which always yields a
+ * team-ish label (e.g. "X's Team") suited to matchup/transaction/report copy.
+ */
+export function getRosterTeamName(
+  user: SleeperLeagueUser | undefined,
+  roster: SleeperRoster | undefined,
+): string {
+  const meta = user?.metadata?.team_name;
+  if (meta && meta.trim()) return meta.trim();
+  return getManagerDisplayName(user, roster);
+}
+
 // ── Per-roster event counts ──────────────────────────────────────────────────
 
 export function countTransactionTypesForRoster(events: ActivityEvent[], rosterId: number) {

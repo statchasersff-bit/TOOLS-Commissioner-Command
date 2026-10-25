@@ -186,6 +186,18 @@ export type MultiLeagueStatus =
   | "not_started"
   | "data_pending";
 
+/** Structured start/sit for benching / optimality alerts, so the UI can render a
+ *  compact "started → bench · +gap" row instead of parsing the description. */
+export interface AlertSwap {
+  slot: string | null;
+  startedName: string;
+  startedProj: number;
+  benchName: string;
+  benchProj: number;
+  gap: number;
+  more: number;
+}
+
 export interface MultiLeagueAlert {
   id: number;
   leagueId: string;
@@ -200,6 +212,8 @@ export interface MultiLeagueAlert {
   description: string;
   suggestedAction: string | null;
   status: string;
+  /** Present only for suspicious_benching / large_optimality_gap alerts. */
+  swap?: AlertSwap | null;
 }
 
 export interface MultiLeagueRow {
@@ -332,7 +346,7 @@ export const lineupIntegrityApi = {
     ),
 
   overview: (leagueId: string, week?: number) =>
-    get<{ week: number; currentWeek: number | null; summary: OverviewSummary; topAlerts: LineupAlert[]; highestRiskTeams: LineupCheck[] }>(
+    get<{ season: string; week: number; currentWeek: number | null; summary: OverviewSummary; topAlerts: LineupAlert[]; highestRiskTeams: LineupCheck[] }>(
       "/overview", { leagueId, week },
     ),
 

@@ -26,8 +26,9 @@ import {
   getSleeperPlayers,
 } from "./sleeperClient";
 import { parseTradeTransaction } from "./parseTradeTransaction";
-import { valueAssets } from "./tradeValueService";
+import { valueAssets, buildValuationContext } from "./tradeValueService";
 import { scoreTrade } from "./scoreTrade";
+import type { ValuationContext } from "./tradeValue";
 import { generateTradeFlags } from "./generateTradeFlags";
 import { generateCommissionerTradeSummary } from "./tradeSummary";
 import { computeRepeatPartnerCount, recordTradeForPairs } from "./managerTradeStats";
@@ -78,7 +79,7 @@ function resolveManagers(
 }
 
 /** Derive value-affecting league settings from Sleeper league meta. */
-function deriveValueSettings(meta: {
+export function deriveValueSettings(meta: {
   settings?: Record<string, number>;
   scoring_settings?: Record<string, number>;
   roster_positions?: string[];
@@ -134,6 +135,9 @@ export async function ingestSleeperTradesForLeague(
 
     const managers = resolveManagers(rosters, users);
     const { value: valueSettings, fcFormat } = deriveValueSettings(leagueMeta);
+    // Build the valuation context ONCE per league run — its adaptive tier floors
+    // come from the full FantasyCalc value universe for this format.
+    const valuationCtx = await buildValuationContext(fcFormat, valueSettings);
 
     let tradesFound = 0;
     let newTrades = 0;
@@ -161,6 +165,7 @@ export async function ingestSleeperTradesForLeague(
           managers,
           valueSettings,
           fcFormat,
+          valuationCtx,
           settings,
           forceRefresh: options.forceRefresh ?? false,
         });
@@ -187,12 +192,13 @@ interface UpsertArgs {
   managers: ManagerIdentity[];
   valueSettings: LeagueValueSettings;
   fcFormat: string;
+  valuationCtx: ValuationContext;
   settings: TradeReviewSettings;
   forceRefresh: boolean;
 }
 
 async function upsertTrade(args: UpsertArgs): Promise<"new" | "updated" | "skipped"> {
-  const { leagueId, season, currentSeason, week, tx, players, managers, valueSettings, fcFormat, settings, forceRefresh } = args;
+  const { leagueId, season, currentSeason, week, tx, players, managers, valueSettings, fcFormat, valuationCtx, settings, forceRefresh } = args;
 
   const existing = await db
     .select({ id: commissionerTrades.id })
@@ -215,7 +221,7 @@ async function upsertTrade(args: UpsertArgs): Promise<"new" | "updated" | "skipp
 
   const score = scoreTrade(
     assets,
-    { currentSeason, repeatPartnerCount },
+    { currentSeason, repeatPartnerCount, valuationCtx },
     valueSettings,
   );
 

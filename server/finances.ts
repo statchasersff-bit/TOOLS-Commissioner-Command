@@ -23,41 +23,44 @@ export async function upsertLeagueFinance(data: {
   isFree?: boolean;
   ignored?: boolean;
   leagueSafeUrl?: string;
+  leagueSafeStatus?: string | null;
+  dueDate?: string | null;
+  paymentRule?: string | null;
 }) {
   const d = getDb();
-  const existing = await d
-    .select()
-    .from(leagueFinances)
-    .where(and(eq(leagueFinances.sleeperUserId, data.sleeperUserId), eq(leagueFinances.leagueId, data.leagueId)))
-    .limit(1);
+  // Natural key is (sleeperUserId, leagueId, season) — dynasty leagues keep one
+  // finance row per season, so the season MUST be part of the match.
+  const keyMatch = and(
+    eq(leagueFinances.sleeperUserId, data.sleeperUserId),
+    eq(leagueFinances.leagueId, data.leagueId),
+    eq(leagueFinances.season, data.season),
+  );
+  const existing = await d.select().from(leagueFinances).where(keyMatch).limit(1);
+
+  const fields = {
+    buyIn: data.buyIn,
+    prizes: data.prizes as any,
+    payments: (data.payments ?? []) as any,
+    notes: data.notes ?? null,
+    isFree: data.isFree ?? false,
+    ignored: data.ignored ?? false,
+    leagueSafeUrl: data.leagueSafeUrl ?? null,
+    leagueSafeStatus: data.leagueSafeStatus ?? null,
+    dueDate: data.dueDate ?? null,
+    paymentRule: data.paymentRule ?? null,
+  };
 
   if (existing.length > 0) {
     await d
       .update(leagueFinances)
-      .set({
-        buyIn: data.buyIn,
-        prizes: data.prizes as any,
-        payments: (data.payments ?? []) as any,
-        notes: data.notes ?? null,
-        season: data.season,
-        isFree: data.isFree ?? false,
-        ignored: data.ignored ?? false,
-        leagueSafeUrl: data.leagueSafeUrl ?? null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(leagueFinances.sleeperUserId, data.sleeperUserId), eq(leagueFinances.leagueId, data.leagueId)));
+      .set({ ...fields, updatedAt: new Date() })
+      .where(keyMatch);
   } else {
     await d.insert(leagueFinances).values({
       sleeperUserId: data.sleeperUserId,
       leagueId: data.leagueId,
       season: data.season,
-      buyIn: data.buyIn,
-      prizes: data.prizes as any,
-      payments: (data.payments ?? []) as any,
-      notes: data.notes ?? null,
-      isFree: data.isFree ?? false,
-      ignored: data.ignored ?? false,
-      leagueSafeUrl: data.leagueSafeUrl ?? null,
+      ...fields,
     });
   }
   return { ok: true };

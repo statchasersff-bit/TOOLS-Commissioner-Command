@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb, numeric, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, boolean, timestamp, serial, jsonb, numeric, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -122,6 +122,9 @@ export const leagueFinances = pgTable("league_finances", {
   id: serial("id").primaryKey(),
   sleeperUserId: varchar("sleeper_user_id").notNull(),
   leagueId: varchar("league_id").notNull(),
+  // Finance is tracked PER SEASON: dynasty leagues keep prior-year LeagueSafe
+  // records, the current year's dues, and future-year obligations side by side.
+  // The natural key is (sleeperUserId, leagueId, season) — one row per season.
   season: varchar("season", { length: 10 }).notNull().default("2026"),
   buyIn: integer("buy_in").notNull().default(0),
   prizes: jsonb("prizes").notNull().default([]),
@@ -133,8 +136,17 @@ export const leagueFinances = pgTable("league_finances", {
   isFree: boolean("is_free").notNull().default(false),
   ignored: boolean("ignored").notNull().default(false),
   leagueSafeUrl: text("league_safe_url"),
+  // Dynasty multi-year fields. All nullable so legacy single-season rows default
+  // cleanly. leagueSafeStatus: "not_created" | "active" | "closed".
+  leagueSafeStatus: varchar("league_safe_status", { length: 20 }),
+  dueDate: varchar("due_date", { length: 20 }),
+  paymentRule: text("payment_rule"),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => ({
+  // One finance row per league per season for a given commissioner.
+  leagueSeasonUnique: uniqueIndex("league_finances_user_league_season_idx")
+    .on(t.sleeperUserId, t.leagueId, t.season),
+}));
 
 export const insertLeagueFinanceSchema = createInsertSchema(leagueFinances).omit({ id: true, updatedAt: true });
 export type InsertLeagueFinance = z.infer<typeof insertLeagueFinanceSchema>;

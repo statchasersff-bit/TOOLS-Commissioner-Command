@@ -15,6 +15,7 @@
  * projected Max PF are available, and a custom user value set selector.
  */
 import { getFantasyCalcValues } from "../../fantasycalc";
+import { createValuationContext, type ValuationContext } from "./tradeValue";
 import type { LeagueValueSettings, ParsedTradeAsset } from "./types";
 
 // Baseline rookie-pick values by round (mid-round assumption). Used only when
@@ -137,6 +138,38 @@ export async function valueAssets(
     a.assetValueSource = source;
   }
   return assets;
+}
+
+/**
+ * Build the trade-evaluation ValuationContext for a league.
+ *
+ * The engine's adaptive tier floors are percentiles of the LIVE value
+ * distribution, so the universe must be the full FantasyCalc player list for the
+ * format — and on the SAME scale as the trade assets. We therefore apply the
+ * identical league adjustments (superflex/TE-premium/best-ball) to each player
+ * that valueForAsset applies, so positionRank lines up with the asset values.
+ *
+ * Degrades gracefully: if FantasyCalc is unavailable the empty universe makes
+ * createValuationContext fall back to its fixed value floors.
+ */
+export async function buildValuationContext(
+  format: string,
+  settings: LeagueValueSettings,
+): Promise<ValuationContext> {
+  let players: Array<{ pos: string; value: number }> = [];
+  try {
+    const fc = await getFantasyCalcValues(format);
+    players = (fc.players ?? []).map((p) => ({ pos: p.pos, value: p.value }));
+  } catch (err) {
+    console.warn("[TradeReview] FantasyCalc universe unavailable, using fallback floors:", err);
+  }
+  const ranked = players
+    .filter((p) => p.value > 0)
+    .map((p) => ({ pos: p.pos, value: applyLeagueAdjustments(p.value, p.pos, settings) }));
+  return createValuationContext(ranked, {
+    format: format === "sf" ? "SF" : "1QB",
+    tePremium: settings.tep,
+  });
 }
 
 /** Reset the in-process FantasyCalc cache (used between large backfills/tests). */

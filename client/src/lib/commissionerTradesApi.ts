@@ -62,6 +62,8 @@ export interface TradeRow {
   fairnessScore: number;
   reviewStatus: ReviewStatus;
   summary: string;
+  /** True when at least one commissioner note has been saved for this trade. */
+  hasNote: boolean;
   isMultiTeam: boolean;
   assets: TradeAsset[];
   flags: TradeFlag[];

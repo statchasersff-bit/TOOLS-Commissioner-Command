@@ -56,7 +56,7 @@ export default function Create() {
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto space-y-6">
+    <div className="max-w-lg space-y-6">
       <button
         onClick={() => setLocation("/")}
         className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
